@@ -10,7 +10,7 @@ name: Pre-commit
 # - pre-commit-hooks: v4.5.0
 # - ruff-pre-commit: v0.1.6 -> ruff==0.1.6
 # - mirrors-mypy: v1.7.1 -> mypy==1.7.1
-# - pyproject.toml dev deps: pytest>=7.4.0, black>=23.0.0, etc.
+# - pyproject.toml dev deps: pytest>=7.4.0, ruff==0.1.6, etc.
 
 on:
   push:
@@ -38,7 +38,6 @@ jobs:
           pytest==7.4.0 \
           pytest-asyncio==0.21.0 \
           pytest-cov==4.1.0 \
-          black==23.0.0 \
           ruff==0.1.6 \
           mypy==1.7.1 \
           pre-commit==3.4.0
