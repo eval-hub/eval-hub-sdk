@@ -25,6 +25,11 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
@@ -32,26 +37,8 @@ jobs:
 
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        # Install exact versions to match .pre-commit-config.yaml
-        pip install \
-          pytest==7.4.0 \
-          pytest-asyncio==0.21.0 \
-          pytest-cov==4.1.0 \
-          ruff==0.1.6 \
-          mypy==1.7.1 \
-          pre-commit==3.4.0
-
-        # Install project dependencies for mypy type checking
-        # (exact versions from .pre-commit-config.yaml mypy additional_dependencies)
-        pip install \
-          "pydantic>=2.0.0" \
-          "httpx>=0.25.0" \
-          "fastapi>=0.104.0" \
-          "uvicorn>=0.24.0" \
-          "typer>=0.9.0" \
-          "rich>=13.0.0" \
-          types-requests
+        # Install pre-commit
+        uv pip install --system pre-commit==3.4.0
 
     - name: Cache pre-commit
       uses: actions/cache@v3
