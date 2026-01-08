@@ -9,6 +9,7 @@ from typing import Any
 import uvicorn
 from fastapi import FastAPI
 
+from ...utils import setup_logging
 from ..api.router import AdapterAPIRouter
 from ..models.framework import AdapterConfig, FrameworkAdapter
 
@@ -27,15 +28,7 @@ class AdapterServer:
         self.adapter = adapter
         self.router = AdapterAPIRouter(adapter)
         self.app = self.router.get_app()
-        self._setup_logging()
-
-    def _setup_logging(self) -> None:
-        """Set up logging configuration."""
-        logging.basicConfig(
-            level=getattr(logging, self.adapter.config.log_level.upper()),
-            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-            handlers=[logging.StreamHandler(sys.stdout)],
-        )
+        setup_logging(level=self.adapter.config.log_level, stream=sys.stdout)
 
     def run(
         self,
