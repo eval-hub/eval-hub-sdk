@@ -221,6 +221,75 @@ class EvaluationResponse(BaseModel):
     duration_seconds: float = Field(..., description="Total evaluation time")
 
 
+class OCICoordinate(BaseModel):
+    """OCI artifact coordinates for persistence."""
+
+    oci_ref: str = Field(..., description="OCI reference (e.g., 'ghcr.io/org/repo:tag')")
+    oci_subject: str | None = Field(
+        default=None, description="Optional OCI subject identifier"
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "oci_ref": "ghcr.io/my-org/eval-results:latest",
+                "oci_subject": "not used atm",
+            }
+        }
+    )
+
+
+class EvaluationJobFilesLocation(BaseModel):
+    """Files location for persisting as OCI artifacts for an evaluation job."""
+
+    job_id: str = Field(..., description="Job identifier")
+    path: str | None = Field(
+        default=None,
+        description="Directory path containing files to persist. None if no files to persist.",
+    )
+    metadata: dict[str, str] = Field(
+        default_factory=dict,
+        description="Framework-specific metadata (e.g., OCI annotations)",
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "job_id": "job_123",
+                "path": "/tmp/lighteval_output/job_123",
+                "metadata": {
+                    "framework": "lighteval",
+                    "benchmark_id": "benchmark_id_value",
+                },
+            }
+        }
+    )
+
+
+class PersistResponse(BaseModel):
+    """Response from OCI artifact persistence operation."""
+
+    job_id: str = Field(..., description="Job identifier")
+    oci_ref: str = Field(..., description="Full OCI reference including digest")
+    digest: str = Field(..., description="SHA256 digest of artifact")
+    files_count: int = Field(..., description="Number of files persisted")
+    metadata: dict[str, Any] = Field(
+        default_factory=dict, description="Additional persistence metadata"
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "job_id": "job_123",
+                "oci_ref": "ghcr.io/org/repo:latest@sha256:abc123...",
+                "digest": "sha256:abc123...",
+                "files_count": 42,
+                "metadata": {"placeholder": True},
+            }
+        }
+    )
+
+
 class FrameworkInfo(BaseModel):
     """Information about a framework adapter."""
 

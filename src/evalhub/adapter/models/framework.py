@@ -1,6 +1,7 @@
 """Framework adapter models and base classes."""
 
 import asyncio
+import logging
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -10,12 +11,17 @@ from pydantic import BaseModel, Field
 from ...models.api import (
     BenchmarkInfo,
     EvaluationJob,
+    EvaluationJobFilesLocation,
     EvaluationRequest,
     EvaluationResponse,
     FrameworkInfo,
     HealthResponse,
     JobStatus,
+    OCICoordinate,
+    PersistResponse,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class AdapterConfig(BaseModel):
@@ -335,4 +341,64 @@ class FrameworkAdapter(ABC):
             documentation_url=None,
             repository_url=None,
             license=None,
+        )
+
+    async def job_files(self, job_id: str) -> EvaluationJobFilesLocation:
+        """Default implementation returns empty files location.
+
+        User should override to specify files location when opting-in for OCI persistence.
+
+        Args:
+            job_id: The job identifier
+
+        Returns:
+            EvaluationJobFilesLocation: Files location (path=None by default)
+        """
+        return EvaluationJobFilesLocation(job_id=job_id, path=None)
+
+    async def persist_job_files_oci(
+        self, job_id: str, coordinate: OCICoordinate
+    ) -> PersistResponse | None:
+        """Persist evaluation job files as OCI artifact (manual trigger).
+
+        Args:
+            job_id: The job identifier
+            coordinate: OCI coordinates (reference and optional subject)
+
+        Returns:
+            PersistResponse: Persistence status and artifact digest
+            None: If no files to persist
+
+        Raises:
+            ValueError: If job not found, OCI reference invalid, or job not in completed state
+            RuntimeError: If persistence fails
+        """
+        # Validate job exists
+        job = self._jobs.get(job_id)
+        if not job:
+            raise ValueError(f"Job {job_id} not found")
+
+        # Validate job is completed
+        if job.status != JobStatus.COMPLETED:
+            raise ValueError(
+                f"Job {job_id} is not completed (status: {job.status}). "
+                "Only completed jobs can be persisted."
+            )
+
+        # Get files location
+        files_location = await self.job_files(job_id)
+
+        if not files_location.path:
+            logger.info(f"No files to persist for job {job_id}")
+            return None
+
+        # Create OCI artifact
+        from evalhub.adapter.oci.persister import OCIArtifactPersister
+
+        persister = OCIArtifactPersister()
+
+        return await persister.persist(
+            files_location=files_location,
+            coordinate=coordinate,
+            job=job,
         )

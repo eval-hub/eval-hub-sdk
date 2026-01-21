@@ -14,6 +14,8 @@ from ...models.api import (
     FrameworkInfo,
     HealthResponse,
     JobStatus,
+    OCICoordinate,
+    PersistResponse,
 )
 from ..models.framework import FrameworkAdapter
 
@@ -290,6 +292,51 @@ def create_adapter_api(adapter: FrameworkAdapter) -> APIRouter:
             logger.exception(f"Failed to stream job updates for {job_id}")
             raise HTTPException(
                 status_code=500, detail=f"Failed to stream job updates: {str(e)}"
+            )
+
+    @router.post(
+        "/evaluations/{job_id}/persist",
+        response_model=PersistResponse,
+        tags=["Evaluations"],
+    )
+    async def persist_job_files(
+        job_id: str, coordinate: OCICoordinate
+    ) -> PersistResponse:
+        """Persist job files as OCI artifact.
+
+        Manually trigger OCI artifact persistence for completed job files.
+
+        Args:
+            job_id: The job identifier
+            coordinate: OCI coordinates (reference and optional subject)
+
+        Returns:
+            PersistResponse: Persistence status and artifact information
+
+        Raises:
+            HTTPException: If job not found, not completed, or has no files to persist
+        """
+        try:
+            result = await adapter.persist_job_files_oci(job_id, coordinate)
+            if result is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Job {job_id} has no files to persist",
+                )
+            return result
+        except ValueError as e:
+            error_msg = str(e)
+            # Job not found -> 404, job not completed -> 409
+            if "not found" in error_msg:
+                raise HTTPException(status_code=404, detail=error_msg)
+            else:
+                raise HTTPException(status_code=409, detail=error_msg)
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.exception(f"Failed to persist files for job {job_id}")
+            raise HTTPException(
+                status_code=500, detail=f"Failed to persist files: {str(e)}"
             )
 
     return router

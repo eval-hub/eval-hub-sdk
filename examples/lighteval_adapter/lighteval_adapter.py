@@ -20,6 +20,7 @@ from evalhub.adapter.models.framework import AdapterConfig, FrameworkAdapter
 from evalhub.models.api import (
     BenchmarkInfo,
     EvaluationJob,
+    EvaluationJobFilesLocation,
     EvaluationRequest,
     EvaluationResponse,
     EvaluationResult,
@@ -417,6 +418,40 @@ class LightEvalAdapter(FrameworkAdapter):
                 await self.cancel_job(job_id)
 
         self._initialized = False
+
+    async def job_files(self, job_id: str) -> EvaluationJobFilesLocation:
+        """Specify LightEval output directory for persistence.
+
+        Args:
+            job_id: The job identifier
+
+        Returns:
+            EvaluationJobFilesLocation: Files location for this job
+        """
+        job = self._jobs.get(job_id)
+        if not job:
+            return EvaluationJobFilesLocation(job_id=job_id, path=None)
+
+        # Only persist completed jobs
+        if job.status != JobStatus.COMPLETED:
+            logger.info(f"Job {job_id} not completed, no files to persist")
+            return EvaluationJobFilesLocation(job_id=job_id, path=None)
+
+        output_path = self._output_dir / job_id
+
+        # Return output directory path if it exists
+        if output_path.exists():
+            return EvaluationJobFilesLocation(
+                job_id=job_id,
+                path=str(output_path),
+                metadata={
+                    "framework": "lighteval",
+                    "benchmark_id": job.request.benchmark_id,
+                    "model_name": job.request.model_name,
+                },
+            )
+
+        return EvaluationJobFilesLocation(job_id=job_id, path=None)
 
 
 def create_lighteval_adapter() -> LightEvalAdapter:

@@ -15,6 +15,8 @@ from ...models.api import (
     FrameworkInfo,
     HealthResponse,
     JobStatus,
+    OCICoordinate,
+    PersistResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -386,3 +388,31 @@ class AdapterClient:
                 )
 
             await asyncio.sleep(poll_interval)
+
+    async def persist_job_files(
+        self, job_id: str, coordinate: OCICoordinate
+    ) -> PersistResponse:
+        """Persist job files as OCI artifact.
+
+        Args:
+            job_id: The job identifier
+            coordinate: OCI coordinates (reference and optional subject)
+
+        Returns:
+            PersistResponse: Persistence status and artifact information
+
+        Raises:
+            httpx.HTTPError: If request fails
+            ClientError: If job not found or has no files to persist
+        """
+        try:
+            response = await self._request(
+                "POST", f"/evaluations/{job_id}/persist", json=coordinate.model_dump()
+            )
+            return PersistResponse(**response.json())
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise ClientError(
+                    f"Job {job_id} not found or has no files to persist", cause=e
+                )
+            raise
