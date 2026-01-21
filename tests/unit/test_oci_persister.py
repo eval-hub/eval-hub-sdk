@@ -123,4 +123,3 @@ class TestOCIArtifactPersister:
 
         assert response.files_count == 3
         assert response.digest == "sha256:" + "0" * 64  # Placeholder digest
-

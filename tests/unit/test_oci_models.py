@@ -89,7 +89,8 @@ class TestEvaluationJobFilesLocation:
         # Invalid: non-string values should fail validation
         with pytest.raises(ValidationError):
             EvaluationJobFilesLocation(
-                job_id="test_job", metadata={"key": 123}  # int value
+                job_id="test_job",
+                metadata={"key": 123},  # int value
             )
 
     def test_evaluation_job_files_location_serialization(self):

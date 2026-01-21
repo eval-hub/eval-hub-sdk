@@ -44,7 +44,9 @@ class OCIArtifactPersister:
             PersistResponse: Mock response with placeholder values
         """
         subject_info = (
-            f" with subject '{coordinate.oci_subject}'" if coordinate.oci_subject else ""
+            f" with subject '{coordinate.oci_subject}'"
+            if coordinate.oci_subject
+            else ""
         )
         logger.warning(
             f"OCI persister is a no-op placeholder. "
@@ -66,5 +68,8 @@ class OCIArtifactPersister:
             oci_ref=f"{coordinate.oci_ref}@sha256:{'0' * 64}",  # Placeholder digest
             digest=f"sha256:{'0' * 64}",
             files_count=files_count,
-            metadata={"placeholder": True, "message": "OCI persistence not yet implemented"},
+            metadata={
+                "placeholder": True,
+                "message": "OCI persistence not yet implemented",
+            },
         )

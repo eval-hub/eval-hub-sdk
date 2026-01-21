@@ -224,7 +224,9 @@ class EvaluationResponse(BaseModel):
 class OCICoordinate(BaseModel):
     """OCI artifact coordinates for persistence."""
 
-    oci_ref: str = Field(..., description="OCI reference (e.g., 'ghcr.io/org/repo:tag')")
+    oci_ref: str = Field(
+        ..., description="OCI reference (e.g., 'ghcr.io/org/repo:tag')"
+    )
     oci_subject: str | None = Field(
         default=None, description="Optional OCI subject identifier"
     )

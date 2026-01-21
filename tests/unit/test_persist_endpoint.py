@@ -53,9 +53,7 @@ class MockAdapter(FrameworkAdapter):
     async def get_job_status(self, job_id: str) -> EvaluationJob | None:
         return self._jobs.get(job_id)
 
-    async def get_evaluation_results(
-        self, job_id: str
-    ) -> EvaluationResponse | None:
+    async def get_evaluation_results(self, job_id: str) -> EvaluationResponse | None:
         raise NotImplementedError
 
     async def cancel_job(self, job_id: str) -> bool:
@@ -221,4 +219,3 @@ class TestPersistEndpoint:
         )
 
         assert response.status_code == 422  # Validation error
-
