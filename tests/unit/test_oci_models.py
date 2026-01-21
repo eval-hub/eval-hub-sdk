@@ -1,13 +1,12 @@
 """Unit tests for OCI persistence models."""
 
 import pytest
-from pydantic import ValidationError
-
 from evalhub.models.api import (
     EvaluationJobFilesLocation,
     OCICoordinate,
     PersistResponse,
 )
+from pydantic import ValidationError
 
 
 class TestOCICoordinate:

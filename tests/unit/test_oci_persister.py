@@ -3,7 +3,6 @@
 from datetime import datetime, timezone
 
 import pytest
-
 from evalhub.adapter.oci.persister import OCIArtifactPersister
 from evalhub.models.api import (
     EvaluationJob,

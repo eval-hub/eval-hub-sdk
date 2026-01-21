@@ -4,9 +4,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-
 from evalhub.adapter.api.endpoints import create_adapter_api
 from evalhub.adapter.models.framework import AdapterConfig, FrameworkAdapter
 from evalhub.models.api import (
@@ -20,6 +17,8 @@ from evalhub.models.api import (
     JobStatus,
     ModelConfig,
 )
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 
 class MockAdapter(FrameworkAdapter):
