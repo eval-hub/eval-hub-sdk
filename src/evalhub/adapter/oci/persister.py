@@ -55,12 +55,13 @@ class OCIArtifactPersister:
 
         # Calculate number of files
         files_count = 0
-        source = Path(files_location.path)
-        if source.exists():
-            if source.is_file():
-                files_count = 1
-            elif source.is_dir():
-                files_count = sum(1 for f in source.rglob("*") if f.is_file())
+        if files_location.path is not None:
+            source = Path(files_location.path)
+            if source.exists():
+                if source.is_file():
+                    files_count = 1
+                elif source.is_dir():
+                    files_count = sum(1 for f in source.rglob("*") if f.is_file())
 
         # Return mock response
         return PersistResponse(
