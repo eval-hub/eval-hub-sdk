@@ -116,7 +116,9 @@ class TestPersistEndpoint:
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
 
-    def test_persist_job_not_completed(self, client: TestClient, mock_adapter: MockAdapter) -> None:
+    def test_persist_job_not_completed(
+        self, client: TestClient, mock_adapter: MockAdapter
+    ) -> None:
         """Test persist with job not in completed state."""
         # Create pending job
         job = EvaluationJob(
@@ -137,7 +139,9 @@ class TestPersistEndpoint:
         assert response.status_code == 409
         assert "not completed" in response.json()["detail"].lower()
 
-    def test_persist_job_running(self, client: TestClient, mock_adapter: MockAdapter) -> None:
+    def test_persist_job_running(
+        self, client: TestClient, mock_adapter: MockAdapter
+    ) -> None:
         """Test persist with running job."""
         job = EvaluationJob(
             job_id="running_job",
@@ -156,7 +160,9 @@ class TestPersistEndpoint:
 
         assert response.status_code == 409
 
-    def test_persist_completed_job_no_files(self, client: TestClient, mock_adapter: MockAdapter) -> None:
+    def test_persist_completed_job_no_files(
+        self, client: TestClient, mock_adapter: MockAdapter
+    ) -> None:
         """Test persist with completed job but no files."""
         # Create completed job (but adapter will return path=None)
         job = EvaluationJob(
@@ -207,7 +213,9 @@ class TestPersistEndpoint:
         assert data["files_count"] == 2  # results.json + metadata.txt
         assert data["metadata"]["placeholder"] is True
 
-    def test_persist_invalid_request_missing_oci_ref(self, client: TestClient, mock_adapter: MockAdapter) -> None:
+    def test_persist_invalid_request_missing_oci_ref(
+        self, client: TestClient, mock_adapter: MockAdapter
+    ) -> None:
         """Test persist with missing oci_ref in request body."""
         job = EvaluationJob(
             job_id="test_job",
