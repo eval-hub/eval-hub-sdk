@@ -447,7 +447,7 @@ class LightEvalAdapter(FrameworkAdapter):
                 metadata={
                     "framework": "lighteval",
                     "benchmark_id": job.request.benchmark_id,
-                    "model_name": job.request.model_name,
+                    "model_name": job.request.model.name,
                 },
             )
 

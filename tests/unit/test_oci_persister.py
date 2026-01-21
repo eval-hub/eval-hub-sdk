@@ -1,6 +1,7 @@
 """Unit tests for OCI persister."""
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 from evalhub.adapter.oci.persister import OCIArtifactPersister
@@ -18,7 +19,7 @@ from evalhub.models.api import (
 class TestOCIArtifactPersister:
     """Tests for OCIArtifactPersister (no-op implementation coverage, will be removed later)."""
 
-    async def test_persister_no_op_returns_response(self, tmp_path):
+    async def test_persister_no_op_returns_response(self, tmp_path: Path) -> None:
         """Test no-op persister returns valid response."""
         # Create test directory with files
         test_dir = tmp_path / "test_job"
@@ -56,7 +57,7 @@ class TestOCIArtifactPersister:
         assert response.metadata["placeholder"] is True
         assert "not yet implemented" in response.metadata["message"]
 
-    async def test_persister_empty_directory(self, tmp_path):
+    async def test_persister_empty_directory(self, tmp_path: Path) -> None:
         """Test persister with empty directory."""
         test_dir = tmp_path / "empty"
         test_dir.mkdir()
@@ -86,7 +87,7 @@ class TestOCIArtifactPersister:
         assert response.files_count == 0
         assert response.digest.startswith("sha256:")
 
-    async def test_persister_nested_directory_structure(self, tmp_path):
+    async def test_persister_nested_directory_structure(self, tmp_path: Path) -> None:
         """Test persister counts files in nested directories."""
         test_dir = tmp_path / "nested"
         test_dir.mkdir()
