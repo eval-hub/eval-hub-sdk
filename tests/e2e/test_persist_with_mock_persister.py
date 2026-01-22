@@ -1,6 +1,8 @@
 """E2E test for persist endpoint with custom mock persister."""
 
 import hashlib
+import json
+import subprocess
 import tarfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -218,4 +220,32 @@ class TestPersistE2E:
         assert data["job_id"] == "e2e_test_job"
         assert data["files_count"] == 3
         assert "@sha256:" in data["oci_ref"]
-        
+
+        # External verification with skopeo.
+
+        # Remove tag if present before digest (e.g., :latest@sha256:... -> @sha256:...)
+        oci_ref = data["oci_ref"]
+        if "@" in oci_ref and ":" in oci_ref.split("@")[0].split("/")[-1]:
+            # Split on @ to get [base:tag, digest], then remove :tag from base
+            base, digest = oci_ref.split("@", 1)
+            base = base.rsplit(":", 1)[0]  # Remove tag
+            oci_ref = f"{base}@{digest}"
+
+        result = subprocess.run(
+            [
+                "skopeo",
+                "inspect",
+                "--raw",
+                f"docker://{oci_ref}",
+                "--tls-verify=False",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        manifest = json.loads(result.stdout)
+
+        # Verify it's an OCI manifest
+        assert manifest["mediaType"] == "application/vnd.oci.image.manifest.v1+json"
+
+
