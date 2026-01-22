@@ -5,7 +5,7 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-import oras.client  # type: ignore[import-untyped]
+import oras.client  # type: ignore
 import pytest
 from evalhub.adapter.api.endpoints import create_adapter_api
 from evalhub.adapter.models.framework import AdapterConfig, FrameworkAdapter
