@@ -1,9 +1,7 @@
 """E2E test for persist endpoint with custom mock persister."""
 
-import hashlib
 import json
 import subprocess
-import tarfile
 from datetime import datetime, timezone
 from pathlib import Path
 
