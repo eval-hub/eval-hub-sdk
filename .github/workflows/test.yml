@@ -63,4 +63,5 @@ jobs:
     - name: Deploy distribution registry
       run: ./scripts/deploy_distribution_registry.sh
     - name: Run E2E tests
-      run: make test-e2e
+      run: |
+        uv run pytest --e2e --cov=src/evalhub --cov-report=term-missing --cov-report=xml

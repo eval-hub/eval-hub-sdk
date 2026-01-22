@@ -7,7 +7,7 @@ import tarfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-import oras.client
+import oras.client  # type: ignore[import-untyped]
 import pytest
 from evalhub.adapter.api.endpoints import create_adapter_api
 from evalhub.adapter.models.framework import AdapterConfig, FrameworkAdapter
@@ -102,7 +102,9 @@ class TestAdapter(FrameworkAdapter):
         """Override to return custom persister for testing."""
         if self.custom_persister:
             return self.custom_persister
-        raise RuntimeError("This test adapter should be used only to override default implementation.")
+        raise RuntimeError(
+            "This test adapter should be used only to override default implementation."
+        )
 
     # Required abstract methods (minimal implementations)
     async def initialize(self) -> None:
@@ -170,7 +172,9 @@ def oras_persister() -> TestOrasPersister:
 
 
 @pytest.fixture
-def test_adapter(test_output_dir: Path, oras_persister: TestOrasPersister) -> TestAdapter:
+def test_adapter(
+    test_output_dir: Path, oras_persister: TestOrasPersister
+) -> TestAdapter:
     """Create test adapter with custom ORAS persister."""
     config = AdapterConfig(framework_id="test-e2e", adapter_name="E2E Test Adapter")
     return TestAdapter(config, test_output_dir, custom_persister=oras_persister)
@@ -247,5 +251,3 @@ class TestPersistE2E:
 
         # Verify it's an OCI manifest
         assert manifest["mediaType"] == "application/vnd.oci.image.manifest.v1+json"
-
-

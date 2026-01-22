@@ -1,9 +1,11 @@
 """Pytest configuration for eval-hub-sdk tests."""
 
+from typing import Any
+
 import pytest
 
 
-def pytest_addoption(parser):
+def pytest_addoption(parser: Any) -> None:
     """Add custom command line options."""
     parser.addoption(
         "--e2e",
@@ -13,18 +15,20 @@ def pytest_addoption(parser):
     )
 
 
-def pytest_configure(config):
+def pytest_configure(config: Any) -> None:
     """Register custom markers."""
     config.addinivalue_line(
         "markers", "e2e: mark test as end-to-end test (run with --e2e flag)"
     )
 
 
-def pytest_collection_modifyitems(config, items):
+def pytest_collection_modifyitems(config: Any, items: list[Any]) -> None:
     e2e_flag = config.getoption("--e2e")
 
     skip_e2e = pytest.mark.skip(reason="E2E tests require --e2e flag")
-    skip_non_e2e = pytest.mark.skip(reason="Non-E2E tests are skipped when --e2e flag is used")
+    skip_non_e2e = pytest.mark.skip(
+        reason="Non-E2E tests are skipped when --e2e flag is used"
+    )
 
     for item in items:
         is_e2e = "e2e" in item.keywords
