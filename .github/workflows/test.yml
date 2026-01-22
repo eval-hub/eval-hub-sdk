@@ -44,3 +44,23 @@ jobs:
       run: uv run ruff format --check src/ tests/
     - name: Run mypy type checking
       run: uv run mypy src/evalhub
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up uv
+      uses: astral-sh/setup-uv@v4
+      with:
+        enable-cache: true
+        cache-dependency-glob: "uv.lock"
+    - name: Set up Python
+      run: uv python install 3.10
+    - name: Install dependencies
+      run: uv sync
+    - name: Create kind cluster
+      uses: helm/kind-action@v1
+    - name: Deploy distribution registry
+      run: ./scripts/deploy_distribution_registry.sh
+    - name: Run E2E tests
+      run: make test-e2e
