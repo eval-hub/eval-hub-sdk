@@ -183,6 +183,7 @@ def client(test_adapter: TestAdapter) -> TestClient:
     return TestClient(app)
 
 
+@pytest.mark.e2e
 class TestPersistE2E:
     """E2E tests for persist endpoint with mock persister."""
 
@@ -217,4 +218,4 @@ class TestPersistE2E:
         assert data["job_id"] == "e2e_test_job"
         assert data["files_count"] == 3
         assert "@sha256:" in data["oci_ref"]
-
+        
