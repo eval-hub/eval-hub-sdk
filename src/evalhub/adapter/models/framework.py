@@ -8,6 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from evalhub.adapter.oci.persister import Persister
+
 from ...models.api import (
     BenchmarkInfo,
     EvaluationJob,
@@ -393,12 +395,23 @@ class FrameworkAdapter(ABC):
             return None
 
         # Create OCI artifact
-        from evalhub.adapter.oci.persister import OCIArtifactPersister
-
-        persister = OCIArtifactPersister()
+        persister = self._get_persister()
 
         return await persister.persist(
             files_location=files_location,
             coordinate=coordinate,
             job=job,
         )
+
+    def _get_persister(self) -> Persister:
+        """Get OCI artifact persister instance.
+
+        This method can be overridden in tests or subclasses to provide
+        a custom persister implementation.
+
+        Returns:
+            OCIArtifactPersister: The persister instance
+        """
+        from evalhub.adapter.oci.persister import OCIArtifactPersister
+
+        return OCIArtifactPersister()

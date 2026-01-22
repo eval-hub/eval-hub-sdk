@@ -2,6 +2,7 @@
 
 import logging
 from pathlib import Path
+from typing import Protocol
 
 from evalhub.models.api import (
     EvaluationJob,
@@ -11,6 +12,28 @@ from evalhub.models.api import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class Persister(Protocol):
+    """Protocol for OCI artifact persisters."""
+
+    async def persist(
+        self,
+        files_location: EvaluationJobFilesLocation,
+        coordinate: OCICoordinate,
+        job: EvaluationJob,
+    ) -> PersistResponse:
+        """Persist evaluation job files as OCI artifact.
+
+        Args:
+            files_location: Files to persist
+            coordinate: OCI coordinates
+            job: The evaluation job
+
+        Returns:
+            PersistResponse: Persistence result
+        """
+        ...
 
 
 class OCIArtifactPersister:
