@@ -21,4 +21,3 @@ mypy:
 
 .PHONY: tidy
 tidy: ruff mypy
-
