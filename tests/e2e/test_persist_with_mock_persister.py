@@ -28,11 +28,7 @@ from fastapi.testclient import TestClient
 
 
 class TestOrasPersister:
-    """Test scope persister that uses oras-py internally for now and returns controlled responses."""
-
-    def __init__(self):
-        """Initialize ORAS client."""
-        self.client = oras.client.OrasClient()
+    """Test scope persister that uses oras-py internally (for now) and returns a controlled response."""
 
     async def persist(
         self,
@@ -48,6 +44,9 @@ class TestOrasPersister:
         if not source_path.exists():
             raise ValueError(f"Source path does not exist: {source_path}")
 
+        registry_host = coordinate.oci_ref.split("/")[0]
+        client = oras.client.OrasClient(hostname=registry_host, insecure=True)
+
         # Count files
         files_count = 0
         if source_path.is_file():
@@ -58,19 +57,19 @@ class TestOrasPersister:
         # Push using ORAS
         digest = None
         try:
-            response = self.client.push(
+            response = client.push(
                 files=[str(source_path)],
                 target=coordinate.oci_ref,
+                disable_path_validation=True,
             )
-            print(response)
-            if hasattr(response, "digest"):
-                digest = response.digest
+            if "Docker-Content-Digest" in response.headers:
+                digest = response.headers["Docker-Content-Digest"]
             else:
-                # Fallback digest if not provided
+                # Fallback digest if not provided during testing
                 digest = f"sha256:{'0' * 64}"
-        except Exception:
-            # If push fails (e.g., no registry running), use fallback digest
-            # This allows tests to work without a running registry
+        except Exception as e:
+            print(e)
+            # If push fails (e.g., no registry running), use fallback digest; this allows E2E tests to work without a running registry for now
             digest = f"sha256:{'0' * 64}"
 
         return PersistResponse(
@@ -80,7 +79,6 @@ class TestOrasPersister:
             files_count=files_count,
             metadata={
                 "test_oras": True,
-                "subject": coordinate.oci_subject,
             },
         )
 
@@ -192,7 +190,6 @@ class TestPersistE2E:
         self,
         client: TestClient,
         test_adapter: TestAdapter,
-        oras_persister: TestOrasPersister,
     ) -> None:
         """Test that persist endpoint uses custom persister."""
         # Setup: Create completed job
@@ -216,5 +213,8 @@ class TestPersistE2E:
         assert response.status_code == 200
         data = response.json()
 
-
+        # Verify response data
+        assert data["job_id"] == "e2e_test_job"
+        assert data["files_count"] == 3
+        assert "@sha256:" in data["oci_ref"]
 
