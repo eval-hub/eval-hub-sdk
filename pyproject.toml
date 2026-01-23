@@ -3,8 +3,8 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "eval-hub"
-version = "0.1.0"
+name = "eval-hub-sdk"
+version = "0.1.0a0"
 description = "SDK for building framework adapters that integrate with TrustyAI EvalHub"
 authors = [
     {name = "Rui Vieira", email = "rui@redhat.com"},
