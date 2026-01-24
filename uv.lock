@@ -585,8 +585,8 @@ wheels = [
 ]
 
 [[package]]
-name = "eval-hub"
-version = "0.1.0"
+name = "eval-hub-sdk"
+version = "0.1.0a0"
 source = { editable = "." }
 dependencies = [
     { name = "importlib-metadata" },
@@ -649,10 +649,10 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "eval-hub", extras = ["core"], marker = "extra == 'adapter'" },
-    { name = "eval-hub", extras = ["core"], marker = "extra == 'cli'" },
-    { name = "eval-hub", extras = ["core"], marker = "extra == 'client'" },
-    { name = "eval-hub", extras = ["core", "adapter", "client", "cli", "dev"], marker = "extra == 'all'" },
+    { name = "eval-hub-sdk", extras = ["core"], marker = "extra == 'adapter'" },
+    { name = "eval-hub-sdk", extras = ["core"], marker = "extra == 'cli'" },
+    { name = "eval-hub-sdk", extras = ["core"], marker = "extra == 'client'" },
+    { name = "eval-hub-sdk", extras = ["core", "adapter", "client", "cli", "dev"], marker = "extra == 'all'" },
     { name = "fastapi", marker = "extra == 'adapter'", specifier = ">=0.104.0" },
     { name = "httpx", marker = "extra == 'core'", specifier = ">=0.25.0" },
     { name = "importlib-metadata", specifier = ">=6.0.0" },
