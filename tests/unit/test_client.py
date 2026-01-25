@@ -62,7 +62,7 @@ class TestAdapterClient:
                 "status": "pending",
                 "request": {
                     "benchmark_id": "test_bench",
-                    "model": {"name": "test-model"},
+                    "model": {"url": "http://localhost:8000/v1", "name": "test-model"},
                 },
                 "submitted_at": "2024-01-01T12:00:00Z",
             },
@@ -233,13 +233,13 @@ class TestAdapterClient:
             with patch.object(
                 client, "_request", return_value=mock_response
             ) as mock_request:
-                model = ModelConfig(name="test-model")
+                model = ModelConfig(url="http://localhost:8000/v1", name="test-model")
                 request = EvaluationRequest(benchmark_id="test_bench", model=model)
 
                 job = await client.submit_evaluation(request)
 
                 assert isinstance(job, EvaluationJob)
-                assert job.job_id == "job_123"
+                assert job.id == "job_123"
                 assert job.status == JobStatus.PENDING
 
                 # Verify the POST was called with correct data
@@ -264,7 +264,7 @@ class TestAdapterClient:
 
                 assert job is not None
                 assert isinstance(job, EvaluationJob)
-                assert job.job_id == "job_123"
+                assert job.id == "job_123"
                 assert job.status == JobStatus.PENDING
 
                 mock_request.assert_called_with("GET", "/evaluations/job_123")
@@ -350,7 +350,7 @@ class TestAdapterClient:
             "status": "completed",
             "request": {
                 "benchmark_id": "test_bench",
-                "model": {"name": "test-model"},
+                "model": {"url": "http://localhost:8000/v1", "name": "test-model"},
             },
             "submitted_at": "2024-01-01T12:00:00Z",
             "completed_at": "2024-01-01T12:10:00Z",
@@ -377,7 +377,7 @@ class TestAdapterClient:
             "status": "running",
             "request": {
                 "benchmark_id": "test_bench",
-                "model": {"name": "test-model"},
+                "model": {"url": "http://localhost:8000/v1", "name": "test-model"},
             },
             "submitted_at": "2024-01-01T12:00:00Z",
             "progress": 0.5,

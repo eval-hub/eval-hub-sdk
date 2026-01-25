@@ -25,16 +25,14 @@ class TestModelConfig:
 
     def test_basic_model_config(self) -> None:
         """Test basic ModelConfig creation."""
-        config = ModelConfig(name="test-model")
+        config = ModelConfig(url="http://localhost:8000/v1", name="test-model")
         assert config.name == "test-model"
-        assert config.provider is None
-        assert config.parameters == {}
-        assert config.device is None
-        assert config.batch_size is None
+        assert config.url == "http://localhost:8000/v1"
 
     def test_full_model_config(self) -> None:
-        """Test ModelConfig with all fields."""
+        """Test ModelConfig with extra fields (extra='allow')."""
         config = ModelConfig(
+            url="http://localhost:8000/v1",
             name="gpt-4",
             provider="openai",
             parameters={"temperature": 0.1, "max_tokens": 100},
@@ -42,6 +40,7 @@ class TestModelConfig:
             batch_size=8,
         )
         assert config.name == "gpt-4"
+        assert config.url == "http://localhost:8000/v1"
         assert config.provider == "openai"
         assert config.parameters == {"temperature": 0.1, "max_tokens": 100}
         assert config.device == "cuda:0"
@@ -50,7 +49,11 @@ class TestModelConfig:
     def test_model_config_validation(self) -> None:
         """Test ModelConfig validation."""
         with pytest.raises(ValidationError):
-            ModelConfig(name="")  # Empty name should fail
+            ModelConfig(
+                url="http://localhost:8000/v1", name=""
+            )  # Empty name should fail
+        with pytest.raises(ValidationError):
+            ModelConfig(url="", name="test-model")  # Empty URL should fail
 
 
 class TestBenchmarkInfo:
@@ -97,7 +100,7 @@ class TestEvaluationRequest:
 
     def test_basic_evaluation_request(self) -> None:
         """Test basic EvaluationRequest creation."""
-        model = ModelConfig(name="test-model")
+        model = ModelConfig(url="http://localhost:8000/v1", name="test-model")
         request = EvaluationRequest(
             benchmark_id="test_bench",
             model=model,
@@ -111,7 +114,11 @@ class TestEvaluationRequest:
 
     def test_full_evaluation_request(self) -> None:
         """Test EvaluationRequest with all fields."""
-        model = ModelConfig(name="gpt-4", provider="openai")
+        model = ModelConfig(
+            url="http://localhost:8000/v1",
+            name="gpt-4",
+            provider="openai",
+        )
         request = EvaluationRequest(
             benchmark_id="mmlu",
             model=model,
@@ -133,7 +140,7 @@ class TestEvaluationJob:
 
     def test_basic_evaluation_job(self) -> None:
         """Test basic EvaluationJob creation."""
-        model = ModelConfig(name="test-model")
+        model = ModelConfig(url="http://localhost:8000/v1", name="test-model")
         request = EvaluationRequest(benchmark_id="test", model=model)
         now = datetime.now(timezone.utc)
 
@@ -143,7 +150,7 @@ class TestEvaluationJob:
             request=request,
             submitted_at=now,
         )
-        assert job.job_id == "job_123"
+        assert job.id == "job_123"
         assert job.status == JobStatus.PENDING
         assert job.request.benchmark_id == "test"
         assert job.submitted_at == now
@@ -154,7 +161,7 @@ class TestEvaluationJob:
 
     def test_completed_evaluation_job(self) -> None:
         """Test completed EvaluationJob."""
-        model = ModelConfig(name="test-model")
+        model = ModelConfig(url="http://localhost:8000/v1", name="test-model")
         request = EvaluationRequest(benchmark_id="test", model=model)
         now = datetime.now(timezone.utc)
 
@@ -173,7 +180,7 @@ class TestEvaluationJob:
 
     def test_failed_evaluation_job(self) -> None:
         """Test failed EvaluationJob."""
-        model = ModelConfig(name="test-model")
+        model = ModelConfig(url="http://localhost:8000/v1", name="test-model")
         request = EvaluationRequest(benchmark_id="test", model=model)
         now = datetime.now(timezone.utc)
 

@@ -1,7 +1,12 @@
 """EvalHub SDK Models - Standard request/response models for framework adapters."""
 
 from .api import (
+    Benchmark,
     BenchmarkInfo,
+    BenchmarkReference,
+    BenchmarksList,
+    Collection,
+    CollectionList,
     ErrorResponse,
     EvaluationJob,
     # Core API models
@@ -12,21 +17,40 @@ from .api import (
     FrameworkInfo,
     HealthResponse,
     # Status and metadata
+    JobsList,
     JobStatus,
     ModelConfig,
+    Provider,
+    ProviderList,
+    Resource,
+    SupportedBenchmark,
 )
 
 __all__ = [
-    # API models
-    "EvaluationRequest",
-    "EvaluationResponse",
-    "EvaluationJob",
-    "EvaluationResult",
-    "BenchmarkInfo",
-    "ModelConfig",
-    "FrameworkInfo",
+    # Job & Evaluation models
     "JobStatus",
     "EvaluationStatus",
+    "ModelConfig",
+    "EvaluationRequest",
+    "EvaluationResult",
+    "EvaluationJob",
+    "JobsList",
+    "EvaluationResponse",
+    # Provider & Benchmark models
+    "SupportedBenchmark",
+    "Provider",
+    "ProviderList",
+    "Benchmark",
+    "BenchmarkInfo",
+    "BenchmarksList",
+    "BenchmarkReference",
+    # Collection models
+    "Resource",
+    "Collection",
+    "CollectionList",
+    # Framework models
+    "FrameworkInfo",
+    # Response models
     "ErrorResponse",
     "HealthResponse",
 ]

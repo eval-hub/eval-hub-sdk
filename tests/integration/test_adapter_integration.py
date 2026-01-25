@@ -215,6 +215,7 @@ class TestAdapterIntegration:
         request_data = {
             "benchmark_id": "integration_test",
             "model": {
+                "url": "http://localhost:8000/v1",
                 "name": "test-model",
                 "provider": "test",
                 "parameters": {"temperature": 0.1},
@@ -286,7 +287,10 @@ class TestAdapterIntegration:
         # Test validation error for invalid request
         invalid_request = {
             "benchmark_id": "",  # Empty benchmark ID
-            "model": {"name": ""},  # Empty model name
+            "model": {
+                "url": "http://localhost:8000/v1",
+                "name": "",
+            },  # Empty model name
         }
         response = test_client.post("/api/v1/evaluations", json=invalid_request)
         assert response.status_code == 422
@@ -297,7 +301,7 @@ class TestAdapterIntegration:
         """Test handling multiple concurrent evaluations."""
         request_data = {
             "benchmark_id": "performance_test",
-            "model": {"name": "test-model"},
+            "model": {"url": "http://localhost:8000/v1", "name": "test-model"},
             "num_examples": 10,
         }
 
@@ -331,7 +335,7 @@ class TestAdapterIntegration:
         # Submit evaluation for integration_test benchmark
         request1 = {
             "benchmark_id": "integration_test",
-            "model": {"name": "test-model"},
+            "model": {"url": "http://localhost:8000/v1", "name": "test-model"},
         }
         response = test_client.post("/api/v1/evaluations", json=request1)
         job1_data = response.json()
@@ -341,7 +345,7 @@ class TestAdapterIntegration:
         # Submit evaluation for performance_test benchmark
         request2 = {
             "benchmark_id": "performance_test",
-            "model": {"name": "test-model"},
+            "model": {"url": "http://localhost:8000/v1", "name": "test-model"},
         }
         response = test_client.post("/api/v1/evaluations", json=request2)
         job2_data = response.json()

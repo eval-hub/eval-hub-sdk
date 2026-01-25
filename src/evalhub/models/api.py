@@ -30,21 +30,30 @@ class EvaluationStatus(str, Enum):
 
 
 class ModelConfig(BaseModel):
-    """Configuration for the model being evaluated."""
+    """Configuration for the model being evaluated.
+
+    This matches the eval-hub API's Model schema which expects:
+    - url: The model endpoint URL (e.g., vLLM, OpenAI-compatible endpoint)
+    - name: Model name/identifier
+
+    Additional fields like provider, parameters, etc. can be passed via extra fields
+    since extra="allow" is set.
+    """
 
     model_config = ConfigDict(extra="allow")
 
+    url: str = Field(..., description="Model endpoint URL")
     name: str = Field(..., description="Model name or identifier")
-    provider: str | None = Field(
-        default=None, description="Model provider (e.g., 'vllm', 'transformers')"
-    )
+    # Common optional fields (also accepted as extras)
+    provider: str | None = Field(default=None, description="Model provider (optional)")
     parameters: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Model-specific parameters (temperature, max_tokens, etc.)",
+        default_factory=dict, description="Model generation parameters (optional)"
     )
-    device: str | None = Field(default=None, description="Device specification")
+    device: str | None = Field(
+        default=None, description="Device placement hint (optional)"
+    )
     batch_size: int | None = Field(
-        default=None, description="Batch size for evaluation"
+        default=None, description="Batch size hint (optional)"
     )
 
     @field_validator("name")
@@ -54,10 +63,12 @@ class ModelConfig(BaseModel):
             raise ValueError("Model name cannot be empty")
         return v
 
-    def merge_with_defaults(self, defaults: dict[str, Any]) -> "ModelConfig":
-        """Merge configuration with default values."""
-        merged_params = {**defaults, **self.parameters}
-        return self.model_copy(update={"parameters": merged_params})
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Model URL cannot be empty")
+        return v
 
 
 class BenchmarkInfo(BaseModel):
@@ -148,7 +159,9 @@ class EvaluationResult(BaseModel):
 class EvaluationJob(BaseModel):
     """Evaluation job information."""
 
-    job_id: str = Field(..., description="Unique job identifier")
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str = Field(..., description="Unique job identifier", alias="job_id")
     status: JobStatus = Field(..., description="Current job status")
     evaluation_status: EvaluationStatus | None = Field(
         default=None, description="Detailed evaluation status"
@@ -193,6 +206,13 @@ class EvaluationJob(BaseModel):
     actual_duration: int | None = Field(
         default=None, description="Actual duration in seconds"
     )
+
+
+class JobsList(BaseModel):
+    """List of evaluation jobs response."""
+
+    total_count: int = Field(..., description="Total number of jobs")
+    items: list[EvaluationJob] = Field(..., description="List of evaluation jobs")
 
 
 class EvaluationResponse(BaseModel):
@@ -244,17 +264,9 @@ class OCICoordinate(BaseModel):
 class EvaluationJobFilesLocation(BaseModel):
     """Files location for persisting as OCI artifacts for an evaluation job."""
 
-    job_id: str = Field(..., description="Job identifier")
-    path: str | None = Field(
-        default=None,
-        description="Directory path containing files to persist. None if no files to persist.",
-    )
-    metadata: dict[str, str] = Field(
-        default_factory=dict,
-        description="Framework-specific metadata (e.g., OCI annotations)",
-    )
-
     model_config = ConfigDict(
+        populate_by_name=True,
+        serialize_by_alias=True,
         json_schema_extra={
             "example": {
                 "job_id": "job_123",
@@ -264,22 +276,26 @@ class EvaluationJobFilesLocation(BaseModel):
                     "benchmark_id": "benchmark_id_value",
                 },
             }
-        }
+        },
+    )
+
+    id: str = Field(..., description="Job identifier", alias="job_id")
+    path: str | None = Field(
+        default=None,
+        description="Directory path containing files to persist. None if no files to persist.",
+    )
+    metadata: dict[str, str] = Field(
+        default_factory=dict,
+        description="Framework-specific metadata (e.g., OCI annotations)",
     )
 
 
 class PersistResponse(BaseModel):
     """Response from OCI artifact persistence operation."""
 
-    job_id: str = Field(..., description="Job identifier")
-    oci_ref: str = Field(..., description="Full OCI reference including digest")
-    digest: str = Field(..., description="SHA256 digest of artifact")
-    files_count: int = Field(..., description="Number of files persisted")
-    metadata: dict[str, Any] = Field(
-        default_factory=dict, description="Additional persistence metadata"
-    )
-
     model_config = ConfigDict(
+        populate_by_name=True,
+        serialize_by_alias=True,
         json_schema_extra={
             "example": {
                 "job_id": "job_123",
@@ -288,8 +304,111 @@ class PersistResponse(BaseModel):
                 "files_count": 42,
                 "metadata": {"placeholder": True},
             }
-        }
+        },
     )
+
+    id: str = Field(..., description="Job identifier", alias="job_id")
+    oci_ref: str = Field(..., description="Full OCI reference including digest")
+    digest: str = Field(..., description="SHA256 digest of artifact")
+    files_count: int = Field(..., description="Number of files persisted")
+    metadata: dict[str, Any] = Field(
+        default_factory=dict, description="Additional persistence metadata"
+    )
+
+
+class SupportedBenchmark(BaseModel):
+    """Reference to a supported benchmark."""
+
+    id: str = Field(..., description="Benchmark identifier")
+
+
+class Provider(BaseModel):
+    """Provider information from EvalHub API."""
+
+    id: str = Field(..., description="Provider identifier")
+    label: str = Field(..., description="Provider display name")
+    supported_benchmarks: list[SupportedBenchmark] = Field(
+        default_factory=list, description="Supported benchmarks"
+    )
+
+
+class ProviderList(BaseModel):
+    """List of providers response."""
+
+    total_count: int = Field(..., description="Total number of providers")
+    items: list[Provider] = Field(..., description="List of providers")
+
+
+class Benchmark(BaseModel):
+    """Benchmark information from EvalHub API."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str = Field(
+        ..., description="Unique benchmark identifier", alias="benchmark_id"
+    )
+    provider_id: str = Field(..., description="Provider that owns this benchmark")
+    label: str = Field(..., description="Human-readable benchmark name", alias="name")
+    description: str = Field(..., description="Benchmark description")
+    category: str = Field(..., description="Benchmark category")
+    metrics: list[str] = Field(..., description="List of metrics")
+    num_few_shot: int = Field(..., description="Number of few-shot examples")
+    dataset_size: int | None = Field(None, description="Size of the evaluation dataset")
+    tags: list[str] = Field(default_factory=list, description="Tags for categorization")
+
+
+class BenchmarksList(BaseModel):
+    """List of benchmarks response."""
+
+    total_count: int = Field(..., description="Total number of benchmarks")
+    items: list[Benchmark] = Field(..., description="List of benchmarks")
+
+
+class Resource(BaseModel):
+    """Resource metadata."""
+
+    id: str = Field(..., description="Resource identifier")
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: datetime = Field(..., description="Last update timestamp")
+
+
+class BenchmarkReference(BaseModel):
+    """Reference to a benchmark within a collection."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    provider_id: str = Field(..., description="Provider identifier")
+    id: str = Field(..., description="Benchmark identifier", alias="benchmark_id")
+    weight: float = Field(default=1.0, description="Benchmark weight in collection")
+    config: dict[str, Any] = Field(
+        default_factory=dict, description="Benchmark configuration"
+    )
+
+
+class Collection(BaseModel):
+    """Collection of benchmarks from EvalHub API."""
+
+    resource: Resource = Field(..., description="Resource metadata")
+    name: str = Field(..., description="Collection name")
+    description: str = Field(..., description="Collection description")
+    tags: list[str] = Field(default_factory=list, description="Collection tags")
+    custom: dict[str, Any] = Field(default_factory=dict, description="Custom metadata")
+    benchmarks: list[BenchmarkReference] = Field(
+        default_factory=list, description="Collection benchmarks"
+    )
+
+
+class CollectionList(BaseModel):
+    """List of collections response."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    total_count: int = Field(..., description="Total number of collections")
+    items: list[Collection] = Field(..., description="Collection resources")
+    # Pagination fields
+    first: dict[str, str] | None = Field(None, description="Link to first page")
+    next: dict[str, str] | None = Field(None, description="Link to next page")
+    limit: int | None = Field(None, description="Page size limit")
 
 
 class FrameworkInfo(BaseModel):

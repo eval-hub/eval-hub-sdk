@@ -249,7 +249,7 @@ class TestMockFrameworkAdapter:
     @pytest.mark.asyncio
     async def test_submit_evaluation(self, adapter: MockFrameworkAdapter) -> None:
         """Test submitting evaluation."""
-        model = ModelConfig(name="test-model")
+        model = ModelConfig(url="http://localhost:8000/v1", name="test-model")
         request = EvaluationRequest(
             benchmark_id="mock_benchmark",
             model=model,
@@ -258,7 +258,7 @@ class TestMockFrameworkAdapter:
 
         job = await adapter.submit_evaluation(request)
 
-        assert job.job_id == "mock_job_1"
+        assert job.id == "mock_job_1"
         assert job.status == JobStatus.PENDING
         assert job.request.benchmark_id == "mock_benchmark"
         assert job.request.model.name == "test-model"
@@ -267,18 +267,18 @@ class TestMockFrameworkAdapter:
     @pytest.mark.asyncio
     async def test_get_job_status_exists(self, adapter: MockFrameworkAdapter) -> None:
         """Test getting existing job status."""
-        model = ModelConfig(name="test-model")
+        model = ModelConfig(url="http://localhost:8000/v1", name="test-model")
         request = EvaluationRequest(benchmark_id="mock_benchmark", model=model)
 
         # Submit job first
         job = await adapter.submit_evaluation(request)
-        job_id = job.job_id
+        job_id = job.id
 
         # Get job status
         retrieved_job = await adapter.get_job_status(job_id)
 
         assert retrieved_job is not None
-        assert retrieved_job.job_id == job_id
+        assert retrieved_job.id == job_id
         assert retrieved_job.status == JobStatus.PENDING
 
     @pytest.mark.asyncio
@@ -294,18 +294,18 @@ class TestMockFrameworkAdapter:
         self, adapter: MockFrameworkAdapter
     ) -> None:
         """Test getting results for completed job."""
-        model = ModelConfig(name="test-model")
+        model = ModelConfig(url="http://localhost:8000/v1", name="test-model")
         request = EvaluationRequest(benchmark_id="mock_benchmark", model=model)
 
         # Submit and complete job
         job = await adapter.submit_evaluation(request)
-        adapter._complete_job(job.job_id)
+        adapter._complete_job(job.id)
 
         # Get results
-        results = await adapter.get_evaluation_results(job.job_id)
+        results = await adapter.get_evaluation_results(job.id)
 
         assert results is not None
-        assert results.job_id == job.job_id
+        assert results.job_id == job.id
         assert results.benchmark_id == "mock_benchmark"
         assert results.model_name == "test-model"
         assert len(results.results) == 2
@@ -317,31 +317,31 @@ class TestMockFrameworkAdapter:
         self, adapter: MockFrameworkAdapter
     ) -> None:
         """Test getting results for non-completed job."""
-        model = ModelConfig(name="test-model")
+        model = ModelConfig(url="http://localhost:8000/v1", name="test-model")
         request = EvaluationRequest(benchmark_id="mock_benchmark", model=model)
 
         # Submit but don't complete job
         job = await adapter.submit_evaluation(request)
 
         # Try to get results
-        results = await adapter.get_evaluation_results(job.job_id)
+        results = await adapter.get_evaluation_results(job.id)
         assert results is None
 
     @pytest.mark.asyncio
     async def test_cancel_job_exists(self, adapter: MockFrameworkAdapter) -> None:
         """Test canceling existing job."""
-        model = ModelConfig(name="test-model")
+        model = ModelConfig(url="http://localhost:8000/v1", name="test-model")
         request = EvaluationRequest(benchmark_id="mock_benchmark", model=model)
 
         # Submit job
         job = await adapter.submit_evaluation(request)
 
         # Cancel job
-        result = await adapter.cancel_job(job.job_id)
+        result = await adapter.cancel_job(job.id)
         assert result is True
 
         # Check job status
-        cancelled_job = await adapter.get_job_status(job.job_id)
+        cancelled_job = await adapter.get_job_status(job.id)
         assert cancelled_job is not None
         assert cancelled_job.status == JobStatus.CANCELLED
 
@@ -371,24 +371,24 @@ class TestMockFrameworkAdapter:
     @pytest.mark.asyncio
     async def test_multiple_jobs(self, adapter: MockFrameworkAdapter) -> None:
         """Test submitting multiple jobs."""
-        model = ModelConfig(name="test-model")
+        model = ModelConfig(url="http://localhost:8000/v1", name="test-model")
         request = EvaluationRequest(benchmark_id="mock_benchmark", model=model)
 
         # Submit multiple jobs
         job1 = await adapter.submit_evaluation(request)
         job2 = await adapter.submit_evaluation(request)
 
-        assert job1.job_id == "mock_job_1"
-        assert job2.job_id == "mock_job_2"
-        assert job1.job_id != job2.job_id
+        assert job1.id == "mock_job_1"
+        assert job2.id == "mock_job_2"
+        assert job1.id != job2.id
 
         # Both jobs should be retrievable
-        retrieved1 = await adapter.get_job_status(job1.job_id)
-        retrieved2 = await adapter.get_job_status(job2.job_id)
+        retrieved1 = await adapter.get_job_status(job1.id)
+        retrieved2 = await adapter.get_job_status(job2.id)
 
         assert retrieved1 is not None
         assert retrieved2 is not None
-        assert retrieved1.job_id != retrieved2.job_id
+        assert retrieved1.id != retrieved2.id
 
 
 class TestFrameworkAdapterAbstract:

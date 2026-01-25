@@ -47,7 +47,33 @@ __all__ = [
 
 # Conditional imports based on available extras
 
-# Core extra - HTTP client functionality
+# Client extra - EvalHub client library
+try:
+    from .client import (
+        AsyncEvalHubClient,
+        AsyncEvaluationsClient,
+        AsyncProvidersClient,
+        EvalHubClient,
+        SyncEvalHubClient,
+        SyncEvaluationsClient,
+        SyncProvidersClient,
+    )
+
+    __all__.extend(
+        [
+            "AsyncEvalHubClient",
+            "AsyncProvidersClient",
+            "AsyncEvaluationsClient",
+            "SyncEvalHubClient",
+            "SyncProvidersClient",
+            "SyncEvaluationsClient",
+            "EvalHubClient",  # Alias for AsyncEvalHubClient
+        ]
+    )
+except ImportError:
+    pass
+
+# Core extra - HTTP client functionality (adapter client)
 try:
     from .adapter.client import AdapterClient, AdapterDiscovery
 

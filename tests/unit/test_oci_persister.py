@@ -37,7 +37,7 @@ class TestOCIArtifactPersister:
             status=JobStatus.COMPLETED,
             request=EvaluationRequest(
                 benchmark_id="test_benchmark",
-                model=ModelConfig(name="test_model"),
+                model=ModelConfig(url="http://localhost:8000/v1", name="test_model"),
             ),
             submitted_at=datetime.now(timezone.utc),
         )
@@ -50,7 +50,7 @@ class TestOCIArtifactPersister:
             job=job,
         )
 
-        assert response.job_id == "test_job"
+        assert response.id == "test_job"
         assert response.files_count == 2
         assert response.digest.startswith("sha256:")
         assert response.oci_ref.startswith("ghcr.io/test/repo:latest@sha256:")
@@ -71,7 +71,8 @@ class TestOCIArtifactPersister:
             job_id="test_job",
             status=JobStatus.COMPLETED,
             request=EvaluationRequest(
-                benchmark_id="test", model=ModelConfig(name="test_model")
+                benchmark_id="test",
+                model=ModelConfig(url="http://localhost:8000/v1", name="test_model"),
             ),
             submitted_at=datetime.now(timezone.utc),
         )
@@ -109,7 +110,8 @@ class TestOCIArtifactPersister:
             job_id="test_job",
             status=JobStatus.COMPLETED,
             request=EvaluationRequest(
-                benchmark_id="test", model=ModelConfig(name="test_model")
+                benchmark_id="test",
+                model=ModelConfig(url="http://localhost:8000/v1", name="test_model"),
             ),
             submitted_at=datetime.now(timezone.utc),
         )

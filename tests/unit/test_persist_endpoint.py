@@ -125,7 +125,8 @@ class TestPersistEndpoint:
             job_id="pending_job",
             status=JobStatus.PENDING,
             request=EvaluationRequest(
-                benchmark_id="test_benchmark", model=ModelConfig(name="test_model")
+                benchmark_id="test_benchmark",
+                model=ModelConfig(url="http://localhost:8000/v1", name="test_model"),
             ),
             submitted_at=datetime.now(timezone.utc),
         )
@@ -147,7 +148,8 @@ class TestPersistEndpoint:
             job_id="running_job",
             status=JobStatus.RUNNING,
             request=EvaluationRequest(
-                benchmark_id="test_benchmark", model=ModelConfig(name="test_model")
+                benchmark_id="test_benchmark",
+                model=ModelConfig(url="http://localhost:8000/v1", name="test_model"),
             ),
             submitted_at=datetime.now(timezone.utc),
         )
@@ -169,7 +171,8 @@ class TestPersistEndpoint:
             job_id="no_files_job",
             status=JobStatus.COMPLETED,
             request=EvaluationRequest(
-                benchmark_id="test_benchmark", model=ModelConfig(name="test_model")
+                benchmark_id="test_benchmark",
+                model=ModelConfig(url="http://localhost:8000/v1", name="test_model"),
             ),
             submitted_at=datetime.now(timezone.utc),
         )
@@ -193,7 +196,8 @@ class TestPersistEndpoint:
             job_id="completed_job",
             status=JobStatus.COMPLETED,
             request=EvaluationRequest(
-                benchmark_id="test_benchmark", model=ModelConfig(name="test_model")
+                benchmark_id="test_benchmark",
+                model=ModelConfig(url="http://localhost:8000/v1", name="test_model"),
             ),
             submitted_at=datetime.now(timezone.utc),
         )
@@ -221,7 +225,8 @@ class TestPersistEndpoint:
             job_id="test_job",
             status=JobStatus.COMPLETED,
             request=EvaluationRequest(
-                benchmark_id="test_benchmark", model=ModelConfig(name="test_model")
+                benchmark_id="test_benchmark",
+                model=ModelConfig(url="http://localhost:8000/v1", name="test_model"),
             ),
             submitted_at=datetime.now(timezone.utc),
         )

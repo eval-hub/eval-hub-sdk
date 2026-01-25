@@ -98,7 +98,10 @@ class MockAdapter(FrameworkAdapter):
                 job_id=job_id,
                 status=JobStatus.COMPLETED,
                 request=EvaluationRequest(
-                    benchmark_id="mock_test", model=ModelConfig(name="mock-model")
+                    benchmark_id="mock_test",
+                    model=ModelConfig(
+                        url="http://localhost:8000/v1", name="mock-model"
+                    ),
                 ),
                 submitted_at=datetime.now(timezone.utc),
                 completed_at=datetime.now(timezone.utc),
@@ -255,7 +258,7 @@ class TestAdapterServer:
 
         request_data = {
             "benchmark_id": "mock_test",
-            "model": {"name": "test-model"},
+            "model": {"url": "http://localhost:8000/v1", "name": "test-model"},
             "num_examples": 100,
         }
 

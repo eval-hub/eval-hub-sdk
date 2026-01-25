@@ -65,7 +65,7 @@ class OCIArtifactPersister:
 
         # Return mock response
         return PersistResponse(
-            job_id=job.job_id,
+            job_id=job.id,
             oci_ref=f"{coordinate.oci_ref}@sha256:{'0' * 64}",  # Placeholder digest
             digest=f"sha256:{'0' * 64}",
             files_count=files_count,

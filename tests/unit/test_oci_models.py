@@ -55,7 +55,7 @@ class TestEvaluationJobFilesLocation:
     def test_evaluation_job_files_location_empty(self) -> None:
         """Test empty files location."""
         loc = EvaluationJobFilesLocation(job_id="test_job", path=None)
-        assert loc.job_id == "test_job"
+        assert loc.id == "test_job"
         assert loc.path is None
         assert loc.metadata == {}
 
@@ -66,7 +66,7 @@ class TestEvaluationJobFilesLocation:
             path="/tmp/output",
             metadata={"framework": "lighteval", "benchmark": "benchmark_id_value"},
         )
-        assert loc.job_id == "test_job"
+        assert loc.id == "test_job"
         assert loc.path == "/tmp/output"
         assert loc.metadata["framework"] == "lighteval"
         assert loc.metadata["benchmark"] == "benchmark_id_value"
@@ -74,7 +74,7 @@ class TestEvaluationJobFilesLocation:
     def test_evaluation_job_files_location_defaults(self) -> None:
         """Test default values for optional fields."""
         loc = EvaluationJobFilesLocation(job_id="test_job")
-        assert loc.job_id == "test_job"
+        assert loc.id == "test_job"
         assert loc.path is None
         assert loc.metadata == {}
 
@@ -117,7 +117,7 @@ class TestPersistResponse:
             digest="sha256:abc123",
             files_count=42,
         )
-        assert response.job_id == "test_job"
+        assert response.id == "test_job"
         assert response.oci_ref == "ghcr.io/org/repo:tag@sha256:abc123"
         assert response.digest == "sha256:abc123"
         assert response.files_count == 42

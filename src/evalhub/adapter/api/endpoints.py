@@ -110,7 +110,7 @@ def create_adapter_api(adapter: FrameworkAdapter) -> APIRouter:
             job = await adapter.submit_evaluation(request)
 
             logger.info(
-                f"Submitted evaluation job {job.job_id} for benchmark {request.benchmark_id}"
+                f"Submitted evaluation job {job.id} for benchmark {request.benchmark_id}"
             )
             return job
 
