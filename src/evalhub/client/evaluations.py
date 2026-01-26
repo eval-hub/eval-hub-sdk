@@ -6,6 +6,8 @@ import asyncio
 import logging
 import time
 
+import httpx
+
 from ..models import (
     EvaluationJob,
     EvaluationRequest,
@@ -72,8 +74,6 @@ class AsyncEvaluationsClient(BaseAsyncClient):
             await self._request_delete(f"/evaluations/jobs/{job_id}")
             return True
         except Exception as e:
-            import httpx
-
             if isinstance(e, httpx.HTTPStatusError):
                 if e.response.status_code in [404, 409]:
                     return False  # Job not found or cannot be cancelled
@@ -195,8 +195,6 @@ class SyncEvaluationsClient(BaseSyncClient):
             self._request_delete(f"/evaluations/jobs/{job_id}")
             return True
         except Exception as e:
-            import httpx
-
             if isinstance(e, httpx.HTTPStatusError):
                 if e.response.status_code in [404, 409]:
                     return False  # Job not found or cannot be cancelled
