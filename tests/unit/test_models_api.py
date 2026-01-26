@@ -1,6 +1,6 @@
 """Unit tests for API models."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -142,7 +142,7 @@ class TestEvaluationJob:
         """Test basic EvaluationJob creation."""
         model = ModelConfig(url="http://localhost:8000/v1", name="test-model")
         request = EvaluationRequest(benchmark_id="test", model=model)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         job = EvaluationJob(
             job_id="job_123",
@@ -163,7 +163,7 @@ class TestEvaluationJob:
         """Test completed EvaluationJob."""
         model = ModelConfig(url="http://localhost:8000/v1", name="test-model")
         request = EvaluationRequest(benchmark_id="test", model=model)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         job = EvaluationJob(
             job_id="job_456",
@@ -182,7 +182,7 @@ class TestEvaluationJob:
         """Test failed EvaluationJob."""
         model = ModelConfig(url="http://localhost:8000/v1", name="test-model")
         request = EvaluationRequest(benchmark_id="test", model=model)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         job = EvaluationJob(
             job_id="job_error",
@@ -244,7 +244,7 @@ class TestEvaluationResponse:
             EvaluationResult(metric_name="accuracy", metric_value=0.85),
             EvaluationResult(metric_name="f1_score", metric_value=0.82),
         ]
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         response = EvaluationResponse(
             job_id="job_123",
@@ -270,7 +270,7 @@ class TestEvaluationResponse:
         results = [
             EvaluationResult(metric_name="accuracy", metric_value=0.85),
         ]
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         response = EvaluationResponse(
             job_id="job_123",

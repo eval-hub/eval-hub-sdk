@@ -4,6 +4,7 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
+from datetime import UTC
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -294,9 +295,9 @@ class FrameworkAdapter(ABC):
         Returns:
             int: Number of jobs cleaned up
         """
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        current_time = datetime.now(timezone.utc)
+        current_time = datetime.now(UTC)
         cleaned_count = 0
 
         jobs_to_remove = []

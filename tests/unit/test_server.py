@@ -1,6 +1,8 @@
 """Unit tests for server components."""
 
 
+from datetime import UTC
+
 import pytest
 from evalhub.adapter.models.framework import AdapterConfig, FrameworkAdapter
 from evalhub.adapter.server.app import AdapterServer, create_adapter_app
@@ -73,7 +75,7 @@ class MockAdapter(FrameworkAdapter):
 
     async def submit_evaluation(self, request: EvaluationRequest) -> EvaluationJob:
         """Submit evaluation job."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         from evalhub.models.api import EvaluationJob
 
@@ -84,13 +86,13 @@ class MockAdapter(FrameworkAdapter):
             job_id=job_id,
             status=JobStatus.PENDING,
             request=request,
-            submitted_at=datetime.now(timezone.utc),
+            submitted_at=datetime.now(UTC),
         )
 
     async def get_job_status(self, job_id: str) -> EvaluationJob | None:
         """Get job status."""
         if job_id.startswith("mock_job_"):
-            from datetime import datetime, timezone
+            from datetime import datetime
 
             from evalhub.models.api import EvaluationJob
 
@@ -103,8 +105,8 @@ class MockAdapter(FrameworkAdapter):
                         url="http://localhost:8000/v1", name="mock-model"
                     ),
                 ),
-                submitted_at=datetime.now(timezone.utc),
-                completed_at=datetime.now(timezone.utc),
+                submitted_at=datetime.now(UTC),
+                completed_at=datetime.now(UTC),
                 progress=1.0,
             )
         return None
@@ -112,7 +114,7 @@ class MockAdapter(FrameworkAdapter):
     async def get_evaluation_results(self, job_id: str) -> EvaluationResponse | None:
         """Get evaluation results."""
         if job_id.startswith("mock_job_"):
-            from datetime import datetime, timezone
+            from datetime import datetime
 
             from evalhub.models.api import EvaluationResponse, EvaluationResult
 
@@ -128,7 +130,7 @@ class MockAdapter(FrameworkAdapter):
                 ],
                 overall_score=0.85,
                 num_examples_evaluated=100,
-                completed_at=datetime.now(timezone.utc),
+                completed_at=datetime.now(UTC),
                 duration_seconds=60.0,
             )
         return None

@@ -20,7 +20,7 @@ Example (async):
     ...
     ...     # Job operations
     ...     job = await client.jobs.submit(request)
-    ...     status = await client.jobs.get(job.job_id)
+    ...     status = await client.jobs.get(job.id)
     ...     jobs = await client.jobs.list()
 
 Example (synchronous):
@@ -40,7 +40,7 @@ Example (synchronous):
     ...
     ...     # Job operations
     ...     job = client.jobs.submit(request)
-    ...     status = client.jobs.get(job.job_id)
+    ...     status = client.jobs.get(job.id)
     ...     jobs = client.jobs.list()
 
 Note: EvalHubClient is an alias for AsyncEvalHubClient (async by default).

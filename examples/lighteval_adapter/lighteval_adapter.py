@@ -12,7 +12,7 @@ import json
 import logging
 import tempfile
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -168,7 +168,7 @@ class LightEvalAdapter(FrameworkAdapter):
             job_id=job_id,
             status=JobStatus.PENDING,
             request=request,
-            submitted_at=datetime.now(timezone.utc),
+            submitted_at=datetime.now(UTC),
         )
 
         self._jobs[job_id] = job
@@ -186,7 +186,7 @@ class LightEvalAdapter(FrameworkAdapter):
         try:
             # Update job status
             job.status = JobStatus.RUNNING
-            job.started_at = datetime.now(timezone.utc)
+            job.started_at = datetime.now(UTC)
             job.progress = 0.1
 
             # Create temporary config files
@@ -227,7 +227,7 @@ class LightEvalAdapter(FrameworkAdapter):
 
                 # Update job status
                 job.status = JobStatus.COMPLETED
-                job.completed_at = datetime.now(timezone.utc)
+                job.completed_at = datetime.now(UTC)
                 job.progress = 1.0
 
                 logger.info(f"Evaluation {job_id} completed successfully")
@@ -240,7 +240,7 @@ class LightEvalAdapter(FrameworkAdapter):
             logger.error(f"Evaluation {job_id} failed: {e}")
             job.status = JobStatus.FAILED
             job.error_message = str(e)
-            job.completed_at = datetime.now(timezone.utc)
+            job.completed_at = datetime.now(UTC)
 
     def _create_evaluation_config(self, request: EvaluationRequest) -> dict[str, Any]:
         """Create LightEval configuration from request."""
@@ -353,7 +353,7 @@ class LightEvalAdapter(FrameworkAdapter):
             results=eval_results,
             overall_score=results.get("accuracy"),
             num_examples_evaluated=results.get("num_examples", 100),
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
             duration_seconds=120.0,  # Mock duration
         )
 
@@ -380,7 +380,7 @@ class LightEvalAdapter(FrameworkAdapter):
         job = self._jobs[job_id]
         if job.status in [JobStatus.PENDING, JobStatus.RUNNING]:
             job.status = JobStatus.CANCELLED
-            job.completed_at = datetime.now(timezone.utc)
+            job.completed_at = datetime.now(UTC)
             return True
 
         return False

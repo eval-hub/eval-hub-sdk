@@ -1,6 +1,6 @@
 """Unit tests for OCI persister."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -39,7 +39,7 @@ class TestOCIArtifactPersister:
                 benchmark_id="test_benchmark",
                 model=ModelConfig(url="http://localhost:8000/v1", name="test_model"),
             ),
-            submitted_at=datetime.now(timezone.utc),
+            submitted_at=datetime.now(UTC),
         )
 
         coordinate = OCICoordinate(oci_ref="ghcr.io/test/repo:latest")
@@ -74,7 +74,7 @@ class TestOCIArtifactPersister:
                 benchmark_id="test",
                 model=ModelConfig(url="http://localhost:8000/v1", name="test_model"),
             ),
-            submitted_at=datetime.now(timezone.utc),
+            submitted_at=datetime.now(UTC),
         )
 
         coordinate = OCICoordinate(oci_ref="ghcr.io/test/repo:latest")
@@ -113,7 +113,7 @@ class TestOCIArtifactPersister:
                 benchmark_id="test",
                 model=ModelConfig(url="http://localhost:8000/v1", name="test_model"),
             ),
-            submitted_at=datetime.now(timezone.utc),
+            submitted_at=datetime.now(UTC),
         )
 
         coordinate = OCICoordinate(oci_ref="ghcr.io/test/repo:latest")

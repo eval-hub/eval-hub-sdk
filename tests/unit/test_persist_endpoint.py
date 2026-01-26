@@ -1,6 +1,6 @@
 """Integration tests for persist endpoint."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -128,7 +128,7 @@ class TestPersistEndpoint:
                 benchmark_id="test_benchmark",
                 model=ModelConfig(url="http://localhost:8000/v1", name="test_model"),
             ),
-            submitted_at=datetime.now(timezone.utc),
+            submitted_at=datetime.now(UTC),
         )
         mock_adapter._jobs["pending_job"] = job
 
@@ -151,7 +151,7 @@ class TestPersistEndpoint:
                 benchmark_id="test_benchmark",
                 model=ModelConfig(url="http://localhost:8000/v1", name="test_model"),
             ),
-            submitted_at=datetime.now(timezone.utc),
+            submitted_at=datetime.now(UTC),
         )
         mock_adapter._jobs["running_job"] = job
 
@@ -174,7 +174,7 @@ class TestPersistEndpoint:
                 benchmark_id="test_benchmark",
                 model=ModelConfig(url="http://localhost:8000/v1", name="test_model"),
             ),
-            submitted_at=datetime.now(timezone.utc),
+            submitted_at=datetime.now(UTC),
         )
         mock_adapter._jobs["no_files_job"] = job
         # Set test_output_dir to None so job_files returns path=None
@@ -199,7 +199,7 @@ class TestPersistEndpoint:
                 benchmark_id="test_benchmark",
                 model=ModelConfig(url="http://localhost:8000/v1", name="test_model"),
             ),
-            submitted_at=datetime.now(timezone.utc),
+            submitted_at=datetime.now(UTC),
         )
         mock_adapter._jobs["completed_job"] = job
 
@@ -228,7 +228,7 @@ class TestPersistEndpoint:
                 benchmark_id="test_benchmark",
                 model=ModelConfig(url="http://localhost:8000/v1", name="test_model"),
             ),
-            submitted_at=datetime.now(timezone.utc),
+            submitted_at=datetime.now(UTC),
         )
         mock_adapter._jobs["test_job"] = job
 

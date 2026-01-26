@@ -30,7 +30,7 @@ class AsyncEvalHubClient(BaseAsyncClient):
         ...     providers = await client.providers.list()
         ...     benchmarks = await client.benchmarks.list()
         ...     job = await client.jobs.submit(request)
-        ...     status = await client.jobs.get(job.job_id)
+        ...     status = await client.jobs.get(job.id)
     """
 
     def __init__(
@@ -92,7 +92,7 @@ class SyncEvalHubClient(BaseSyncClient):
         ...     providers = client.providers.list()
         ...     benchmarks = client.benchmarks.list()
         ...     job = client.jobs.submit(request)
-        ...     status = client.jobs.get(job.job_id)
+        ...     status = client.jobs.get(job.id)
     """
 
     def __init__(

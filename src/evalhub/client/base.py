@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, cast
+from typing import Any, Self, cast
 
 import httpx
-from typing_extensions import Self
 
 logger = logging.getLogger(__name__)
 

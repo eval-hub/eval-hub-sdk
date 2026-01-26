@@ -1,6 +1,6 @@
 """Unit tests for FrameworkAdapter."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 # typing imports removed - using PEP 604 union syntax
 import pytest
@@ -71,7 +71,7 @@ class MockFrameworkAdapter(FrameworkAdapter):
             job_id=job_id,
             status=JobStatus.PENDING,
             request=request,
-            submitted_at=datetime.now(timezone.utc),
+            submitted_at=datetime.now(UTC),
         )
 
         self._jobs[job_id] = job
@@ -99,7 +99,7 @@ class MockFrameworkAdapter(FrameworkAdapter):
             results=results,
             overall_score=0.835,
             num_examples_evaluated=100,
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
             duration_seconds=120.0,
         )
 
@@ -127,7 +127,7 @@ class MockFrameworkAdapter(FrameworkAdapter):
         """Helper method to mark job as completed for testing."""
         if job_id in self._jobs:
             self._jobs[job_id].status = JobStatus.COMPLETED
-            self._jobs[job_id].completed_at = datetime.now(timezone.utc)
+            self._jobs[job_id].completed_at = datetime.now(UTC)
             self._jobs[job_id].progress = 1.0
 
 

@@ -2,7 +2,7 @@
 
 import json
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import oras.client  # type: ignore
@@ -73,7 +73,7 @@ class TestOrasPersister:
             digest = f"sha256:{'0' * 64}"
 
         return PersistResponse(
-            job_id=job.job_id,
+            job_id=job.id,
             oci_ref=f"{coordinate.oci_ref}@{digest}",
             digest=digest,
             files_count=files_count,
@@ -202,9 +202,10 @@ class TestPersistE2E:
             job_id="e2e_test_job",
             status=JobStatus.COMPLETED,
             request=EvaluationRequest(
-                benchmark_id="test_benchmark", model=ModelConfig(name="test_model")
+                benchmark_id="test_benchmark",
+                model=ModelConfig(url="http://localhost:8000", name="test_model"),
             ),
-            submitted_at=datetime.now(timezone.utc),
+            submitted_at=datetime.now(UTC),
         )
         test_adapter._jobs["e2e_test_job"] = job
 
