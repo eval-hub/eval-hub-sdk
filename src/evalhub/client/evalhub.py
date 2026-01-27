@@ -40,6 +40,10 @@ class AsyncEvalHubClient(BaseAsyncClient):
         timeout: float = 30.0,
         max_retries: int = 3,
         verify_ssl: bool = True,
+        retry_initial_delay: float = 1.0,
+        retry_max_delay: float = 60.0,
+        retry_backoff_factor: float = 2.0,
+        retry_randomization: bool = True,
     ):
         """Initialize the async EvalHub client.
 
@@ -49,6 +53,10 @@ class AsyncEvalHubClient(BaseAsyncClient):
             timeout: Request timeout in seconds (default: 30.0)
             max_retries: Maximum number of retry attempts (default: 3)
             verify_ssl: Whether to verify SSL certificates (default: True)
+            retry_initial_delay: Initial delay between retries in seconds (default: 1.0)
+            retry_max_delay: Maximum delay between retries in seconds (default: 60.0)
+            retry_backoff_factor: Multiplier for exponential backoff (default: 2.0)
+            retry_randomization: Add random jitter to retry delays (default: True)
         """
         super().__init__(
             base_url=base_url,
@@ -56,6 +64,10 @@ class AsyncEvalHubClient(BaseAsyncClient):
             timeout=timeout,
             max_retries=max_retries,
             verify_ssl=verify_ssl,
+            retry_initial_delay=retry_initial_delay,
+            retry_max_delay=retry_max_delay,
+            retry_backoff_factor=retry_backoff_factor,
+            retry_randomization=retry_randomization,
         )
 
     @cached_property
@@ -102,6 +114,10 @@ class SyncEvalHubClient(BaseSyncClient):
         timeout: float = 30.0,
         max_retries: int = 3,
         verify_ssl: bool = True,
+        retry_initial_delay: float = 1.0,
+        retry_max_delay: float = 60.0,
+        retry_backoff_factor: float = 2.0,
+        retry_randomization: bool = True,
     ):
         """Initialize the sync EvalHub client.
 
@@ -111,6 +127,10 @@ class SyncEvalHubClient(BaseSyncClient):
             timeout: Request timeout in seconds (default: 30.0)
             max_retries: Maximum number of retry attempts (default: 3)
             verify_ssl: Whether to verify SSL certificates (default: True)
+            retry_initial_delay: Initial delay between retries in seconds (default: 1.0)
+            retry_max_delay: Maximum delay between retries in seconds (default: 60.0)
+            retry_backoff_factor: Multiplier for exponential backoff (default: 2.0)
+            retry_randomization: Add random jitter to retry delays (default: True)
         """
         super().__init__(
             base_url=base_url,
@@ -118,6 +138,10 @@ class SyncEvalHubClient(BaseSyncClient):
             timeout=timeout,
             max_retries=max_retries,
             verify_ssl=verify_ssl,
+            retry_initial_delay=retry_initial_delay,
+            retry_max_delay=retry_max_delay,
+            retry_backoff_factor=retry_backoff_factor,
+            retry_randomization=retry_randomization,
         )
 
     @cached_property
