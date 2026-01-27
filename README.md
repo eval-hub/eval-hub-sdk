@@ -31,19 +31,17 @@ graph TB
         subgraph sidecar["Sidecar Container"]
             S1["ConfigMap mounted<br/>/etc/eval-job/spec.json"]
             S2["Forward status to<br/>EvalHub service (HTTP)"]
-            S3["Push artifacts to<br/>OCI registry"]
             S4["Forward results to<br/>EvalHub service (HTTP)"]
         end
 
         A1 -.-> S1
         A3 --> S2
-        A4 --> S3
         A5 --> S4
     end
 
     S2 --> EvalHub["EvalHub Service"]
-    S3 --> Registry["OCI Registry"]
     S4 --> EvalHub
+    A4 --> Registry["OCI Registry"]
 
     style pod fill:#f0f0f0,stroke:#333,stroke-width:2px
     style adapter fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
