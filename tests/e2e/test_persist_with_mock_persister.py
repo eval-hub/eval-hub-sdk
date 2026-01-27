@@ -1,12 +1,18 @@
 """E2E test for OCI artifact persistence with the new adapter framework."""
 
+from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
-from evalhub.adapter import JobCallbacks, JobResults, JobSpec, ModelConfig
+from evalhub.adapter import (
+    EvaluationResult,
+    FrameworkAdapter,
+    JobCallbacks,
+    JobResults,
+    JobSpec,
+    ModelConfig,
+)
 from evalhub.adapter.callbacks import DefaultCallbacks
-from evalhub.adapter.examples import ExampleAdapter
 from evalhub.adapter.models import JobStatusUpdate, OCIArtifactResult, OCIArtifactSpec
 
 
@@ -39,8 +45,51 @@ class TestOCIArtifactPersistenceE2E:
                 """No-op for this test."""
                 pass
 
+        # Simple test adapter
+        class TestAdapter(FrameworkAdapter):
+            """Minimal adapter for testing OCI workflow."""
+
+            def run_benchmark_job(
+                self, config: JobSpec, callbacks: JobCallbacks
+            ) -> JobResults:
+                """Run minimal benchmark job that creates artifacts."""
+                # Create test files
+                output_dir = tmp_path / config.job_id
+                output_dir.mkdir(parents=True, exist_ok=True)
+                results_file = output_dir / "results.json"
+                results_file.write_text('{"score": 0.85}')
+
+                # Create OCI artifact
+                artifact = callbacks.create_oci_artifact(
+                    OCIArtifactSpec(
+                        files=[results_file],
+                        base_path=output_dir,
+                        job_id=config.job_id,
+                        benchmark_id=config.benchmark_id,
+                        model_name=config.model.name,
+                    )
+                )
+
+                # Return results
+                return JobResults(
+                    job_id=config.job_id,
+                    benchmark_id=config.benchmark_id,
+                    model_name=config.model.name,
+                    results=[
+                        EvaluationResult(
+                            metric_name="accuracy",
+                            metric_value=0.85,
+                            metric_type="float",
+                        )
+                    ],
+                    num_examples_evaluated=10,
+                    duration_seconds=1.0,
+                    completed_at=datetime.now(UTC),
+                    oci_artifact=artifact,
+                )
+
         # Run adapter with test callbacks
-        adapter = ExampleAdapter()
+        adapter = TestAdapter()
         callbacks = TestCallbacks()
 
         spec = JobSpec(
@@ -50,10 +99,7 @@ class TestOCIArtifactPersistenceE2E:
             num_examples=10,
         )
 
-        # Mock file operations
-        with patch("evalhub.adapter.examples.simple_adapter.Path.mkdir"):
-            with patch("builtins.open", create=True):
-                results = adapter.run_benchmark_job(spec, callbacks)
+        results = adapter.run_benchmark_job(spec, callbacks)
 
         # Verify artifact was created
         assert len(created_artifacts) == 1
