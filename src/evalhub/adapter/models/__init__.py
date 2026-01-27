@@ -1,9 +1,26 @@
-"""Adapter-specific models and base classes."""
+"""Adapter models for the simplified BYOF SDK."""
 
-from .framework import AdapterConfig, AdapterMetadata, FrameworkAdapter
+from .adapter import FrameworkAdapter
+from .job import (
+    JobCallbacks,
+    JobPhase,
+    JobResults,
+    JobSpec,
+    JobStatusUpdate,
+    OCIArtifactResult,
+    OCIArtifactSpec,
+)
 
 __all__ = [
-    "AdapterConfig",
-    "AdapterMetadata",
+    # Core adapter
     "FrameworkAdapter",
+    # Job models
+    "JobSpec",
+    "JobCallbacks",
+    "JobResults",
+    "JobStatusUpdate",
+    "JobPhase",
+    # OCI models
+    "OCIArtifactSpec",
+    "OCIArtifactResult",
 ]

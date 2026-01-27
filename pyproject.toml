@@ -39,20 +39,11 @@ core = [
 # Adapter development - for building custom evaluation framework adapters
 adapter = [
     "eval-hub-sdk[core]",
-    "fastapi>=0.104.0",
-    "uvicorn[standard]>=0.24.0",
 ]
 
 # Client API - for end users in Jupyter notebooks and scripts
 client = [
     "eval-hub-sdk[core]",
-]
-
-# CLI application - command-line interface
-cli = [
-    "eval-hub-sdk[core]",
-    "typer>=0.9.0",
-    "rich>=13.0.0",
 ]
 
 # Development dependencies
@@ -73,16 +64,13 @@ examples = [
 ]
 
 # All core functionality (excludes examples which are optional)
-all = ["eval-hub-sdk[core,adapter,client,cli,dev]"]
+all = ["eval-hub-sdk[core,adapter,client,dev]"]
 
 [project.urls]
 Homepage = "https://github.com/eval-hub"
 Repository = "https://github.com/eval-hub/eval-hub-sdk"
 Documentation = "https://github.com/eval-hub/eval-hub-sdk"
 "Bug Tracker" = "https://github.com/eval-hub/eval-hub-sdk/issues"
-
-[project.scripts]
-eval-hub = "evalhub.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -130,10 +118,6 @@ module = [
     "yaml.*",
     "yaml",
     "httpx.*",
-    "fastapi.*",
-    "uvicorn.*",
-    "typer.*",
-    "rich.*",
 ]
 ignore_missing_imports = true
 

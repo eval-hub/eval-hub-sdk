@@ -1,0 +1,174 @@
+---
+# ConfigMap containing the job specification
+# The EvalHub service creates this when launching a job
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: eval-job-001-spec
+  namespace: evalhub
+data:
+  spec.json: |
+    {
+      "job_id": "eval-job-001",
+      "benchmark_id": "mmlu",
+      "model": {
+        "url": "http://model-server.models.svc.cluster.local:8000/v1",
+        "name": "llama-2-7b-chat"
+      },
+      "num_examples": 1000,
+      "num_few_shot": 5,
+      "random_seed": 42,
+      "benchmark_config": {
+        "subject": "all"
+      },
+      "experiment_name": "llama-2-evaluation",
+      "tags": {
+        "model_family": "llama-2",
+        "model_size": "7b",
+        "env": "production"
+      },
+      "timeout_seconds": 3600
+    }
+
+---
+# Pod running the adapter with sidecar
+apiVersion: v1
+kind: Pod
+metadata:
+  name: eval-job-001
+  namespace: evalhub
+  labels:
+    app: evalhub-adapter
+    job-id: eval-job-001
+    benchmark: mmlu
+spec:
+  restartPolicy: Never
+  serviceAccountName: evalhub-job-runner
+
+  # Share process namespace so containers can see each other
+  shareProcessNamespace: true
+
+  containers:
+    # Main adapter container
+    - name: adapter
+      image: ghcr.io/your-org/simple-adapter:latest
+      imagePullPolicy: IfNotPresent
+
+      # ConfigMap mounted at /etc/eval-job/spec.json
+      volumeMounts:
+        - name: job-spec
+          mountPath: /etc/eval-job
+          readOnly: true
+
+      # Environment variables for registry access
+      env:
+        - name: REGISTRY_URL
+          value: "ghcr.io"
+        - name: REGISTRY_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: registry-credentials
+              key: username
+        - name: REGISTRY_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: registry-credentials
+              key: password
+
+      # Resource limits
+      resources:
+        requests:
+          memory: "2Gi"
+          cpu: "1"
+        limits:
+          memory: "4Gi"
+          cpu: "2"
+
+    # Sidecar for communication with EvalHub service
+    - name: sidecar
+      image: ghcr.io/evalhub/job-sidecar:latest
+      imagePullPolicy: IfNotPresent
+
+      # Sidecar listens on localhost:8080
+      ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+
+      # Environment variables for EvalHub service connection
+      env:
+        - name: EVALHUB_SERVICE_URL
+          value: "http://evalhub-service.evalhub.svc.cluster.local:8080"
+        - name: JOB_ID
+          value: "eval-job-001"
+
+      # Health check
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        initialDelaySeconds: 5
+        periodSeconds: 10
+
+      resources:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "256Mi"
+          cpu: "200m"
+
+  volumes:
+    - name: job-spec
+      configMap:
+        name: eval-job-001-spec
+
+---
+# Secret containing registry credentials
+# This should be created once and reused
+apiVersion: v1
+kind: Secret
+metadata:
+  name: registry-credentials
+  namespace: evalhub
+type: Opaque
+stringData:
+  username: "your-github-username"
+  password: "ghp_your_github_token"
+
+---
+# ServiceAccount for job pods
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: evalhub-job-runner
+  namespace: evalhub
+
+---
+# Role for job pods (minimal permissions)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: evalhub-job-runner
+  namespace: evalhub
+rules:
+  # Pods can read their own metadata
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+
+---
+# RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: evalhub-job-runner
+  namespace: evalhub
+subjects:
+  - kind: ServiceAccount
+    name: evalhub-job-runner
+    namespace: evalhub
+roleRef:
+  kind: Role
+  name: evalhub-job-runner
+  apiGroup: rbac.authorization.k8s.io

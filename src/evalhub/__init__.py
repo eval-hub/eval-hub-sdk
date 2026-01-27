@@ -73,33 +73,6 @@ try:
 except ImportError:
     pass
 
-# Core extra - HTTP client functionality (adapter client)
-try:
-    from .adapter.client import AdapterClient, AdapterDiscovery
-
-    __all__.extend(["AdapterClient", "AdapterDiscovery"])
-except ImportError:
-    pass
-
-# Adapter extra - server and API components
-try:
-    from .adapter.api import AdapterAPIRouter, create_adapter_api
-    from .adapter.models import AdapterConfig, AdapterMetadata, FrameworkAdapter
-    from .adapter.server import AdapterServer
-
-    __all__.extend(
-        [
-            "AdapterAPIRouter",
-            "create_adapter_api",
-            "AdapterConfig",
-            "AdapterMetadata",
-            "FrameworkAdapter",
-            "AdapterServer",
-        ]
-    )
-except ImportError:
-    pass
-
 # Package metadata
 __title__ = "eval-hub"
 __description__ = (

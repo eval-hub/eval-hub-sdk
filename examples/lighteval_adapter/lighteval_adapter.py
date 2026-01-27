@@ -1,7 +1,10 @@
-"""LightEval Framework Adapter for EvalHub SDK.
+"""LightEval Framework Adapter for EvalHub SDK (Legacy - DEPRECATED).
 
 This adapter wraps the LightEval framework to work with the EvalHub SDK.
 LightEval is a lightweight evaluation framework for language models.
+
+NOTE: This example uses the legacy adapter framework which is deprecated.
+For new adapters, use the simplified adapter framework from evalhub.adapter.
 """
 
 import asyncio
@@ -16,7 +19,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from evalhub.adapter.models.framework import AdapterConfig, FrameworkAdapter
+from evalhub.adapter.legacy.framework import (
+    AdapterConfig,
+    FrameworkAdapter,
+)
 from evalhub.models.api import (
     BenchmarkInfo,
     EvaluationJob,
@@ -475,7 +481,9 @@ def create_lighteval_adapter() -> LightEvalAdapter:
 if __name__ == "__main__":
     import sys
 
-    from evalhub.adapter.server.app import AdapterServer
+    from evalhub.adapter.legacy.server.app import (
+        AdapterServer,
+    )
 
     # Create adapter
     adapter = create_lighteval_adapter()

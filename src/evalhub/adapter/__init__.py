@@ -1,28 +1,112 @@
-"""Adapter SDK components for building and hosting framework adapters."""
+"""Adapter SDK for building BYOF (Bring Your Own Framework) adapters.
 
-# Core adapter building components
-from .api.endpoints import create_adapter_api
-from .api.router import AdapterAPIRouter
+The adapter SDK provides a simple interface for integrating evaluation frameworks
+with the eval-hub service. Adapters are job runners that execute benchmarks in
+Kubernetes pods and communicate with the service via a sidecar container.
 
-# Client components for communicating with adapters
-from .client.adapter_client import AdapterClient, ClientError
-from .client.discovery import AdapterDiscovery
-from .models.framework import AdapterConfig, AdapterMetadata, FrameworkAdapter
+Quick Start:
+-----------
+    from evalhub.adapter import (
+        FrameworkAdapter,
+        JobSpec,
+        JobCallbacks,
+        JobResults,
+        JobStatus,
+        JobPhase,
+        JobStatusUpdate,
+    )
 
-# Server components for hosting adapters
-from .server.app import AdapterServer
+    class MyAdapter(FrameworkAdapter):
+        def run_benchmark_job(
+            self, config: JobSpec, callbacks: JobCallbacks
+        ) -> JobResults:
+            # Report progress
+            callbacks.report_status(JobStatusUpdate(
+                status=JobStatus.RUNNING,
+                phase=JobPhase.RUNNING_EVALUATION,
+                progress=0.5
+            ))
+
+            # Run evaluation
+            results = evaluate_benchmark(
+                benchmark_id=config.benchmark_id,
+                model=config.model,
+                ...
+            )
+
+            # Persist artifacts if needed
+            if output_files:
+                artifact = callbacks.create_oci_artifact(OCIArtifactSpec(
+                    files=output_files,
+                    job_id=config.job_id,
+                    benchmark_id=config.benchmark_id,
+                    model_name=config.model.name
+                ))
+
+            # Return results
+            return JobResults(
+                job_id=config.job_id,
+                benchmark_id=config.benchmark_id,
+                model_name=config.model.name,
+                results=results,
+                ...
+            )
+
+Architecture:
+-----------
+The adapter SDK uses a job runner architecture:
+
+1. Service creates a Kubernetes Job with adapter container + sidecar
+2. ConfigMap mounts JobSpec at pod startup
+3. Adapter reads JobSpec and calls run_benchmark_job()
+4. Adapter reports status via callbacks to localhost sidecar
+5. Sidecar forwards updates to eval-hub service
+6. Adapter returns JobResults when complete
+7. Entrypoint reports results via callbacks.report_results()
+8. Pod terminates
+"""
+
+# Simplified adapter API (current)
+# Re-export common models from evalhub.models.api for convenience
+from ..models.api import (
+    EvaluationResult,
+    JobStatus,
+    ModelConfig,
+)
+from .callbacks import DefaultCallbacks
+from .models import (
+    FrameworkAdapter,
+    JobCallbacks,
+    JobPhase,
+    JobResults,
+    JobSpec,
+    JobStatusUpdate,
+    OCIArtifactResult,
+    OCIArtifactSpec,
+)
+from .oci import OCIArtifactPersister, Persister
+
+# Legacy API is available but deprecated
+# from evalhub.adapter.legacy import ...
 
 __all__ = [
-    # Adapter building
-    "AdapterConfig",
-    "AdapterMetadata",
+    # Core adapter interface
     "FrameworkAdapter",
-    # Server hosting
-    "AdapterServer",
-    "create_adapter_api",
-    "AdapterAPIRouter",
-    # Client communication
-    "AdapterClient",
-    "ClientError",
-    "AdapterDiscovery",
+    # Job models
+    "JobSpec",
+    "JobCallbacks",
+    "JobResults",
+    "JobStatusUpdate",
+    "JobPhase",
+    # OCI models
+    "OCIArtifactSpec",
+    "OCIArtifactResult",
+    "Persister",
+    "OCIArtifactPersister",
+    # Callback implementation
+    "DefaultCallbacks",
+    # Common models (re-exported for convenience)
+    "JobStatus",
+    "ModelConfig",
+    "EvaluationResult",
 ]

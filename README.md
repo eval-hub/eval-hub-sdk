@@ -1,6 +1,6 @@
 # EvalHub SDK
 
-**Framework Adapter SDK for TrustyAI EvalHub Integration**
+**Framework Adapter SDK for EvalHub Integration**
 
 The EvalHub SDK provides a standardized way to create framework adapters that can be consumed by EvalHub, enabling a "Bring Your Own Framework" (BYOF) approach for evaluation frameworks.
 
@@ -14,45 +14,68 @@ EvalHub → (Standard API) → Your Framework Adapter → Your Evaluation Framew
 
 ## Architecture
 
-```mermaid
-graph LR
-    EH[EvalHub]
-    FA[Framework Adapter<br/>SDK + Glue Code]
-    YF[Your Framework<br/>LMEval, Custom,<br/>RAGAS, etc.]
-    API[Standard API<br/>─────────────<br/>/health<br/>/info<br/>/benchmarks<br/>/evaluations]
+The adapter SDK uses a **job runner architecture**:
 
-    EH <--> FA
-    FA <--> YF
-    EH --> API
-    FA --> API
+```mermaid
+graph TB
+    subgraph pod["Kubernetes Job Pod"]
+        subgraph adapter["Adapter Container"]
+            A1["1. Read JobSpec<br/>from ConfigMap"]
+            A2["2. run_benchmark_job()"]
+            A3["3. Report status<br/>via callbacks"]
+            A4["4. Create OCI artifacts<br/>via callbacks"]
+            A5["5. Report results<br/>via callbacks"]
+            A6["6. Exit"]
+        end
+
+        subgraph sidecar["Sidecar Container"]
+            S1["ConfigMap mounted<br/>/etc/eval-job/spec.json"]
+            S2["Forward status to<br/>EvalHub service (HTTP)"]
+            S3["Push artifacts to<br/>OCI registry"]
+            S4["Forward results to<br/>EvalHub service (HTTP)"]
+        end
+
+        A1 -.-> S1
+        A3 --> S2
+        A4 --> S3
+        A5 --> S4
+    end
+
+    S2 --> EvalHub["EvalHub Service"]
+    S3 --> Registry["OCI Registry"]
+    S4 --> EvalHub
+
+    style pod fill:#f0f0f0,stroke:#333,stroke-width:2px
+    style adapter fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style sidecar fill:#fff3e0,stroke:#f57c00,stroke-width:2px
 ```
 
 ### Package Organization
 
 The SDK is organized into distinct, focused packages:
 
-**🏗️ Core (`evalhub.models`)** - Shared data models and utilities
+**Core (`evalhub.models`)** - Shared data models
 - Request/response models for API communication
-- Common data structures used by both clients and adapters
+- Common data structures for evaluations and benchmarks
 
-**🔧 Adapter SDK (`evalhub.adapter`)** - Components for building framework adapters
-- Framework adapter base class and configuration
-- Server components for hosting your adapter
-- API routing and endpoint implementations
-- CLI tools for running and managing adapters
+**Adapter SDK (`evalhub.adapter`)** - Framework adapter components
+- `FrameworkAdapter` base class with `run_benchmark_job()` method
+- Job specification models (`JobSpec`, `JobResults`)
+- Callback interface for status updates and OCI artifacts
+- Example implementations
 
-**📡 Client SDK (`evalhub.adapter.client`)** - Components for communicating with adapters
-- HTTP client for connecting to framework adapters
-- Discovery service for finding and managing multiple adapters
-- Async communication patterns
+**Client SDK (`evalhub.client`)** - REST API client for EvalHub service
+- HTTP client for submitting evaluations to EvalHub
+- Resource navigation (providers, benchmarks, collections)
+- See [CLIENT_SDK_GUIDE.md](./CLIENT_SDK_GUIDE.md)
 
 ### Key Components
 
-1. **Standard API**: Common REST endpoints that all adapters must implement
-2. **Framework Adapter Base Class**: Abstract base class with the adapter contract (`evalhub.adapter.models`)
-3. **Server Components**: FastAPI-based server for exposing the standard API (`evalhub.adapter.server`)
-4. **Client Components**: HTTP client for EvalHub to communicate with adapters (`evalhub.adapter.client`)
-5. **Data Models**: Pydantic models for requests, responses, and metadata (`evalhub.models`)
+1. **JobSpec** - Job configuration loaded from ConfigMap at pod startup
+2. **FrameworkAdapter** - Base class that implements `run_benchmark_job()` method
+3. **JobCallbacks** - Interface for reporting status and persisting artifacts
+4. **JobResults** - Evaluation results returned when job completes
+5. **Sidecar** - Container that handles service communication (provided by platform)
 
 ## Quick Start
 
@@ -60,11 +83,11 @@ The SDK is organized into distinct, focused packages:
 
 ```bash
 # Install from PyPI (when available)
-pip install evalhub-sdk
+pip install eval-hub-sdk
 
 # Install from source
-git clone https://github.com/trustyai-explainability/evalhub-sdk.git
-cd evalhub-sdk
+git clone https://github.com/eval-hub/eval-hub-sdk.git
+cd eval-hub-sdk
 pip install -e .[dev]
 ```
 
@@ -74,512 +97,479 @@ Create a new Python file for your adapter:
 
 ```python
 # my_framework_adapter.py
-from evalhub.adapter import FrameworkAdapter, AdapterConfig
-from evalhub.models import *
+from evalhub.adapter import (
+    FrameworkAdapter,
+    JobSpec,
+    JobCallbacks,
+    JobResults,
+    JobStatus,
+    JobPhase,
+    JobStatusUpdate,
+    EvaluationResult,
+)
 
 class MyFrameworkAdapter(FrameworkAdapter):
-    async def initialize(self):
-        """Initialize your framework here"""
-        # Load your evaluation framework
-        pass
+    def run_benchmark_job(
+        self, config: JobSpec, callbacks: JobCallbacks
+    ) -> JobResults:
+        """Run a benchmark evaluation job."""
 
-    async def list_benchmarks(self) -> List[BenchmarkInfo]:
-        """Return available benchmarks from your framework"""
-        return [
-            BenchmarkInfo(
-                benchmark_id="my_benchmark",
-                name="My Custom Benchmark",
-                description="A custom benchmark",
-                category="reasoning",
-                metrics=["accuracy", "f1_score"]
-            )
-        ]
+        # Report initialization
+        callbacks.report_status(JobStatusUpdate(
+            status=JobStatus.RUNNING,
+            phase=JobPhase.INITIALIZING,
+            progress=0.0,
+            message="Loading benchmark and model"
+        ))
 
-    async def submit_evaluation(self, request: EvaluationRequest) -> EvaluationJob:
-        """Submit evaluation to your framework"""
-        # Translate request to your framework's format
+        # Load your evaluation framework and benchmark
+        framework = load_your_framework()
+        benchmark = framework.load_benchmark(config.benchmark_id)
+        model = framework.load_model(config.model.url)
+
+        # Report evaluation start
+        callbacks.report_status(JobStatusUpdate(
+            status=JobStatus.RUNNING,
+            phase=JobPhase.RUNNING_EVALUATION,
+            progress=0.3,
+            message=f"Evaluating on {config.num_examples} examples"
+        ))
+
         # Run evaluation
-        # Return job information
-        pass
+        results = framework.evaluate(
+            benchmark=benchmark,
+            model=model,
+            num_examples=config.num_examples,
+            num_few_shot=config.num_few_shot
+        )
 
-    # Implement other required methods...
+        # Save and persist artifacts
+        output_files = save_results(config.job_id, results)
+        artifact = callbacks.create_oci_artifact(OCIArtifactSpec(
+            files=output_files,
+            job_id=config.job_id,
+            benchmark_id=config.benchmark_id,
+            model_name=config.model.name
+        ))
+
+        # Return results
+        return JobResults(
+            job_id=config.job_id,
+            benchmark_id=config.benchmark_id,
+            model_name=config.model.name,
+            results=[
+                EvaluationResult(
+                    metric_name="accuracy",
+                    metric_value=results["accuracy"],
+                    metric_type="float"
+                )
+            ],
+            num_examples_evaluated=len(results),
+            duration_seconds=results["duration"],
+            oci_artifact=artifact
+        )
 ```
 
-### 3. Run Your Adapter
+### 3. OCI Artifact Persistence
+
+The SDK provides built-in OCI artifact persistence. The adapter **always pushes OCI artifacts directly** using the SDK's `OCIArtifactPersister`.
+
+#### Using DefaultCallbacks
+
+Use `DefaultCallbacks` for both production and development:
+
+```python
+from evalhub.adapter import DefaultCallbacks
+import os
+
+# Production (Kubernetes with sidecar for status updates)
+callbacks = DefaultCallbacks(
+    sidecar_url="http://localhost:8080",  # Sidecar for status updates
+    registry_url="ghcr.io",               # SDK pushes OCI directly
+    registry_username=os.getenv("REGISTRY_USER"),
+    registry_password=os.getenv("REGISTRY_TOKEN")
+)
+
+# Local development (no sidecar)
+callbacks = DefaultCallbacks(
+    registry_url="localhost:5000",
+    insecure=True  # For local registries
+)
+
+adapter = MyFrameworkAdapter()
+results = adapter.run_benchmark_job(spec, callbacks)
+```
+
+**Key Points:**
+- **Status updates**: Sent to sidecar if `sidecar_url` is provided, otherwise logged locally
+- **OCI artifacts**: Always pushed directly by the SDK using `OCIArtifactPersister`
+
+#### Advanced: Direct Persister Usage
+
+The OCI functionality follows the `Persister` protocol. You can use `OCIArtifactPersister` directly or implement your own:
+
+```python
+from evalhub.adapter import OCIArtifactPersister, OCIArtifactSpec, Persister
+from pathlib import Path
+
+# Use the default implementation
+persister: Persister = OCIArtifactPersister(
+    registry_url="ghcr.io",
+    username="user",
+    password="token"
+)
+
+result = persister.persist(
+    OCIArtifactSpec(
+        files=[Path("results.json"), Path("metrics.csv")],
+        job_id="job-123",
+        benchmark_id="mmlu",
+        model_name="llama-2-7b",
+        title="MMLU Evaluation Results",
+        annotations={"score": "0.85"}
+    )
+)
+
+print(f"Pushed to: {result.reference}")
+print(f"Digest: {result.digest}")
+```
+
+**Custom Persister**: Implement your own `Persister` for custom storage backends:
+
+```python
+from evalhub.adapter import Persister, OCIArtifactSpec, OCIArtifactResult
+
+class S3Persister:
+    """Custom persister that stores artifacts in S3."""
+
+    def persist(self, spec: OCIArtifactSpec) -> OCIArtifactResult:
+        # Upload files to S3
+        s3_url = self.upload_to_s3(spec.files)
+        return OCIArtifactResult(
+            digest=compute_digest(spec.files),
+            reference=s3_url,
+            size_bytes=compute_size(spec.files)
+        )
+```
+
+**Requirements**: OCI pushing requires `oras` package:
+```bash
+pip install oras
+```
+
+Without `oras`, the persister will return mock results (useful for testing).
+
+### 4. Containerise Your Adapter
+
+Create a Dockerfile for your adapter:
+
+```dockerfile
+FROM registry.access.redhat.com/ubi9/python-312
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy adapter code
+COPY my_framework_adapter.py .
+COPY run_adapter.py .
+
+# Run adapter
+CMD ["python", "run_adapter.py"]
+```
+
+Create the entrypoint script:
 
 ```python
 # run_adapter.py
-from evalhub.adapter import AdapterServer, AdapterConfig
+import json
+from pathlib import Path
 from my_framework_adapter import MyFrameworkAdapter
+from evalhub.adapter import JobSpec, DefaultCallbacks
 
-config = AdapterConfig(
-    framework_id="my_framework",
-    adapter_name="My Framework Adapter",
-    port=8080
-)
+# Load job spec from mounted ConfigMap
+config_path = Path("/etc/eval-job/spec.json")
+with open(config_path) as f:
+    spec_data = json.load(f)
 
-adapter = MyFrameworkAdapter(config)
-server = AdapterServer(adapter)
-server.run()
+job_spec = JobSpec(**spec_data)
+
+# Create callbacks that communicate with localhost sidecar
+callbacks = DefaultCallbacks(sidecar_url="http://localhost:8080")
+
+# Run adapter
+adapter = MyFrameworkAdapter()
+results = adapter.run_benchmark_job(job_spec, callbacks)
+
+# Report final results to service via sidecar
+callbacks.report_results(results)
+
+print(f"Job completed: {results.job_id}")
 ```
 
-### 4. Test Your Adapter
+### 4. Deploy to Kubernetes
 
-```bash
-# Run your adapter
-python run_adapter.py
+The eval-hub service will create Kubernetes Jobs for your adapter:
 
-# Test health check
-curl http://localhost:8080/api/v1/health
-
-# Get framework info
-curl http://localhost:8080/api/v1/info
-
-# List benchmarks
-curl http://localhost:8080/api/v1/benchmarks
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: eval-job-123
+spec:
+  template:
+    spec:
+      containers:
+      # Your adapter container
+      - name: adapter
+        image: myregistry/my-adapter:latest
+        volumeMounts:
+        - name: job-spec
+          mountPath: /etc/eval-job
+      # Sidecar container (provided by platform)
+      - name: sidecar
+        image: evalhub/sidecar:latest
+        env:
+        - name: EVALHUB_SERVICE_URL
+          value: "http://evalhub-service:8080"
+      volumes:
+      - name: job-spec
+        configMap:
+          name: job-123-spec
 ```
+
+For a complete working example, see `evalhub/adapter/examples/simple_adapter.py`.
 
 ## Package Organization Guide
 
 The EvalHub SDK is organized into distinct packages based on your use case:
 
-### 📦 **Which Package Should I Use?**
+### Which Package Should I Use?
 
 | Use Case | Primary Package | Description |
 |----------|----------------|-------------|
-| **Building an Adapter** | `evalhub.adapter` | You're creating a new framework adapter |
-| **Connecting to Adapters** | `evalhub.adapter.client` | You're building a client to communicate with adapters |
-| **Data Models** | `evalhub.models` | You need request/response models for API communication |
-| **CLI Tools** | `evalhub.adapter.cli` | You want to run/manage adapters from command line |
+| **Building an Adapter** | `evalhub.adapter` | Create a framework adapter for your evaluation framework |
+| **Interacting with EvalHub** | `evalhub.client` | REST API client for submitting evaluations |
+| **Data Models** | `evalhub.models` | Request/response models for API communication |
 
-### 🎯 **Import Patterns by Role**
+### Import Patterns
 
 **Framework Adapter Developer:**
 ```python
 # Building your adapter
-from evalhub.adapter.models import FrameworkAdapter, AdapterConfig
-from evalhub.adapter.server import AdapterServer
-from evalhub.models.api import EvaluationRequest, EvaluationJob
-
-# Running your adapter
-from evalhub.adapter import *  # Everything you need
+from evalhub.adapter import (
+    FrameworkAdapter,
+    JobSpec,
+    JobCallbacks,
+    JobResults,
+    JobStatus,
+    JobPhase,
+    JobStatusUpdate,
+    EvaluationResult,
+    OCIArtifactSpec,
+)
 ```
 
-**Client Developer (EvalHub team):**
+**EvalHub Service User:**
 ```python
-# Communicating with adapters
-from evalhub.adapter.client import AdapterClient, AdapterDiscovery
-from evalhub.models.api import EvaluationRequest, ModelConfig
+# Interacting with EvalHub REST API
+from evalhub.client import EvalHubClient
+from evalhub.models.api import ModelConfig, EvaluationRequest
 ```
 
-**Integration Developer:**
+## Complete Example
+
+The SDK includes a complete reference implementation showing all adapter patterns:
+
+**Example Adapter**: `src/evalhub/adapter/examples/simple_adapter.py`
+
+This example demonstrates:
+- Loading JobSpec from mounted ConfigMap
+- Validating configuration
+- Loading benchmark data
+- Running evaluation with progress reporting
+- Persisting results as OCI artifacts
+- Returning structured results
+
+### Using the Example
+
 ```python
-# Using both sides of the API
-from evalhub.adapter.client import AdapterClient        # Client side
-from evalhub.adapter.models import FrameworkAdapter      # Adapter side
-from evalhub.models.api import *                         # Shared models
-```
+from evalhub.adapter.examples import ExampleAdapter
+from evalhub.adapter import JobSpec
 
-## Complete Examples
+# Load job specification
+job_spec = JobSpec(
+    job_id="eval-123",
+    benchmark_id="mmlu",
+    model=ModelConfig(
+        url="http://vllm-service:8000",
+        name="llama-2-7b"
+    ),
+    num_examples=100
+)
 
-### LightEval Framework Example
-See [examples/lighteval_adapter/](examples/lighteval_adapter/) for a production-ready example with:
-
-Try the demo (notebook runs **outside** the container):
-```bash
-# Container: LightEval + adapter
-# Notebook: External HTTP client
-cd examples/
-jupyter notebook lighteval_demo_external.ipynb
-```
-
-## Standard API Endpoints
-
-All framework adapters expose the same REST API:
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check |
-| `/info` | GET | Framework information |
-| `/benchmarks` | GET | List available benchmarks |
-| `/benchmarks/{id}` | GET | Get benchmark details |
-| `/evaluations` | POST | Submit evaluation job |
-| `/evaluations/{job_id}` | GET | Get job status |
-| `/evaluations/{job_id}/results` | GET | Get evaluation results |
-| `/evaluations/{job_id}` | DELETE | Cancel job |
-| `/evaluations/{job_id}/stream` | GET | Stream job updates |
-
-### Example API Usage
-
-```bash
-# Submit evaluation
-curl -X POST http://localhost:8080/api/v1/evaluations \
-  -H "Content-Type: application/json" \
-  -d '{
-    "benchmark_id": "my_benchmark",
-    "model": {
-      "name": "gpt-4",
-      "provider": "openai",
-      "parameters": {
-        "temperature": 0.1,
-        "max_tokens": 100
-      }
-    },
-    "num_examples": 100,
-    "experiment_name": "test_evaluation"
-  }'
-
-# Check job status
-curl http://localhost:8080/api/v1/evaluations/{job_id}
-
-# Get results
-curl http://localhost:8080/api/v1/evaluations/{job_id}/results
+# Create adapter and run
+adapter = ExampleAdapter()
+results = adapter.run_benchmark_job(job_spec, callbacks)
 ```
 
 ## Framework Adapter Interface
 
-### Required Methods
-
-Your adapter must implement these abstract methods:
+Your adapter must implement a single method:
 
 ```python
-class FrameworkAdapter(ABC):
-    @abstractmethod
-    async def initialize(self) -> None:
-        """Initialize the framework"""
+from evalhub.adapter import FrameworkAdapter, JobSpec, JobCallbacks, JobResults
 
-    @abstractmethod
-    async def get_framework_info(self) -> FrameworkInfo:
-        """Get framework information"""
+class MyFrameworkAdapter(FrameworkAdapter):
+    def run_benchmark_job(
+        self, config: JobSpec, callbacks: JobCallbacks
+    ) -> JobResults:
+        """Run a benchmark evaluation job.
 
-    @abstractmethod
-    async def list_benchmarks(self) -> List[BenchmarkInfo]:
-        """List available benchmarks"""
+        Args:
+            config: Job specification from mounted ConfigMap
+            callbacks: Callbacks for status updates and artifact persistence
 
-    @abstractmethod
-    async def get_benchmark_info(self, benchmark_id: str) -> Optional[BenchmarkInfo]:
-        """Get benchmark details"""
+        Returns:
+            JobResults: Evaluation results and metadata
 
-    @abstractmethod
-    async def submit_evaluation(self, request: EvaluationRequest) -> EvaluationJob:
-        """Submit evaluation job"""
-
-    @abstractmethod
-    async def get_job_status(self, job_id: str) -> Optional[EvaluationJob]:
-        """Get job status"""
-
-    @abstractmethod
-    async def get_evaluation_results(self, job_id: str) -> Optional[EvaluationResponse]:
-        """Get evaluation results"""
-
-    @abstractmethod
-    async def cancel_job(self, job_id: str) -> bool:
-        """Cancel job"""
-
-    @abstractmethod
-    async def health_check(self) -> HealthResponse:
-        """Perform health check"""
-
-    @abstractmethod
-    async def shutdown(self) -> None:
-        """Graceful shutdown"""
+        Raises:
+            ValueError: If configuration is invalid
+            RuntimeError: If evaluation fails
+        """
+        # Your implementation here
+        pass
 ```
 
-### Data Models
+### Key Data Models
 
-Key data models for requests and responses:
-
+**JobSpec** - Configuration loaded from ConfigMap:
 ```python
-# Evaluation request from EvalHub
-class EvaluationRequest(BaseModel):
-    benchmark_id: str
-    model: ModelConfig
-    num_examples: Optional[int] = None
-    num_few_shot: Optional[int] = None
-    benchmark_config: Dict[str, Any] = {}
-    experiment_name: Optional[str] = None
+class JobSpec(BaseModel):
+    job_id: str                    # Unique job identifier
+    benchmark_id: str              # Benchmark to evaluate
+    model: ModelConfig             # Model configuration
+    num_examples: Optional[int]    # Number of examples to evaluate
+    num_few_shot: Optional[int]    # Number of few-shot examples
+    random_seed: Optional[int]     # Random seed for reproducibility
+    benchmark_config: Dict[str, Any]  # Benchmark-specific parameters
+```
 
-# Model configuration
-class ModelConfig(BaseModel):
-    name: str
-    provider: Optional[str] = None
-    parameters: Dict[str, Any] = {}
-    device: Optional[str] = None
-    batch_size: Optional[int] = None
+**JobCallbacks** - Interface for service communication:
+```python
+class JobCallbacks(ABC):
+    @abstractmethod
+    def report_status(self, update: JobStatusUpdate) -> None:
+        """Report status update to service"""
 
-# Evaluation job tracking
-class EvaluationJob(BaseModel):
-    job_id: str
-    status: JobStatus  # PENDING, RUNNING, COMPLETED, FAILED, CANCELLED
-    request: EvaluationRequest
-    submitted_at: datetime
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    progress: Optional[float] = None  # 0.0 to 1.0
-    error_message: Optional[str] = None
+    @abstractmethod
+    def create_oci_artifact(self, spec: OCIArtifactSpec) -> OCIArtifactResult:
+        """Create and push OCI artifact"""
+```
 
-# Evaluation results
-class EvaluationResponse(BaseModel):
+**JobResults** - Returned when job completes:
+```python
+class JobResults(BaseModel):
     job_id: str
     benchmark_id: str
     model_name: str
-    results: List[EvaluationResult]
-    overall_score: Optional[float] = None
-    num_examples_evaluated: int
-    completed_at: datetime
-    duration_seconds: float
-
-# Individual metric result
-class EvaluationResult(BaseModel):
-    metric_name: str
-    metric_value: Union[float, int, str, bool]
-    metric_type: str = "float"
-    num_samples: Optional[int] = None
-```
-
-## CLI Usage
-
-The SDK includes a CLI tool for running and testing adapters:
-
-```bash
-# Run an adapter
-evalhub-adapter run my_adapter:MyAdapter --port 8080
-
-# Get adapter info
-evalhub-adapter info http://localhost:8080
-
-# Check adapter health
-evalhub-adapter health http://localhost:8080
-
-# Discover multiple adapters
-evalhub-adapter discover http://adapter1:8080 http://adapter2:8081
-```
-
-## EvalHub Integration
-
-### Client Usage
-
-EvalHub uses the provided client to communicate with adapters:
-
-```python
-from evalhub.adapter.client import AdapterClient
-from evalhub.models import EvaluationRequest, ModelConfig
-
-async with AdapterClient("http://adapter:8080") as client:
-    # Get framework info
-    info = await client.get_framework_info()
-    print(f"Framework: {info.name}")
-
-    # List benchmarks
-    benchmarks = await client.list_benchmarks()
-    print(f"Available benchmarks: {len(benchmarks)}")
-
-    # Submit evaluation
-    request = EvaluationRequest(
-        benchmark_id="custom_benchmark",
-        model=ModelConfig(
-            name="llama-7b",
-            provider="vllm",
-            parameters={"temperature": 0.1}
-        ),
-        num_examples=100
-    )
-
-    job = await client.submit_evaluation(request)
-    print(f"Job submitted: {job.job_id}")
-
-    # Wait for completion
-    final_job = await client.wait_for_completion(job.job_id)
-
-    # Get results
-    if final_job.status == JobStatus.COMPLETED:
-        results = await client.get_evaluation_results(job.job_id)
-        print(f"Results: {len(results.results)} metrics")
-```
-
-### Discovery Service
-
-EvalHub can automatically discover and manage multiple adapters:
-
-```python
-from evalhub.adapter.client import AdapterDiscovery
-
-discovery = AdapterDiscovery()
-
-# Register adapters
-discovery.register_adapter("http://lmeval-adapter:8080")
-discovery.register_adapter("http://ragas-adapter:8081")
-
-# Start health monitoring
-await discovery.start_health_monitoring()
-
-# Get healthy adapters
-healthy_adapters = discovery.get_healthy_adapters()
-
-# Find adapter for specific framework
-lmeval_adapter = discovery.get_adapter_for_framework("lm_evaluation_harness")
-```
-
-## Configuration
-
-### Adapter Configuration
-
-```python
-config = AdapterConfig(
-    framework_id="my_framework",
-    adapter_name="My Framework Adapter",
-    version="1.0.0",
-    host="0.0.0.0",
-    port=8080,
-    max_concurrent_jobs=5,
-    job_timeout_seconds=3600,
-    log_level="INFO",
-    framework_config={
-        # Framework-specific settings
-        "model_cache_dir": "/models",
-        "device": "cuda",
-        "batch_size": 8
-    }
-)
-```
-
-### Configuration File
-
-```yaml
-# adapter_config.yaml
-framework_id: "my_framework"
-adapter_name: "My Framework Adapter"
-version: "1.0.0"
-host: "0.0.0.0"
-port: 8080
-max_concurrent_jobs: 10
-job_timeout_seconds: 7200
-log_level: "DEBUG"
-
-framework_config:
-  model_cache_dir: "/data/models"
-  device: "cuda:0"
-  batch_size: 16
-  enable_caching: true
+    results: List[EvaluationResult]           # Evaluation metrics
+    overall_score: Optional[float]            # Overall score if applicable
+    num_examples_evaluated: int               # Number of examples evaluated
+    duration_seconds: float                   # Total evaluation time
+    evaluation_metadata: Dict[str, Any]       # Framework-specific metadata
+    oci_artifact: Optional[OCIArtifactResult] # OCI artifact info if persisted
 ```
 
 ## Deployment
 
-### Podman with Red Hat UBI
+### Container Structure
+
+Your adapter runs as a container in a Kubernetes Job alongside a sidecar:
 
 ```dockerfile
-# Framework Adapter Container
-FROM registry.access.redhat.com/ubi9/python-311:latest
-
-# Set environment variables for Python optimization
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
+FROM registry.access.redhat.com/ubi9/python-312
 
 WORKDIR /app
 
-# Copy source code
-COPY . ./
+# Install your framework and dependencies
+RUN pip install lm-evaluation-harness==0.4.0 eval-hub-sdk
 
-# Install dependencies
-RUN pip install -e .
+# Copy adapter implementation
+COPY my_adapter.py .
+COPY entrypoint.py .
 
-EXPOSE 8080
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:8080/api/v1/health || exit 1
-
-CMD ["evalhub-adapter", "run", "my_adapter:MyAdapter", "--port", "8080"]
+CMD ["python", "entrypoint.py"]
 ```
 
-### Building and Running with Podman
+### Entrypoint Script
 
-```bash
-# Build the image
-podman build -t your-adapter:latest .
+```python
+# entrypoint.py
+import json
+from pathlib import Path
+from my_adapter import MyFrameworkAdapter
+from evalhub.adapter import JobSpec, DefaultCallbacks
 
-# Run the container
-podman run -d \
-  --name your-adapter \
-  -p 8080:8080 \
-  --health-cmd='curl -f http://localhost:8080/api/v1/health || exit 1' \
-  --health-interval=30s \
-  --health-timeout=10s \
-  --health-start-period=30s \
-  --health-retries=3 \
-  your-adapter:latest
+# Load job spec from mounted ConfigMap
+config_path = Path("/etc/eval-job/spec.json")
+with open(config_path) as f:
+    job_spec = JobSpec(**json.load(f))
 
-# Check container health
-podman ps
+# Create callbacks (communicate with sidecar on localhost:8080)
+callbacks = DefaultCallbacks(sidecar_url="http://localhost:8080")
 
-# View logs
-podman logs your-adapter
+# Run adapter
+adapter = MyFrameworkAdapter()
+results = adapter.run_benchmark_job(job_spec, callbacks)
 
-# Stop and clean up
-podman stop your-adapter
-podman rm your-adapter
+# Report final results to service via sidecar
+callbacks.report_results(results)
+
+print(f"Job {results.job_id} completed with score: {results.overall_score}")
 ```
 
-**Note**: For frameworks requiring additional build tools, see [examples/lighteval_adapter/](examples/lighteval_adapter/) for a production deployment example with UBI minimal and custom dependencies.
+### Kubernetes Job
+
+EvalHub creates Jobs automatically:
+
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: eval-job-123
+spec:
+  template:
+    spec:
+      containers:
+      - name: adapter
+        image: myregistry/my-framework-adapter:latest
+        volumeMounts:
+        - name: job-spec
+          mountPath: /etc/eval-job
+      - name: sidecar
+        image: evalhub/sidecar:latest
+        env:
+        - name: EVALHUB_SERVICE_URL
+          value: "http://evalhub-service:8080"
+      volumes:
+      - name: job-spec
+        configMap:
+          name: job-123-spec
+      restartPolicy: Never
+```
 
 ## Development
 
-### Project Structure
-
-The SDK uses a modern Python project structure with clear separation of concerns:
-
-```
-evalhub-sdk/
-├── src/evalhub/          # Source code (src layout)
-│   ├── models/           # 🏗️ Core: Shared data models
-│   │   ├── api.py        #    Request/response models
-│   │   └── __init__.py
-│   ├── adapter/          # 🔧 Adapter SDK: Framework adapter components
-│   │   ├── models/       #    Adapter-specific models (FrameworkAdapter, AdapterConfig)
-│   │   ├── server/       #    FastAPI server for hosting adapters
-│   │   ├── api/          #    API endpoints and routing
-│   │   ├── client/       # 📡 Client SDK: Communication with adapters
-│   │   ├── cli.py        #    Command-line interface for adapters
-│   │   └── __init__.py
-│   ├── utils/            # 🛠️ Utilities and helpers
-│   ├── cli.py            # Main CLI interface
-│   └── __init__.py       # Public API exports
-├── tests/                # Test suite
-│   ├── unit/             # Unit tests
-│   └── integration/      # Integration tests
-├── examples/             # Example adapters
-│   ├── custom_framework_adapter.py
-│   └── lighteval_adapter/
-└── pyproject.toml        # Project configuration
-```
-
-### Package Usage Patterns
-
-**🏗️ Building an Adapter:**
-```python
-from evalhub.adapter import FrameworkAdapter, AdapterConfig, AdapterServer
-from evalhub.models import EvaluationRequest, EvaluationJob
-```
-
-**📡 Connecting to Adapters:**
-```python
-from evalhub.adapter.client import AdapterClient, AdapterDiscovery
-from evalhub.models import EvaluationRequest, ModelConfig
-```
-
-**🛠️ Framework Development:**
-```python
-# Access everything through the main package
-from evalhub.adapter import *  # All adapter components
-from evalhub.models import *   # All data models
-```
-
+### Setting Up Development Environment
 ### Development Setup
 
 ```bash
 # Clone the repository
-git clone https://github.com/trustyai-explainability/evalhub-sdk.git
-cd evalhub-sdk
+git clone https://github.com/eval-hub/eval-hub-sdk.git
+cd eval-hub-sdk
 
 # Install in development mode with all dependencies
 pip install -e .[dev]

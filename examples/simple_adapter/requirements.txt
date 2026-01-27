@@ -1,0 +1,8 @@
+# EvalHub Adapter SDK
+eval-hub-sdk[adapter]>=0.1.0
+
+# Optional: Add your evaluation framework dependencies here
+# For example:
+# lm-eval>=0.4.0  # For lm-evaluation-harness
+# ragas>=0.1.0    # For RAG evaluation
+# giskard>=2.0.0  # For safety evaluation

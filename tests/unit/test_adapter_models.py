@@ -1,0 +1,489 @@
+"""Unit tests for the simplified adapter models."""
+
+from datetime import UTC, datetime
+from pathlib import Path
+
+import pytest
+from evalhub.adapter import (
+    EvaluationResult,
+    FrameworkAdapter,
+    JobCallbacks,
+    JobPhase,
+    JobResults,
+    JobSpec,
+    JobStatus,
+    JobStatusUpdate,
+    ModelConfig,
+    OCIArtifactResult,
+    OCIArtifactSpec,
+)
+
+
+class TestJobSpec:
+    """Tests for JobSpec model."""
+
+    def test_job_spec_creation(self) -> None:
+        """Test creating a valid JobSpec."""
+        spec = JobSpec(
+            job_id="test-job-001",
+            benchmark_id="mmlu",
+            model=ModelConfig(url="http://localhost:8000", name="test-model"),
+            num_examples=10,
+            num_few_shot=5,
+            random_seed=42,
+        )
+
+        assert spec.job_id == "test-job-001"
+        assert spec.benchmark_id == "mmlu"
+        assert spec.model.name == "test-model"
+        assert spec.num_examples == 10
+        assert spec.num_few_shot == 5
+        assert spec.random_seed == 42
+
+    def test_creating_jobspec_with_minimal_fields(self) -> None:
+        """Test creating JobSpec with minimal fields."""
+        spec = JobSpec(
+            job_id="test-job-002",
+            benchmark_id="hellaswag",
+            model=ModelConfig(url="http://localhost:8000", name="model"),
+        )
+
+        assert spec.job_id == "test-job-002"
+        assert spec.benchmark_id == "hellaswag"
+        assert spec.num_examples is None
+        assert spec.num_few_shot is None
+        assert spec.random_seed == 42  # Default value
+
+    def test_jobspec_with_benchmarkspecific_configuration(self) -> None:
+        """Test JobSpec with benchmark-specific configuration."""
+        spec = JobSpec(
+            job_id="test-job-003",
+            benchmark_id="mmlu",
+            model=ModelConfig(url="http://localhost:8000", name="model"),
+            benchmark_config={"subject": "physics", "difficulty": "hard"},
+        )
+
+        assert spec.benchmark_config == {"subject": "physics", "difficulty": "hard"}
+
+    def test_jobspec_with_custom_tags(self) -> None:
+        """Test JobSpec with custom tags."""
+        spec = JobSpec(
+            job_id="test-job-004",
+            benchmark_id="arc",
+            model=ModelConfig(url="http://localhost:8000", name="model"),
+            tags={"env": "test", "developer": "alice"},
+        )
+
+        assert spec.tags == {"env": "test", "developer": "alice"}
+
+    def test_jobspec_can_be_serialized_to_json(self) -> None:
+        """Test JobSpec can be serialized to JSON."""
+        spec = JobSpec(
+            job_id="test-job-005",
+            benchmark_id="gsm8k",
+            model=ModelConfig(url="http://localhost:8000", name="model"),
+            num_examples=50,
+        )
+
+        json_data = spec.model_dump()
+
+        assert json_data["job_id"] == "test-job-005"
+        assert json_data["benchmark_id"] == "gsm8k"
+        assert json_data["num_examples"] == 50
+
+        # Can recreate from JSON
+        spec_2 = JobSpec(**json_data)
+        assert spec_2.job_id == spec.job_id
+
+
+class TestJobStatusUpdate:
+    """Tests for JobStatusUpdate model."""
+
+    def test_creating_a_status_update(self) -> None:
+        """Test creating a status update."""
+        update = JobStatusUpdate(
+            status=JobStatus.RUNNING,
+            phase=JobPhase.RUNNING_EVALUATION,
+            progress=0.5,
+            message="Evaluating examples",
+        )
+
+        assert update.status == JobStatus.RUNNING
+        assert update.phase == JobPhase.RUNNING_EVALUATION
+        assert update.progress == 0.5
+        assert update.message == "Evaluating examples"
+
+    def test_status_update_with_only_required_fields(self) -> None:
+        """Test status update with only required fields."""
+        update = JobStatusUpdate(status=JobStatus.PENDING)
+
+        assert update.status == JobStatus.PENDING
+        assert update.phase is None
+        assert update.progress is None
+        assert update.message is None
+
+    def test_status_update_with_step_information(self) -> None:
+        """Test status update with step information."""
+        update = JobStatusUpdate(
+            status=JobStatus.RUNNING,
+            current_step="Processing batch 5",
+            total_steps=10,
+            completed_steps=5,
+        )
+
+        assert update.current_step == "Processing batch 5"
+        assert update.total_steps == 10
+        assert update.completed_steps == 5
+
+    def test_status_update_with_error_information(self) -> None:
+        """Test status update with error information."""
+        update = JobStatusUpdate(
+            status=JobStatus.FAILED,
+            error_message="Model server unreachable",
+            error_details={"error_code": "CONNECTION_REFUSED", "retry_count": 3},
+        )
+
+        assert update.status == JobStatus.FAILED
+        assert update.error_message == "Model server unreachable"
+        assert update.error_details is not None
+        assert update.error_details["error_code"] == "CONNECTION_REFUSED"
+
+    def test_that_timestamp_is_automatically_set(self) -> None:
+        """Test that timestamp is automatically set."""
+        update = JobStatusUpdate(status=JobStatus.RUNNING)
+
+        assert update.timestamp is not None
+        assert isinstance(update.timestamp, datetime)
+        # Should be recent (within last second)
+        now = datetime.now(UTC)
+        assert (now - update.timestamp).total_seconds() < 1.0
+
+
+class TestOCIArtifactSpec:
+    """Tests for OCIArtifactSpec model."""
+
+    def test_creating_an_oci_artifact_specification(self) -> None:
+        """Test creating an OCI artifact specification."""
+        files = [Path("/tmp/results.json"), Path("/tmp/summary.txt")]
+
+        spec = OCIArtifactSpec(
+            files=files,
+            job_id="test-job-001",
+            benchmark_id="mmlu",
+            model_name="test-model",
+            title="Test Results",
+            description="Results from test job",
+        )
+
+        assert spec.files == files
+        assert spec.job_id == "test-job-001"
+        assert spec.benchmark_id == "mmlu"
+        assert spec.model_name == "test-model"
+        assert spec.title == "Test Results"
+
+    def test_artifact_spec_with_base_path(self) -> None:
+        """Test artifact spec with base path."""
+        spec = OCIArtifactSpec(
+            files=[Path("results.json")],
+            base_path=Path("/tmp/job-001"),
+            job_id="test-job-001",
+            benchmark_id="mmlu",
+            model_name="model",
+        )
+
+        assert spec.base_path == Path("/tmp/job-001")
+
+    def test_artifact_spec_with_custom_annotations(self) -> None:
+        """Test artifact spec with custom annotations."""
+        spec = OCIArtifactSpec(
+            files=[Path("results.json")],
+            job_id="test-job-001",
+            benchmark_id="mmlu",
+            model_name="model",
+            annotations={
+                "score": "0.85",
+                "framework": "lm-eval",
+            },
+        )
+
+        assert spec.annotations["score"] == "0.85"
+        assert spec.annotations["framework"] == "lm-eval"
+
+
+class TestOCIArtifactResult:
+    """Tests for OCIArtifactResult model."""
+
+    def test_creating_an_oci_artifact_result(self) -> None:
+        """Test creating an OCI artifact result."""
+        result = OCIArtifactResult(
+            digest="sha256:abc123...",
+            reference="ghcr.io/eval-hub/results:test@sha256:abc123...",
+            size_bytes=1048576,
+        )
+
+        assert result.digest == "sha256:abc123..."
+        assert result.reference == "ghcr.io/eval-hub/results:test@sha256:abc123..."
+        assert result.size_bytes == 1048576
+        assert isinstance(result.created_at, datetime)
+
+
+class TestJobResults:
+    """Tests for JobResults model."""
+
+    def test_creating_job_results(self) -> None:
+        """Test creating job results."""
+        results = JobResults(
+            job_id="test-job-001",
+            benchmark_id="mmlu",
+            model_name="test-model",
+            results=[
+                EvaluationResult(
+                    metric_name="accuracy", metric_value=0.85, metric_type="float"
+                )
+            ],
+            num_examples_evaluated=100,
+            duration_seconds=125.5,
+        )
+
+        assert results.job_id == "test-job-001"
+        assert results.benchmark_id == "mmlu"
+        assert results.model_name == "test-model"
+        assert len(results.results) == 1
+        assert results.results[0].metric_name == "accuracy"
+        assert results.num_examples_evaluated == 100
+        assert results.duration_seconds == 125.5
+
+    def test_job_results_with_overall_score(self) -> None:
+        """Test job results with overall score."""
+        results = JobResults(
+            job_id="test-job-001",
+            benchmark_id="mmlu",
+            model_name="model",
+            results=[],
+            num_examples_evaluated=100,
+            duration_seconds=60.0,
+            overall_score=0.75,
+        )
+
+        assert results.overall_score == 0.75
+
+    def test_job_results_with_evaluation_metadata(self) -> None:
+        """Test job results with evaluation metadata."""
+        results = JobResults(
+            job_id="test-job-001",
+            benchmark_id="mmlu",
+            model_name="model",
+            results=[],
+            num_examples_evaluated=100,
+            duration_seconds=60.0,
+            evaluation_metadata={
+                "framework": "lm-eval",
+                "framework_version": "0.4.0",
+                "num_few_shot": 5,
+            },
+        )
+
+        assert results.evaluation_metadata["framework"] == "lm-eval"
+        assert results.evaluation_metadata["num_few_shot"] == 5
+
+    def test_job_results_with_oci_artifact_information(self) -> None:
+        """Test job results with OCI artifact information."""
+        artifact = OCIArtifactResult(
+            digest="sha256:abc123",
+            reference="ghcr.io/eval-hub/results:test",
+            size_bytes=1024,
+        )
+
+        results = JobResults(
+            job_id="test-job-001",
+            benchmark_id="mmlu",
+            model_name="model",
+            results=[],
+            num_examples_evaluated=100,
+            duration_seconds=60.0,
+            oci_artifact=artifact,
+        )
+
+        assert results.oci_artifact is not None
+        assert results.oci_artifact.digest == "sha256:abc123"
+
+    def test_that_completed_at_is_automatically_set(self) -> None:
+        """Test that completed_at is automatically set."""
+        results = JobResults(
+            job_id="test-job-001",
+            benchmark_id="mmlu",
+            model_name="model",
+            results=[],
+            num_examples_evaluated=100,
+            duration_seconds=60.0,
+        )
+
+        assert results.completed_at is not None
+        assert isinstance(results.completed_at, datetime)
+
+
+class TestJobCallbacks:
+    """Tests for JobCallbacks interface."""
+
+    def test_that_jobcallbacks_cannot_be_instantiated_directly(self) -> None:
+        """Test that JobCallbacks cannot be instantiated directly."""
+        with pytest.raises(TypeError):
+            JobCallbacks()  # type: ignore
+
+    def test_implementing_jobcallbacks_with_a_mock(self) -> None:
+        """Test implementing JobCallbacks with a mock."""
+
+        class MockCallbacks(JobCallbacks):
+            def __init__(self) -> None:
+                self.status_updates: list[JobStatusUpdate] = []
+                self.artifacts: list[OCIArtifactSpec] = []
+                self.results: list[JobResults] = []
+
+            def report_status(self, update: JobStatusUpdate) -> None:
+                self.status_updates.append(update)
+
+            def create_oci_artifact(self, spec: OCIArtifactSpec) -> OCIArtifactResult:
+                self.artifacts.append(spec)
+                return OCIArtifactResult(
+                    digest="sha256:test",
+                    reference="test://artifact",
+                    size_bytes=1024,
+                )
+
+            def report_results(self, results: JobResults) -> None:
+                self.results.append(results)
+
+        # Should be able to instantiate the implementation
+        callbacks = MockCallbacks()
+
+        # Test report_status
+        update = JobStatusUpdate(status=JobStatus.RUNNING, progress=0.5)
+        callbacks.report_status(update)
+
+        assert len(callbacks.status_updates) == 1
+        assert callbacks.status_updates[0].status == JobStatus.RUNNING
+
+        # Test create_oci_artifact
+        spec = OCIArtifactSpec(
+            files=[Path("/tmp/test.json")],
+            job_id="test",
+            benchmark_id="mmlu",
+            model_name="model",
+        )
+        result = callbacks.create_oci_artifact(spec)
+
+        assert len(callbacks.artifacts) == 1
+        assert result.digest == "sha256:test"
+
+
+class TestFrameworkAdapter:
+    """Tests for FrameworkAdapter base class."""
+
+    def test_that_frameworkadapter_cannot_be_instantiated_directly(self) -> None:
+        """Test that FrameworkAdapter cannot be instantiated directly."""
+        with pytest.raises(TypeError):
+            FrameworkAdapter()  # type: ignore
+
+    def test_implementing_frameworkadapter(self) -> None:
+        """Test implementing FrameworkAdapter."""
+
+        class TestAdapter(FrameworkAdapter):
+            def run_benchmark_job(
+                self, config: JobSpec, callbacks: JobCallbacks
+            ) -> JobResults:
+                # Unused but required by interface
+                _ = callbacks
+                return JobResults(
+                    job_id=config.job_id,
+                    benchmark_id=config.benchmark_id,
+                    model_name=config.model.name,
+                    results=[],
+                    num_examples_evaluated=0,
+                    duration_seconds=0.0,
+                )
+
+        # Should be able to instantiate the implementation
+        adapter = TestAdapter()
+        assert adapter is not None
+
+    def test_running_a_benchmark_job_through_the_adapter(self) -> None:
+        """Test running a benchmark job through the adapter."""
+
+        class TestAdapter(FrameworkAdapter):
+            def run_benchmark_job(
+                self, config: JobSpec, callbacks: JobCallbacks
+            ) -> JobResults:
+                # Report initial status
+                callbacks.report_status(
+                    JobStatusUpdate(
+                        status=JobStatus.RUNNING,
+                        phase=JobPhase.INITIALIZING,
+                        progress=0.0,
+                    )
+                )
+
+                # Report progress
+                callbacks.report_status(
+                    JobStatusUpdate(
+                        status=JobStatus.RUNNING,
+                        phase=JobPhase.RUNNING_EVALUATION,
+                        progress=0.5,
+                    )
+                )
+
+                # Return results
+                return JobResults(
+                    job_id=config.job_id,
+                    benchmark_id=config.benchmark_id,
+                    model_name=config.model.name,
+                    results=[
+                        EvaluationResult(
+                            metric_name="accuracy",
+                            metric_value=0.85,
+                            metric_type="float",
+                        )
+                    ],
+                    num_examples_evaluated=100,
+                    duration_seconds=60.0,
+                )
+
+        # Create mock callbacks
+        class MockCallbacks(JobCallbacks):
+            def __init__(self) -> None:
+                self.status_updates: list[JobStatusUpdate] = []
+                self.results: list[JobResults] = []
+
+            def report_status(self, update: JobStatusUpdate) -> None:
+                self.status_updates.append(update)
+
+            def create_oci_artifact(self, spec: OCIArtifactSpec) -> OCIArtifactResult:
+                # Unused but required by interface
+                _ = spec
+                return OCIArtifactResult(
+                    digest="sha256:test", reference="test", size_bytes=1024
+                )
+
+            def report_results(self, results: JobResults) -> None:
+                self.results.append(results)
+
+        # Run the adapter
+        adapter = TestAdapter()
+        callbacks = MockCallbacks()
+        spec = JobSpec(
+            job_id="test-job-001",
+            benchmark_id="mmlu",
+            model=ModelConfig(url="http://localhost:8000", name="test-model"),
+        )
+
+        results = adapter.run_benchmark_job(spec, callbacks)
+
+        # Verify results
+        assert results.job_id == "test-job-001"
+        assert results.benchmark_id == "mmlu"
+        assert len(results.results) == 1
+        assert results.results[0].metric_value == 0.85
+
+        # Verify status updates were sent
+        assert len(callbacks.status_updates) == 2
+        assert callbacks.status_updates[0].phase == JobPhase.INITIALIZING
+        assert callbacks.status_updates[1].phase == JobPhase.RUNNING_EVALUATION
