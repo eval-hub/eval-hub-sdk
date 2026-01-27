@@ -211,8 +211,14 @@ class EvaluationJob(BaseModel):
 class JobsList(BaseModel):
     """List of evaluation jobs response."""
 
-    total_count: int = Field(..., description="Total number of jobs")
-    items: list[EvaluationJob] = Field(..., description="List of evaluation jobs")
+    model_config = ConfigDict(populate_by_name=True)
+
+    total_count: int = Field(
+        ..., alias="total_jobs", description="Total number of jobs"
+    )
+    items: list[EvaluationJob] = Field(
+        ..., alias="jobs", description="List of evaluation jobs"
+    )
 
 
 class EvaluationResponse(BaseModel):
@@ -335,8 +341,14 @@ class Provider(BaseModel):
 class ProviderList(BaseModel):
     """List of providers response."""
 
-    total_count: int = Field(..., description="Total number of providers")
-    items: list[Provider] = Field(..., description="List of providers")
+    model_config = ConfigDict(populate_by_name=True)
+
+    total_count: int = Field(
+        ..., alias="total_providers", description="Total number of providers"
+    )
+    items: list[Provider] = Field(
+        ..., alias="providers", description="List of providers"
+    )
 
 
 class Benchmark(BaseModel):
@@ -360,8 +372,12 @@ class Benchmark(BaseModel):
 class BenchmarksList(BaseModel):
     """List of benchmarks response."""
 
+    model_config = ConfigDict(populate_by_name=True)
+
     total_count: int = Field(..., description="Total number of benchmarks")
-    items: list[Benchmark] = Field(..., description="List of benchmarks")
+    items: list[Benchmark] = Field(
+        ..., alias="benchmarks", description="List of benchmarks"
+    )
 
 
 class Resource(BaseModel):
@@ -403,8 +419,12 @@ class CollectionList(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    total_count: int = Field(..., description="Total number of collections")
-    items: list[Collection] = Field(..., description="Collection resources")
+    total_count: int = Field(
+        ..., alias="total_collections", description="Total number of collections"
+    )
+    items: list[Collection] = Field(
+        ..., alias="collections", description="Collection resources"
+    )
     # Pagination fields
     first: dict[str, str] | None = Field(None, description="Link to first page")
     next: dict[str, str] | None = Field(None, description="Link to next page")

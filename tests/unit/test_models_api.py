@@ -6,6 +6,8 @@ from typing import Any
 import pytest
 from evalhub.models.api import (
     BenchmarkInfo,
+    BenchmarksList,
+    CollectionList,
     ErrorResponse,
     EvaluationJob,
     EvaluationRequest,
@@ -14,8 +16,10 @@ from evalhub.models.api import (
     EvaluationStatus,
     FrameworkInfo,
     HealthResponse,
+    JobsList,
     JobStatus,
     ModelConfig,
+    ProviderList,
 )
 from pydantic import ValidationError
 
@@ -394,3 +398,137 @@ class TestEnums:
         assert EvaluationStatus.COMPLETED == "completed"
         assert EvaluationStatus.FAILED == "failed"
         assert EvaluationStatus.CANCELLED == "cancelled"
+
+
+class TestListModelsServerCompatibility:
+    """Test cases for list models to ensure server API compatibility.
+
+    These tests verify that the client models correctly parse server responses
+    using field aliases (e.g., server's 'providers' -> client's 'items').
+    """
+
+    def test_provider_list_with_server_fields(self) -> None:
+        """Test ProviderList parses server response format."""
+        # Server returns 'providers' and 'total_providers'
+        server_response = {
+            "providers": [{"id": "lm_eval", "label": "LM Evaluation Harness"}],
+            "total_providers": 1,
+        }
+
+        provider_list = ProviderList.model_validate(server_response)
+        assert provider_list.total_count == 1
+        assert len(provider_list.items) == 1
+        assert provider_list.items[0].id == "lm_eval"
+
+    def test_provider_list_with_client_fields(self) -> None:
+        """Test ProviderList also accepts normalized client field names."""
+        # Client can also use normalized field names
+        client_data = {
+            "items": [{"id": "ragas", "label": "RAGAS"}],
+            "total_count": 1,
+        }
+
+        provider_list = ProviderList.model_validate(client_data)
+        assert provider_list.total_count == 1
+        assert len(provider_list.items) == 1
+
+    def test_benchmarks_list_with_server_fields(self) -> None:
+        """Test BenchmarksList parses server response format."""
+        # Server returns 'benchmarks'
+        server_response = {
+            "benchmarks": [
+                {
+                    "benchmark_id": "mmlu",
+                    "provider_id": "lm_eval",
+                    "name": "MMLU",
+                    "description": "Massive Multitask Language Understanding",
+                    "category": "knowledge",
+                    "metrics": ["accuracy"],
+                    "num_few_shot": 5,
+                }
+            ],
+            "total_count": 1,
+            "providers": [],
+            "categories": [],
+        }
+
+        benchmarks_list = BenchmarksList.model_validate(server_response)
+        assert benchmarks_list.total_count == 1
+        assert len(benchmarks_list.items) == 1
+        assert benchmarks_list.items[0].id == "mmlu"
+
+    def test_collection_list_with_server_fields(self) -> None:
+        """Test CollectionList parses server response format."""
+        # Server returns 'collections' and 'total_collections'
+        server_response = {
+            "collections": [
+                {
+                    "resource": {
+                        "id": "healthcare_v1",
+                        "created_at": "2026-01-27T12:00:00Z",
+                        "updated_at": "2026-01-27T12:00:00Z",
+                    },
+                    "name": "Healthcare Safety v1",
+                    "description": "Healthcare benchmarks",
+                    "benchmarks": [
+                        {"benchmark_id": "medqa", "provider_id": "lm_eval"},
+                        {"benchmark_id": "pubmedqa", "provider_id": "lm_eval"},
+                    ],
+                }
+            ],
+            "total_collections": 1,
+        }
+
+        collection_list = CollectionList.model_validate(server_response)
+        assert collection_list.total_count == 1
+        assert len(collection_list.items) == 1
+        assert collection_list.items[0].resource.id == "healthcare_v1"
+
+    def test_jobs_list_with_server_fields(self) -> None:
+        """Test JobsList parses server response format."""
+        # Server returns 'jobs' and 'total_jobs'
+        server_response = {
+            "jobs": [
+                {
+                    "id": "job-123",
+                    "status": "completed",
+                    "request": {
+                        "benchmark_id": "mmlu",
+                        "model": {"name": "test-model", "url": "http://localhost:8000"},
+                    },
+                    "submitted_at": "2026-01-27T12:00:00Z",
+                    "started_at": "2026-01-27T12:01:00Z",
+                    "completed_at": "2026-01-27T12:30:00Z",
+                }
+            ],
+            "total_jobs": 1,
+        }
+
+        jobs_list = JobsList.model_validate(server_response)
+        assert jobs_list.total_count == 1
+        assert len(jobs_list.items) == 1
+        assert jobs_list.items[0].id == "job-123"
+
+    def test_empty_provider_list(self) -> None:
+        """Test ProviderList handles empty server response."""
+        server_response = {
+            "providers": [],
+            "total_providers": 0,
+        }
+
+        provider_list = ProviderList.model_validate(server_response)
+        assert provider_list.total_count == 0
+        assert len(provider_list.items) == 0
+
+    def test_empty_benchmarks_list(self) -> None:
+        """Test BenchmarksList handles empty server response."""
+        server_response = {
+            "benchmarks": [],
+            "total_count": 0,
+            "providers": [],
+            "categories": [],
+        }
+
+        benchmarks_list = BenchmarksList.model_validate(server_response)
+        assert benchmarks_list.total_count == 0
+        assert len(benchmarks_list.items) == 0
