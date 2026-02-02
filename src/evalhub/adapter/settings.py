@@ -15,7 +15,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal, Self
 
-from pydantic import Field, HttpUrl
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -35,9 +35,6 @@ class AdapterSettings(BaseSettings):
     job_spec_path: Path | None = Field(
         default=None, validation_alias="EVALHUB_JOB_SPEC_PATH"
     )
-
-    # Sidecar configuration (local HTTP endpoint inside the pod / local dev)
-    service_url: HttpUrl | None = Field(default=None, validation_alias="SERVICE_URL")
 
     # OCI registry configuration
     registry_url: str | None = Field(default=None, validation_alias="REGISTRY_URL")
@@ -73,8 +70,6 @@ class AdapterSettings(BaseSettings):
                 "Set EVALHUB_JOB_SPEC_PATH (or EVALHUB_MODE=k8s for /meta/job.json)."
             )
 
-        # For the current adapter callbacks implementation, these are required.
-        if self.service_url is None:
-            raise ValueError("SERVICE_URL environment variable is required")
+        # For the current adapter callbacks implementation, registry is required.
         if not self.registry_url:
             raise ValueError("REGISTRY_URL environment variable is required")

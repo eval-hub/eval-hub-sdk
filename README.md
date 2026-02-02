@@ -627,10 +627,9 @@ from evalhub.adapter import AdapterSettings
 
 def test_settings_parse(monkeypatch):
     monkeypatch.setenv("EVALHUB_MODE", "local")
-    monkeypatch.setenv("SERVICE_URL", "http://localhost:8080")
     monkeypatch.setenv("REGISTRY_URL", "localhost:5000")
     s = AdapterSettings.from_env()
-    assert str(s.service_url) == "http://localhost:8080/"
+    assert str(s.registry_url) == "localhost:5000"
 ```
 
 ### Quality Assurance
