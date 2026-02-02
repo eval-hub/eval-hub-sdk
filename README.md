@@ -409,7 +409,7 @@ job_spec = JobSpec(
         name="llama-2-7b"
     ),
     benchmark_config={},
-    callback_url="http://localhost:8080/callback",
+    callback_url="http://localhost:8080",
     num_examples=100
 )
 
@@ -456,7 +456,7 @@ class JobSpec(BaseModel):
     benchmark_id: str                 # Benchmark to evaluate
     model: ModelConfig                # Model configuration (url, name)
     benchmark_config: Dict[str, Any]  # Adapter-specific parameters
-    callback_url: str                 # URL for status and result callbacks
+    callback_url: str                 # Base URL for callbacks (SDK appends /status, /results)
 
     # Optional fields
     num_examples: Optional[int]       # Number of examples to evaluate

@@ -30,7 +30,7 @@ def mock_job_spec_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         "model": {"url": "http://localhost:8000", "name": "test-model"},
         "num_examples": 10,
         "benchmark_config": {"random_seed": 42},
-        "callback_url": "http://localhost:8080/callback",
+        "callback_url": "http://localhost:8080",
     }
 
     # Write to temp file
@@ -54,7 +54,7 @@ class TestJobSpec:
             model=ModelConfig(url="http://localhost:8000", name="test-model"),
             num_examples=10,
             benchmark_config={"num_few_shot": 5, "random_seed": 42},
-            callback_url="http://localhost:8080/callback",
+            callback_url="http://localhost:8080",
         )
 
         assert spec.job_id == "test-job-001"
@@ -71,7 +71,7 @@ class TestJobSpec:
             benchmark_id="hellaswag",
             model=ModelConfig(url="http://localhost:8000", name="model"),
             benchmark_config={},
-            callback_url="http://localhost:8080/callback",
+            callback_url="http://localhost:8080",
         )
 
         assert spec.job_id == "test-job-002"
@@ -86,7 +86,7 @@ class TestJobSpec:
             benchmark_id="mmlu",
             model=ModelConfig(url="http://localhost:8000", name="model"),
             benchmark_config={"subject": "physics", "difficulty": "hard"},
-            callback_url="http://localhost:8080/callback",
+            callback_url="http://localhost:8080",
         )
 
         assert spec.benchmark_config == {"subject": "physics", "difficulty": "hard"}
@@ -98,7 +98,7 @@ class TestJobSpec:
             benchmark_id="arc",
             model=ModelConfig(url="http://localhost:8000", name="model"),
             benchmark_config={},
-            callback_url="http://localhost:8080/callback",
+            callback_url="http://localhost:8080",
             tags={"env": "test", "developer": "alice"},
         )
 
@@ -111,7 +111,7 @@ class TestJobSpec:
             benchmark_id="gsm8k",
             model=ModelConfig(url="http://localhost:8000", name="model"),
             benchmark_config={},
-            callback_url="http://localhost:8080/callback",
+            callback_url="http://localhost:8080",
             num_examples=50,
         )
 
@@ -507,7 +507,7 @@ class TestFrameworkAdapter:
             benchmark_id="mmlu",
             model=ModelConfig(url="http://localhost:8000", name="test-model"),
             benchmark_config={},
-            callback_url="http://localhost:8080/callback",
+            callback_url="http://localhost:8080",
         )
 
         results = adapter.run_benchmark_job(spec, callbacks)

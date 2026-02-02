@@ -146,7 +146,7 @@ Example job spec in ConfigMap:
     "num_few_shot": 5,
     "random_seed": 42
   },
-  "callback_url": "http://localhost:8080/callback",
+  "callback_url": "http://localhost:8080",
   "num_examples": 100
 }
 ```
@@ -189,7 +189,7 @@ spec = JobSpec(
     benchmark_id="mmlu",
     model={"url": "http://localhost:8000", "name": "test-model"},
     benchmark_config={},
-    callback_url="http://localhost:8080/callback",
+    callback_url="http://localhost:8080",
     num_examples=10
 )
 

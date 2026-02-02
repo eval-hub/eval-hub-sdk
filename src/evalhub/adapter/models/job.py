@@ -66,7 +66,10 @@ class JobSpec(BaseModel):
     )
 
     # Callback configuration (mandatory)
-    callback_url: str = Field(..., description="URL for status and result callbacks")
+    callback_url: str = Field(
+        ...,
+        description="Base URL for callbacks",
+    )
 
     # ============================================================================
     # OPTIONAL FIELDS
