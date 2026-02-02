@@ -142,9 +142,12 @@ Example job spec in ConfigMap:
     "url": "http://model-server:8000/v1",
     "name": "llama-2-7b"
   },
-  "num_examples": 100,
-  "num_few_shot": 5,
-  "random_seed": 42
+  "benchmark_config": {
+    "num_few_shot": 5,
+    "random_seed": 42
+  },
+  "callback_url": "http://localhost:8080/callback",
+  "num_examples": 100
 }
 ```
 
@@ -185,6 +188,8 @@ spec = JobSpec(
     job_id="local-test",
     benchmark_id="mmlu",
     model={"url": "http://localhost:8000", "name": "test-model"},
+    benchmark_config={},
+    callback_url="http://localhost:8080/callback",
     num_examples=10
 )
 

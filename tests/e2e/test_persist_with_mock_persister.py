@@ -27,6 +27,7 @@ def mock_job_spec_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         "model": {"url": "http://localhost:8000", "name": "test-model"},
         "num_examples": 10,
         "benchmark_config": {"random_seed": 42},
+        "callback_url": "http://localhost:8080/callback",
     }
 
     # Write to temp file
@@ -121,6 +122,8 @@ class TestOCIArtifactPersistenceE2E:
             job_id="e2e-test-001",
             benchmark_id="mmlu",
             model=ModelConfig(url="http://localhost:8000", name="test-model"),
+            benchmark_config={},
+            callback_url="http://localhost:8080/callback",
             num_examples=10,
         )
 

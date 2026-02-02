@@ -32,26 +32,52 @@ class JobSpec(BaseModel):
     The service creates this and mounts it via ConfigMap when launching the job pod.
 
     Matches the Go service's EvaluationJobConfig structure.
+
+    Mandatory fields:
+        - job_id: Unique job identifier
+        - benchmark_id: Benchmark to evaluate
+        - model: Model configuration (url and name)
+        - benchmark_config: Benchmark-specific parameters
+        - callback_url: URL for status and result callbacks
+
+    Optional fields:
+        - num_examples: Number of examples to evaluate (None = all)
+        - experiment_name: Name for this evaluation experiment
+        - tags: Custom tags for the job
+        - timeout_seconds: Maximum job execution time (default: 3600)
+        - retry_attempts: Number of retry attempts on failure
     """
 
-    # Job identification
+    # ============================================================================
+    # MANDATORY FIELDS
+    # ============================================================================
+
+    # Job identification (mandatory)
     job_id: str = Field(..., description="Unique job identifier from service")
     benchmark_id: str = Field(..., description="Benchmark to evaluate")
 
-    # Model configuration
+    # Model configuration (mandatory)
     model: ModelConfig = Field(..., description="Model configuration")
 
-    # Evaluation parameters
+    # Benchmark-specific configuration (mandatory)
+    # adapter-specific params go here
+    benchmark_config: dict[str, Any] = Field(
+        ..., description="Benchmark-specific parameters"
+    )
+
+    # Callback configuration (mandatory)
+    callback_url: str = Field(..., description="URL for status and result callbacks")
+
+    # ============================================================================
+    # OPTIONAL FIELDS
+    # ============================================================================
+
+    # Evaluation parameters (optional)
     num_examples: int | None = Field(
         default=None, description="Number of examples to evaluate (None = all)"
     )
 
-    # Benchmark-specific configuration (adapter-specific params go here)
-    benchmark_config: dict[str, Any] = Field(
-        default_factory=dict, description="Benchmark-specific parameters"
-    )
-
-    # Job metadata
+    # Job metadata (optional)
     experiment_name: str | None = Field(
         default=None, description="Name for this evaluation experiment"
     )
@@ -59,9 +85,12 @@ class JobSpec(BaseModel):
         default_factory=dict, description="Custom tags for the job"
     )
 
-    # Resource hints
+    # Resource hints (optional)
     timeout_seconds: int | None = Field(
         default=3600, description="Maximum job execution time"
+    )
+    retry_attempts: int | None = Field(
+        default=None, description="Number of retry attempts on failure"
     )
 
     @classmethod

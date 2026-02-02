@@ -408,6 +408,8 @@ job_spec = JobSpec(
         url="http://vllm-service:8000",
         name="llama-2-7b"
     ),
+    benchmark_config={},
+    callback_url="http://localhost:8080/callback",
     num_examples=100
 )
 
@@ -449,14 +451,19 @@ class MyFrameworkAdapter(FrameworkAdapter):
 **JobSpec** - Configuration loaded from ConfigMap:
 ```python
 class JobSpec(BaseModel):
-    job_id: str                    # Unique job identifier
-    benchmark_id: str              # Benchmark to evaluate
-    model: ModelConfig             # Model configuration (url, name)
-    num_examples: Optional[int]    # Number of examples to evaluate
+    # Mandatory fields
+    job_id: str                       # Unique job identifier
+    benchmark_id: str                 # Benchmark to evaluate
+    model: ModelConfig                # Model configuration (url, name)
     benchmark_config: Dict[str, Any]  # Adapter-specific parameters
-    experiment_name: Optional[str] # Experiment name
-    tags: Dict[str, str]           # Custom tags
-    timeout_seconds: Optional[int] # Max execution time
+    callback_url: str                 # URL for status and result callbacks
+
+    # Optional fields
+    num_examples: Optional[int]       # Number of examples to evaluate
+    experiment_name: Optional[str]    # Experiment name
+    tags: Dict[str, str]              # Custom tags (default: {})
+    timeout_seconds: Optional[int]    # Max execution time (default: 3600)
+    retry_attempts: Optional[int]     # Number of retry attempts on failure
 
     @classmethod
     def from_file(cls, path: Path | str) -> Self:
