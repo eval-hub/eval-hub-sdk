@@ -59,7 +59,7 @@ class FrameworkAdapter(ABC):
         adapter = MyAdapter()
         callbacks = DefaultCallbacks(
             job_id=adapter.job_spec.job_id,
-            sidecar_url=str(adapter.settings.service_url),
+            sidecar_url=adapter.job_spec.callback_url,
             ...
         )
         results = adapter.run_benchmark_job(adapter.job_spec, callbacks)
