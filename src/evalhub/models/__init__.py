@@ -7,6 +7,7 @@ from .api import (
     BenchmarksList,
     Collection,
     CollectionList,
+    ErrorInfo,
     ErrorResponse,
     EvaluationJob,
     # Core API models
@@ -51,6 +52,7 @@ __all__ = [
     # Framework models
     "FrameworkInfo",
     # Response models
+    "ErrorInfo",
     "ErrorResponse",
     "HealthResponse",
 ]

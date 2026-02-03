@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from evalhub.adapter import (
+    ErrorInfo,
     EvaluationResult,
     FrameworkAdapter,
     JobCallbacks,
@@ -14,6 +15,7 @@ from evalhub.adapter import (
     JobSpec,
     JobStatus,
     JobStatusUpdate,
+    MessageInfo,
     ModelConfig,
     OCIArtifactResult,
     OCIArtifactSpec,
@@ -135,13 +137,17 @@ class TestJobStatusUpdate:
             status=JobStatus.RUNNING,
             phase=JobPhase.RUNNING_EVALUATION,
             progress=0.5,
-            message="Evaluating examples",
+            message=MessageInfo(
+                message="Evaluating examples",
+                message_code="status_update",
+            ),
         )
 
         assert update.status == JobStatus.RUNNING
         assert update.phase == JobPhase.RUNNING_EVALUATION
         assert update.progress == 0.5
-        assert update.message == "Evaluating examples"
+        assert update.message is not None
+        assert update.message.message == "Evaluating examples"
 
     def test_status_update_with_only_required_fields(self) -> None:
         """Test status update with only required fields."""
@@ -150,7 +156,9 @@ class TestJobStatusUpdate:
         assert update.status == JobStatus.PENDING
         assert update.phase is None
         assert update.progress is None
-        assert update.message is None
+        assert update.message is not None
+        assert update.message.message == "Status update"
+        assert update.message.message_code == "status_update"
 
     def test_status_update_with_step_information(self) -> None:
         """Test status update with step information."""
@@ -169,14 +177,19 @@ class TestJobStatusUpdate:
         """Test status update with error information."""
         update = JobStatusUpdate(
             status=JobStatus.FAILED,
-            error_message="Model server unreachable",
-            error_details={"error_code": "CONNECTION_REFUSED", "retry_count": 3},
+            error=ErrorInfo(
+                message="Model server unreachable",
+                message_code="model_server_unreachable",
+            ),
+            error_details={"retry_count": 3},
         )
 
         assert update.status == JobStatus.FAILED
-        assert update.error_message == "Model server unreachable"
+        assert update.error is not None
+        assert update.error.message == "Model server unreachable"
+        assert update.error.message_code == "model_server_unreachable"
         assert update.error_details is not None
-        assert update.error_details["error_code"] == "CONNECTION_REFUSED"
+        assert update.error_details["retry_count"] == 3
 
     def test_that_timestamp_is_automatically_set(self) -> None:
         """Test that timestamp is automatically set."""

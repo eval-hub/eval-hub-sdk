@@ -4,10 +4,13 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from ..models.api import JobStatus
 from .models import (
     JobCallbacks,
+    JobPhase,
     JobResults,
     JobStatusUpdate,
+    MessageInfo,
     OCIArtifactResult,
     OCIArtifactSpec,
 )
@@ -59,6 +62,7 @@ class DefaultCallbacks(JobCallbacks):
         auth_token: str | None = None,
         auth_token_path: Path | str | None = None,
         ca_bundle_path: Path | str | None = None,
+        events_path_template: str | None = None,
     ):
         """Initialize default callbacks.
 
@@ -78,6 +82,11 @@ class DefaultCallbacks(JobCallbacks):
         """
         self.job_id = job_id
         self.sidecar_url = sidecar_url.rstrip("/") if sidecar_url else None
+        self._events_path_template = (
+            events_path_template
+            if events_path_template is not None
+            else "/api/v1/evaluations/jobs/{job_id}/events"
+        )
 
         # Initialize OCI persister
         self.persister = OCIArtifactPersister(
@@ -180,6 +189,9 @@ class DefaultCallbacks(JobCallbacks):
         # Try common CA bundle locations
         ca_paths = [
             Path("/etc/pki/ca-trust/source/anchors/service-ca.crt"),  # OpenShift
+            Path(
+                "/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt"
+            ),  # OpenShift SA mount
             Path("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"),  # Kubernetes
         ]
 
@@ -231,8 +243,15 @@ class DefaultCallbacks(JobCallbacks):
         # If evalhub available, send status update
         if self.sidecar_url and self._httpx_available and self._http_client:
             try:
-                url = f"{self.sidecar_url}/api/v1/evaluations/jobs/{self.job_id}/update"
-                data = update.model_dump(mode="json", exclude_none=True)
+                url = f"{self.sidecar_url}{self._events_path_template.format(job_id=self.job_id)}"
+
+                # Transform to eval-hub API format
+                data = {
+                    "status_event": {
+                        "state": update.status.value,
+                        "message": update.message.model_dump(mode="json")
+                    }
+                }
 
                 response = self._http_client.post(url, json=data, timeout=10.0)
                 response.raise_for_status()
@@ -290,35 +309,18 @@ class DefaultCallbacks(JobCallbacks):
         Args:
             results: Final job results to report
         """
-        # If evalhub available, send results
+        # If evalhub available, send completed status event
         if self.sidecar_url and self._httpx_available and self._http_client:
-            try:
-                url = f"{self.sidecar_url}/api/v1/evaluations/jobs/{self.job_id}/update"
-                data = results.model_dump(mode="json", exclude_none=True)
-
-                response = self._http_client.post(url, json=data, timeout=30.0)
-                response.raise_for_status()
-
-                logger.info(f"Results for job {results.job_id} sent to evalhub")
-                return
-
-            except self.httpx.HTTPStatusError as e:
-                if e.response.status_code == 401:
-                    logger.error(
-                        "Authentication failed (401). Ensure the job has a valid "
-                        "ServiceAccount token at /var/run/secrets/kubernetes.io/serviceaccount/token"
-                    )
-                elif e.response.status_code == 403:
-                    logger.error(
-                        "Authorization failed (403). Ensure the ServiceAccount has RBAC "
-                        "permissions for services/proxy resource with create/update verbs"
-                    )
-                else:
-                    logger.warning(f"Failed to send results to evalhub: {e}")
-                # Fall through to local logging
-            except Exception as e:
-                logger.warning(f"Failed to send results to evalhub: {e}")
-                # Fall through to local logging
+            completed_update = JobStatusUpdate(
+                status=JobStatus.COMPLETED,
+                phase=JobPhase.COMPLETED,
+                progress=1.0,
+                message=MessageInfo(
+                    message="Evaluation completed successfully",
+                    message_code="evaluation_completed",
+                ),
+            )
+            self.report_status(completed_update)
 
         # Local logging
         logger.info(

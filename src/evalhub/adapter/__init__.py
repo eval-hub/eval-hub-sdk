@@ -76,12 +76,14 @@ from ..models.api import (
 from .callbacks import DefaultCallbacks
 from .config import get_job_spec_path
 from .models import (
+    ErrorInfo,
     FrameworkAdapter,
     JobCallbacks,
     JobPhase,
     JobResults,
     JobSpec,
     JobStatusUpdate,
+    MessageInfo,
     OCIArtifactResult,
     OCIArtifactSpec,
 )
@@ -100,6 +102,8 @@ __all__ = [
     "JobResults",
     "JobStatusUpdate",
     "JobPhase",
+    "ErrorInfo",
+    "MessageInfo",
     # OCI models
     "OCIArtifactSpec",
     "OCIArtifactResult",

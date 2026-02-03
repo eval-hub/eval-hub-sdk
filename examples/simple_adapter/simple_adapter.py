@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from evalhub.adapter import (
+    ErrorInfo,
     EvaluationResult,
     FrameworkAdapter,
     JobCallbacks,
@@ -27,12 +28,17 @@ from evalhub.adapter import (
     JobSpec,
     JobStatus,
     JobStatusUpdate,
+    MessageInfo,
     ModelConfig,
     OCIArtifactResult,
     OCIArtifactSpec,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _status_message(text: str, code: str = "status_update") -> MessageInfo:
+    return MessageInfo(message=text, message_code=code)
 
 
 class ExampleAdapter(FrameworkAdapter):
@@ -70,7 +76,9 @@ class ExampleAdapter(FrameworkAdapter):
                     status=JobStatus.RUNNING,
                     phase=JobPhase.INITIALIZING,
                     progress=0.0,
-                    message=f"Initializing {config.benchmark_id} evaluation",
+                    message=_status_message(
+                        f"Initializing {config.benchmark_id} evaluation"
+                    ),
                 )
             )
 
@@ -83,7 +91,7 @@ class ExampleAdapter(FrameworkAdapter):
                     status=JobStatus.RUNNING,
                     phase=JobPhase.LOADING_DATA,
                     progress=0.1,
-                    message="Loading benchmark data",
+                    message=_status_message("Loading benchmark data"),
                     current_step="Loading dataset",
                     total_steps=4,
                     completed_steps=1,
@@ -99,7 +107,7 @@ class ExampleAdapter(FrameworkAdapter):
                     status=JobStatus.RUNNING,
                     phase=JobPhase.RUNNING_EVALUATION,
                     progress=0.3,
-                    message=f"Evaluating on {len(dataset)} examples",
+                    message=_status_message(f"Evaluating on {len(dataset)} examples"),
                     current_step="Running evaluation",
                     total_steps=4,
                     completed_steps=2,
@@ -115,7 +123,7 @@ class ExampleAdapter(FrameworkAdapter):
                     status=JobStatus.RUNNING,
                     phase=JobPhase.POST_PROCESSING,
                     progress=0.8,
-                    message="Processing results",
+                    message=_status_message("Processing results"),
                     current_step="Post-processing",
                     total_steps=4,
                     completed_steps=3,
@@ -134,7 +142,7 @@ class ExampleAdapter(FrameworkAdapter):
                     status=JobStatus.RUNNING,
                     phase=JobPhase.PERSISTING_ARTIFACTS,
                     progress=0.9,
-                    message="Persisting artifacts to OCI registry",
+                    message=_status_message("Persisting artifacts to OCI registry"),
                     current_step="Creating OCI artifact",
                     total_steps=4,
                     completed_steps=4,
@@ -192,7 +200,13 @@ class ExampleAdapter(FrameworkAdapter):
             callbacks.report_status(
                 JobStatusUpdate(
                     status=JobStatus.FAILED,
-                    error_message=str(e),
+                    message=_status_message(
+                        "Evaluation failed", code="evaluation_failed"
+                    ),
+                    error=ErrorInfo(
+                        message=str(e),
+                        message_code="evaluation_failed",
+                    ),
                     error_details={"exception_type": type(e).__name__},
                 )
             )

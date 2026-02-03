@@ -29,6 +29,16 @@ class EvaluationStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class ErrorInfo(BaseModel):
+    """Error information with message and code.
+
+    Matches the MessageInfo structure from eval-hub API.
+    """
+
+    message: str = Field(..., description="Error message")
+    message_code: str = Field(..., description="Error code identifier")
+
+
 class ModelConfig(BaseModel):
     """Configuration for the model being evaluated.
 
@@ -170,8 +180,8 @@ class EvaluationJob(BaseModel):
     )
 
     # Error information
-    error_message: str | None = Field(
-        default=None, description="Error message if failed"
+    error: ErrorInfo | None = Field(
+        default=None, description="Error information if failed"
     )
     error_details: dict[str, Any] | None = Field(
         default=None, description="Detailed error information"
@@ -495,8 +505,8 @@ class HealthResponse(BaseModel):
     )
 
     # Error information for unhealthy status
-    error_message: str | None = Field(
-        default=None, description="Error message when status is unhealthy"
+    error: ErrorInfo | None = Field(
+        default=None, description="Error information when status is unhealthy"
     )
 
     # Additional info
