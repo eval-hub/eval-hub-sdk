@@ -1,6 +1,8 @@
 """Default callback implementation for adapters."""
 
 import logging
+from pathlib import Path
+from typing import Any
 
 from .models import (
     JobCallbacks,
@@ -54,6 +56,9 @@ class DefaultCallbacks(JobCallbacks):
         registry_username: str | None = None,
         registry_password: str | None = None,
         insecure: bool = False,
+        auth_token: str | None = None,
+        auth_token_path: Path | str | None = None,
+        ca_bundle_path: Path | str | None = None,
     ):
         """Initialize default callbacks.
 
@@ -64,7 +69,12 @@ class DefaultCallbacks(JobCallbacks):
             registry_url: OCI registry URL (e.g., "ghcr.io")
             registry_username: Registry username
             registry_password: Registry password/token
-            insecure: Allow insecure HTTP connections to registry
+            insecure: Allow insecure HTTP connections (both registry and evalhub)
+            auth_token: Explicit authentication token (overrides auto-detection)
+            auth_token_path: Path to authentication token file (e.g., ServiceAccount token)
+                           If not provided, auto-detects Kubernetes ServiceAccount token
+            ca_bundle_path: Path to CA bundle for TLS verification
+                          If not provided, auto-detects OpenShift/Kubernetes CA bundles
         """
         self.job_id = job_id
         self.sidecar_url = sidecar_url.rstrip("/") if sidecar_url else None
@@ -77,19 +87,140 @@ class DefaultCallbacks(JobCallbacks):
             insecure=insecure,
         )
 
+        # Store insecure flag for evalhub communication
+        self._insecure = insecure
+
+        # Auto-detect or load authentication token
+        self._auth_token = self._resolve_auth_token(auth_token, auth_token_path)
+
+        # Auto-detect or load CA bundle (only if TLS verification is enabled)
+        if insecure:
+            self._ca_bundle = None
+            logger.warning("TLS verification disabled - skipping CA bundle detection")
+        else:
+            self._ca_bundle = self._resolve_ca_bundle(ca_bundle_path)
+
         # Try to import httpx for sidecar communication
         self._httpx_available = False
+        self._http_client: Any | None = None
         if self.sidecar_url:
             try:
                 import httpx
 
                 self.httpx = httpx
                 self._httpx_available = True
+                self._http_client = self._create_http_client()
             except ImportError:
                 logger.warning(
                     "httpx not installed. Status updates will be logged locally. "
                     "Install with: pip install httpx"
                 )
+
+    def _resolve_auth_token(
+        self, explicit_token: str | None, token_path: Path | str | None
+    ) -> str | None:
+        """Resolve authentication token with auto-detection.
+
+        Priority:
+        1. Explicit token parameter
+        2. Token from specified file path
+        3. Auto-detected Kubernetes ServiceAccount token
+        4. None (local mode, no authentication)
+
+        Args:
+            explicit_token: Explicit token string
+            token_path: Path to token file
+
+        Returns:
+            Token string or None
+        """
+        # Use explicit token if provided
+        if explicit_token:
+            return explicit_token
+
+        # Try specified token path
+        if token_path:
+            path = Path(token_path)
+            if path.exists():
+                return path.read_text().strip()
+            logger.warning(f"Specified token path does not exist: {token_path}")
+
+        # Auto-detect Kubernetes ServiceAccount token
+        default_token_path = Path("/var/run/secrets/kubernetes.io/serviceaccount/token")
+        if default_token_path.exists():
+            logger.debug("Auto-detected Kubernetes ServiceAccount token")
+            return default_token_path.read_text().strip()
+
+        # No token available (local mode)
+        logger.debug("No authentication token found - running in local mode")
+        return None
+
+    def _resolve_ca_bundle(self, ca_bundle_path: Path | str | None) -> Path | None:
+        """Resolve CA bundle path with auto-detection.
+
+        Priority:
+        1. Explicitly specified CA bundle path
+        2. Auto-detected OpenShift service-ca
+        3. Auto-detected Kubernetes ServiceAccount CA
+        4. None (use system defaults or insecure mode)
+
+        Args:
+            ca_bundle_path: Path to CA bundle file
+
+        Returns:
+            Path to CA bundle or None
+        """
+        # Use explicit CA bundle if provided
+        if ca_bundle_path:
+            path = Path(ca_bundle_path)
+            if path.exists():
+                return path
+            logger.warning(f"Specified CA bundle does not exist: {ca_bundle_path}")
+
+        # Try common CA bundle locations
+        ca_paths = [
+            Path("/etc/pki/ca-trust/source/anchors/service-ca.crt"),  # OpenShift
+            Path("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"),  # Kubernetes
+        ]
+
+        for path in ca_paths:
+            if path.exists():
+                logger.debug(f"Auto-detected CA bundle at: {path}")
+                return path
+
+        # No CA bundle found (use system defaults)
+        logger.debug("No CA bundle found - using system defaults")
+        return None
+
+    def _create_http_client(self) -> Any:
+        """Create httpx client with authentication and TLS configuration.
+
+        Returns:
+            httpx.Client: Configured HTTP client
+        """
+        # Build headers
+        headers: dict[str, str] = {}
+        if self._auth_token:
+            headers["Authorization"] = f"Bearer {self._auth_token}"
+            logger.debug("HTTP client configured with Bearer token authentication")
+
+        # Determine TLS verification settings
+        verify: bool | str
+        if self._insecure:
+            verify = False
+            logger.warning("TLS verification disabled (insecure mode)")
+        elif self._ca_bundle:
+            verify = str(self._ca_bundle)
+            logger.debug(f"TLS verification using CA bundle: {self._ca_bundle}")
+        else:
+            verify = True  # Use system CA certificates
+            logger.debug("TLS verification using system CA certificates")
+
+        return self.httpx.Client(
+            headers=headers,
+            verify=verify,
+            timeout=30.0,
+        )
 
     def report_status(self, update: JobStatusUpdate) -> None:
         """Report status update to evalhub or log it.
@@ -98,17 +229,31 @@ class DefaultCallbacks(JobCallbacks):
             update: Status update to report
         """
         # If evalhub available, send status update
-        if self.sidecar_url and self._httpx_available:
+        if self.sidecar_url and self._httpx_available and self._http_client:
             try:
                 url = f"{self.sidecar_url}/api/v1/evaluations/jobs/{self.job_id}/update"
                 data = update.model_dump(mode="json", exclude_none=True)
 
-                response = self.httpx.post(url, json=data, timeout=10.0)
+                response = self._http_client.post(url, json=data, timeout=10.0)
                 response.raise_for_status()
 
                 logger.debug(f"Status update sent to evalhub: {update.status}")
                 return
 
+            except self.httpx.HTTPStatusError as e:
+                if e.response.status_code == 401:
+                    logger.error(
+                        "Authentication failed (401). Ensure the job has a valid "
+                        "ServiceAccount token at /var/run/secrets/kubernetes.io/serviceaccount/token"
+                    )
+                elif e.response.status_code == 403:
+                    logger.error(
+                        "Authorization failed (403). Ensure the ServiceAccount has RBAC "
+                        "permissions for services/proxy resource with create/update verbs"
+                    )
+                else:
+                    logger.warning(f"Failed to send status to evalhub: {e}")
+                # Fall through to local logging
             except Exception as e:
                 logger.warning(f"Failed to send status to evalhub: {e}")
                 # Fall through to local logging
@@ -146,17 +291,31 @@ class DefaultCallbacks(JobCallbacks):
             results: Final job results to report
         """
         # If evalhub available, send results
-        if self.sidecar_url and self._httpx_available:
+        if self.sidecar_url and self._httpx_available and self._http_client:
             try:
                 url = f"{self.sidecar_url}/api/v1/evaluations/jobs/{self.job_id}/update"
                 data = results.model_dump(mode="json", exclude_none=True)
 
-                response = self.httpx.post(url, json=data, timeout=30.0)
+                response = self._http_client.post(url, json=data, timeout=30.0)
                 response.raise_for_status()
 
                 logger.info(f"Results for job {results.job_id} sent to evalhub")
                 return
 
+            except self.httpx.HTTPStatusError as e:
+                if e.response.status_code == 401:
+                    logger.error(
+                        "Authentication failed (401). Ensure the job has a valid "
+                        "ServiceAccount token at /var/run/secrets/kubernetes.io/serviceaccount/token"
+                    )
+                elif e.response.status_code == 403:
+                    logger.error(
+                        "Authorization failed (403). Ensure the ServiceAccount has RBAC "
+                        "permissions for services/proxy resource with create/update verbs"
+                    )
+                else:
+                    logger.warning(f"Failed to send results to evalhub: {e}")
+                # Fall through to local logging
             except Exception as e:
                 logger.warning(f"Failed to send results to evalhub: {e}")
                 # Fall through to local logging
