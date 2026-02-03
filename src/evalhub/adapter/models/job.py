@@ -14,6 +14,16 @@ from pydantic import BaseModel, Field
 from ...models.api import EvaluationResult, JobStatus, ModelConfig
 
 
+class MessageInfo(BaseModel):
+    """Message information with message and code.
+
+    Matches the MessageInfo structure from eval-hub API.
+    """
+
+    message: str = Field(..., description="Message text")
+    message_code: str = Field(..., description="Message code identifier")
+
+
 class ErrorInfo(BaseModel):
     """Error information with message and code.
 
@@ -150,7 +160,13 @@ class JobStatusUpdate(BaseModel):
     progress: float | None = Field(
         default=None, description="Progress percentage (0.0 to 1.0)"
     )
-    message: str | None = Field(default=None, description="Status message")
+    message: MessageInfo = Field(
+        default_factory=lambda: MessageInfo(
+            message="Status update",
+            message_code="status_update",
+        ),
+        description="Status message",
+    )
     current_step: str | None = Field(
         default=None, description="Current step description"
     )
