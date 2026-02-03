@@ -148,9 +148,7 @@ class JobStatusUpdate(BaseModel):
     completed_steps: int | None = Field(
         default=None, description="Number of completed steps"
     )
-    error_message: str | None = Field(
-        default=None, description="Error message if failed"
-    )
+    error: str | None = Field(default=None, description="Error message if failed")
     error_details: dict[str, Any] | None = Field(
         default=None, description="Detailed error information"
     )

@@ -192,7 +192,7 @@ class ExampleAdapter(FrameworkAdapter):
             callbacks.report_status(
                 JobStatusUpdate(
                     status=JobStatus.FAILED,
-                    error_message=str(e),
+                    error=str(e),
                     error_details={"exception_type": type(e).__name__},
                 )
             )

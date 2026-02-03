@@ -170,9 +170,7 @@ class EvaluationJob(BaseModel):
     )
 
     # Error information
-    error_message: str | None = Field(
-        default=None, description="Error message if failed"
-    )
+    error: str | None = Field(default=None, description="Error message if failed")
     error_details: dict[str, Any] | None = Field(
         default=None, description="Detailed error information"
     )
@@ -495,7 +493,7 @@ class HealthResponse(BaseModel):
     )
 
     # Error information for unhealthy status
-    error_message: str | None = Field(
+    error: str | None = Field(
         default=None, description="Error message when status is unhealthy"
     )
 

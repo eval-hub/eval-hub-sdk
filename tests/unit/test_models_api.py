@@ -143,7 +143,7 @@ class TestEvaluationJob:
         assert job.started_at is None
         assert job.completed_at is None
         assert job.progress is None
-        assert job.error_message is None
+        assert job.error is None
 
     def test_completed_evaluation_job(self) -> None:
         """Test completed EvaluationJob."""
@@ -175,10 +175,10 @@ class TestEvaluationJob:
             status=JobStatus.FAILED,
             request=request,
             submitted_at=now,
-            error_message="Model not found",
+            error="Model not found",
         )
         assert job.status == JobStatus.FAILED
-        assert job.error_message == "Model not found"
+        assert job.error == "Model not found"
 
 
 class TestEvaluationResult:
@@ -327,10 +327,10 @@ class TestHealthResponse:
             status="unhealthy",
             framework_id="test_framework",
             version="1.0.0",
-            error_message="Database connection failed",
+            error="Database connection failed",
         )
         assert health.status == "unhealthy"
-        assert health.error_message == "Database connection failed"
+        assert health.error == "Database connection failed"
         assert health.uptime_seconds is None
         assert health.dependencies is None
 

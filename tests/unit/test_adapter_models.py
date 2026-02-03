@@ -169,12 +169,12 @@ class TestJobStatusUpdate:
         """Test status update with error information."""
         update = JobStatusUpdate(
             status=JobStatus.FAILED,
-            error_message="Model server unreachable",
+            error="Model server unreachable",
             error_details={"error_code": "CONNECTION_REFUSED", "retry_count": 3},
         )
 
         assert update.status == JobStatus.FAILED
-        assert update.error_message == "Model server unreachable"
+        assert update.error == "Model server unreachable"
         assert update.error_details is not None
         assert update.error_details["error_code"] == "CONNECTION_REFUSED"
 

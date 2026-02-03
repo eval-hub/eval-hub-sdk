@@ -231,8 +231,10 @@ class DefaultCallbacks(JobCallbacks):
         # If evalhub available, send status update
         if self.sidecar_url and self._httpx_available and self._http_client:
             try:
-                url = f"{self.sidecar_url}/api/v1/evaluations/jobs/{self.job_id}/update"
-                data = update.model_dump(mode="json", exclude_none=True)
+                url = f"{self.sidecar_url}/api/v1/evaluations/jobs/{self.job_id}/events"
+                data = {
+                    "status_event": update.model_dump(mode="json", exclude_none=True)
+                }
 
                 response = self._http_client.post(url, json=data, timeout=10.0)
                 response.raise_for_status()
@@ -293,8 +295,10 @@ class DefaultCallbacks(JobCallbacks):
         # If evalhub available, send results
         if self.sidecar_url and self._httpx_available and self._http_client:
             try:
-                url = f"{self.sidecar_url}/api/v1/evaluations/jobs/{self.job_id}/update"
-                data = results.model_dump(mode="json", exclude_none=True)
+                url = f"{self.sidecar_url}/api/v1/evaluations/jobs/{self.job_id}/events"
+                data = {
+                    "status_event": results.model_dump(mode="json", exclude_none=True)
+                }
 
                 response = self._http_client.post(url, json=data, timeout=30.0)
                 response.raise_for_status()
