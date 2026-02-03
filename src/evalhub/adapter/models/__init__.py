@@ -2,6 +2,7 @@
 
 from .adapter import FrameworkAdapter
 from .job import (
+    ErrorInfo,
     JobCallbacks,
     JobPhase,
     JobResults,
@@ -20,6 +21,7 @@ __all__ = [
     "JobResults",
     "JobStatusUpdate",
     "JobPhase",
+    "ErrorInfo",
     # OCI models
     "OCIArtifactSpec",
     "OCIArtifactResult",

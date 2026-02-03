@@ -8,6 +8,7 @@ from evalhub.models.api import (
     BenchmarkInfo,
     BenchmarksList,
     CollectionList,
+    ErrorInfo,
     ErrorResponse,
     EvaluationJob,
     EvaluationRequest,
@@ -175,10 +176,12 @@ class TestEvaluationJob:
             status=JobStatus.FAILED,
             request=request,
             submitted_at=now,
-            error="Model not found",
+            error=ErrorInfo(message="Model not found", message_code="model_not_found"),
         )
         assert job.status == JobStatus.FAILED
-        assert job.error == "Model not found"
+        assert job.error is not None
+        assert job.error.message == "Model not found"
+        assert job.error.message_code == "model_not_found"
 
 
 class TestEvaluationResult:
@@ -327,10 +330,15 @@ class TestHealthResponse:
             status="unhealthy",
             framework_id="test_framework",
             version="1.0.0",
-            error="Database connection failed",
+            error=ErrorInfo(
+                message="Database connection failed",
+                message_code="database_connection_failed",
+            ),
         )
         assert health.status == "unhealthy"
-        assert health.error == "Database connection failed"
+        assert health.error is not None
+        assert health.error.message == "Database connection failed"
+        assert health.error.message_code == "database_connection_failed"
         assert health.uptime_seconds is None
         assert health.dependencies is None
 

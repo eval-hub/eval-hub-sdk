@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from evalhub.adapter import (
+    ErrorInfo,
     EvaluationResult,
     FrameworkAdapter,
     JobCallbacks,
@@ -192,7 +193,10 @@ class ExampleAdapter(FrameworkAdapter):
             callbacks.report_status(
                 JobStatusUpdate(
                     status=JobStatus.FAILED,
-                    error=str(e),
+                    error=ErrorInfo(
+                        message=str(e),
+                        message_code="evaluation_failed",
+                    ),
                     error_details={"exception_type": type(e).__name__},
                 )
             )

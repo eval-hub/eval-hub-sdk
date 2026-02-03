@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from evalhub.adapter import (
+    ErrorInfo,
     EvaluationResult,
     FrameworkAdapter,
     JobCallbacks,
@@ -169,14 +170,19 @@ class TestJobStatusUpdate:
         """Test status update with error information."""
         update = JobStatusUpdate(
             status=JobStatus.FAILED,
-            error="Model server unreachable",
-            error_details={"error_code": "CONNECTION_REFUSED", "retry_count": 3},
+            error=ErrorInfo(
+                message="Model server unreachable",
+                message_code="model_server_unreachable",
+            ),
+            error_details={"retry_count": 3},
         )
 
         assert update.status == JobStatus.FAILED
-        assert update.error == "Model server unreachable"
+        assert update.error is not None
+        assert update.error.message == "Model server unreachable"
+        assert update.error.message_code == "model_server_unreachable"
         assert update.error_details is not None
-        assert update.error_details["error_code"] == "CONNECTION_REFUSED"
+        assert update.error_details["retry_count"] == 3
 
     def test_that_timestamp_is_automatically_set(self) -> None:
         """Test that timestamp is automatically set."""
