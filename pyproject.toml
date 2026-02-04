@@ -142,6 +142,7 @@ markers = [
     "unit: Unit tests",
     "integration: Integration tests requiring external services",
     "adapter: Tests for specific framework adapters",
+    "e2e: End-to-end tests",
 ]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
