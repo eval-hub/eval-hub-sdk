@@ -205,8 +205,14 @@ class JobsList(BaseModel):
         ..., alias="total_jobs", description="Total number of jobs"
     )
     items: list[EvaluationJob] = Field(
-        ..., alias="jobs", description="List of evaluation jobs"
+        default_factory=list, alias="jobs", description="List of evaluation jobs"
     )
+
+    @field_validator("items", mode="before")
+    @classmethod
+    def handle_none_items(cls, v: list[EvaluationJob] | None) -> list[EvaluationJob]:
+        """Convert None to empty list for compatibility with server responses."""
+        return v if v is not None else []
 
 
 class EvaluationResponse(BaseModel):
@@ -335,8 +341,14 @@ class ProviderList(BaseModel):
         ..., alias="total_providers", description="Total number of providers"
     )
     items: list[Provider] = Field(
-        ..., alias="providers", description="List of providers"
+        default_factory=list, alias="providers", description="List of providers"
     )
+
+    @field_validator("items", mode="before")
+    @classmethod
+    def handle_none_items(cls, v: list[Provider] | None) -> list[Provider]:
+        """Convert None to empty list for compatibility with server responses."""
+        return v if v is not None else []
 
 
 class Benchmark(BaseModel):

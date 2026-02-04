@@ -560,6 +560,7 @@ examples = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "eval-hub-server" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "mypy" },
@@ -593,6 +594,7 @@ provides-extras = ["core", "adapter", "client", "dev", "examples", "all"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "eval-hub-server", git = "https://github.com/eval-hub/eval-hub?subdirectory=python-server" },
     { name = "fastapi", specifier = ">=0.124.4" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "mypy", specifier = ">=1.7.1" },
@@ -603,6 +605,11 @@ dev = [
     { name = "types-pyyaml", specifier = ">=6.0.12.20250915" },
     { name = "uvicorn", specifier = ">=0.38.0" },
 ]
+
+[[package]]
+name = "eval-hub-server"
+version = "0.1.0a0"
+source = { git = "https://github.com/eval-hub/eval-hub?subdirectory=python-server#6eff607f2d7247172118bafac8f853b1d0d0dbc1" }
 
 [[package]]
 name = "evaluate"

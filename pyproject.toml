@@ -146,6 +146,7 @@ asyncio_default_fixture_loop_scope = "function"
 
 [dependency-groups]
 dev = [
+    "eval-hub-server @ git+https://github.com/eval-hub/eval-hub#subdirectory=python-server",  # TODO: this should be moved to a pypi release
     "fastapi>=0.124.4",
     "httpx>=0.28.1",
     "mypy>=1.7.1",
