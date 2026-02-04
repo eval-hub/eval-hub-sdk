@@ -78,7 +78,7 @@ where = ["src"]
 include = ["evalhub*"]
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py311"  # needed for LMEval compatibility
 line-length = 88
 select = [
     "E",  # pycodestyle errors
@@ -120,6 +120,8 @@ module = [
     "yaml",
     "httpx.*",
     "pydantic_settings",
+    "evalhub_server.*",
+    "evalhub_server",
 ]
 ignore_missing_imports = true
 

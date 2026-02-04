@@ -4,8 +4,8 @@ import platform
 import shutil
 import tempfile
 import time
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
 
 import httpx
 import pytest
@@ -40,7 +40,9 @@ def _ensure_server_binary() -> bool:
         machine = platform.machine().lower()
 
         if system == "darwin":
-            binary_name = f"eval-hub-darwin-{'arm64' if machine == 'arm64' else 'amd64'}"
+            binary_name = (
+                f"eval-hub-darwin-{'arm64' if machine == 'arm64' else 'amd64'}"
+            )
         elif system == "linux":
             binary_name = f"eval-hub-linux-{'arm64' if 'aarch64' in machine or 'arm64' in machine else 'amd64'}"
         else:
@@ -53,6 +55,7 @@ def _ensure_server_binary() -> bool:
         if binary_source.exists():
             # Copy to evalhub_server package
             import evalhub_server
+
             pkg_dir = Path(evalhub_server.__file__).parent
             binaries_dir = pkg_dir / "binaries"
             binaries_dir.mkdir(exist_ok=True)
@@ -114,20 +117,16 @@ database:
         for i in range(max_retries):
             try:
                 # Use health endpoint to check if server is ready
-                response = httpx.get(
-                    f"{base_url}/health", timeout=1.0
-                )
+                response = httpx.get(f"{base_url}/health", timeout=1.0)
                 if response.status_code == 200:
                     break
             except (httpx.ConnectError, httpx.TimeoutException):
                 if i == max_retries - 1:
                     server_process.terminate()
                     server_process.join()
-                    raise RuntimeError(
-                        "Server failed to start within expected time"
-                    )
+                    raise RuntimeError("Server failed to start within expected time")
                 # Exponential backoff: 0.5s, 1s, 2s, 4s
-                time.sleep(base_delay * (2 ** i))
+                time.sleep(base_delay * (2**i))
 
         yield base_url
 
@@ -140,7 +139,7 @@ database:
 
 
 @pytest.mark.e2e
-def test_evaluations_providers_endpoint(evalhub_server):
+def test_evaluations_providers_endpoint(evalhub_server: str) -> None:
     """Test that the evaluations providers endpoint is accessible."""
     with SyncEvalHubClient(base_url=evalhub_server) as client:
         providers = client.providers.list()
@@ -148,7 +147,7 @@ def test_evaluations_providers_endpoint(evalhub_server):
 
 
 @pytest.mark.e2e
-def test_collections_endpoint(evalhub_server):
+def test_collections_endpoint(evalhub_server: str) -> None:
     """Test that the collections endpoint returns 501 Not Implemented."""
     with SyncEvalHubClient(base_url=evalhub_server) as client:
         with pytest.raises(HTTPStatusError) as exc_info:
@@ -157,7 +156,7 @@ def test_collections_endpoint(evalhub_server):
 
 
 @pytest.mark.e2e
-def test_jobs_endpoint(evalhub_server):
+def test_jobs_endpoint(evalhub_server: str) -> None:
     """Test that the jobs endpoint is accessible."""
     with SyncEvalHubClient(base_url=evalhub_server) as client:
         jobs = client.jobs.list()
@@ -165,9 +164,8 @@ def test_jobs_endpoint(evalhub_server):
 
 
 @pytest.mark.e2e
-def test_health_endpoint(evalhub_server):
+def test_health_endpoint(evalhub_server: str) -> None:
     """Test that the health endpoint is accessible."""
     with SyncEvalHubClient(base_url=evalhub_server) as client:
         health = client.health()
         assert health is not None
-
