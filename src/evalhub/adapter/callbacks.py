@@ -249,7 +249,7 @@ class DefaultCallbacks(JobCallbacks):
                 data = {
                     "status_event": {
                         "state": update.status.value,
-                        "message": update.message.model_dump(mode="json")
+                        "message": update.message.model_dump(mode="json"),
                     }
                 }
 
