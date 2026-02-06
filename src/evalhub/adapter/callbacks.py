@@ -256,7 +256,6 @@ class DefaultCallbacks(JobCallbacks):
                 # Transform to eval-hub API format
                 status_event = {
                     "benchmark_id": self.benchmark_id,
-                    "benchmark_name": self.benchmark_id,
                     "state": update.status.value,
                     "status": update.status.value,
                     "message": update.message.model_dump(mode="json"),
@@ -343,7 +342,6 @@ class DefaultCallbacks(JobCallbacks):
                 # Build status event with results
                 status_event = {
                     "benchmark_id": self.benchmark_id,
-                    "benchmark_name": self.benchmark_id,
                     "state": JobStatus.COMPLETED.value,
                     "status": JobStatus.COMPLETED.value,
                     "message": {
@@ -379,7 +377,9 @@ class DefaultCallbacks(JobCallbacks):
                 )
 
             except self.httpx.HTTPStatusError as e:
-                logger.error(f"Failed to send results to evalhub (HTTP {e.response.status_code}): {e}")
+                logger.error(
+                    f"Failed to send results to evalhub (HTTP {e.response.status_code}): {e}"
+                )
                 # Fall through to local logging
             except Exception as e:
                 logger.error(f"Failed to send results to evalhub: {e}")
