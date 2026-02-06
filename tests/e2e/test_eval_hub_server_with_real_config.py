@@ -81,7 +81,7 @@ def test_providers_endpoint_with_real_config(
             print(
                 f"    ✓ Benchmark count matches YAML: {len(provider_benchmarks)} benchmarks"
             )
-            print(f"    ✓ All YAML-defined benchmarks found in server response")
+            print("    ✓ All YAML-defined benchmarks found in server response")
 
             # Verify the first benchmark in detail
             if yaml_benchmarks:

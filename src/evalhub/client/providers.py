@@ -95,7 +95,7 @@ class AsyncProvidersClient(BaseAsyncClient):
                 tags=item.get("tags", []),
                 dataset_size=item.get("dataset_size"),
                 supports_few_shot=True,  # Assume true by default
-                default_few_shot=item.get("num_few_shot"),
+                num_few_shot=item.get("num_few_shot"),
             )
             benchmarks.append(benchmark_info)
         return benchmarks
@@ -210,7 +210,7 @@ class SyncProvidersClient(BaseSyncClient):
                 tags=item.get("tags", []),
                 dataset_size=item.get("dataset_size"),
                 supports_few_shot=True,  # Assume true by default
-                default_few_shot=item.get("num_few_shot"),
+                num_few_shot=item.get("num_few_shot"),
             )
             benchmarks.append(benchmark_info)
         return benchmarks

@@ -5,7 +5,8 @@ import os
 import sys
 from pathlib import Path
 
-def main():
+
+def main() -> None:
     # Get the config directory path
     config_dir = Path(__file__).parent.parent / "tests" / "e2e"
 
@@ -33,6 +34,7 @@ def main():
 
     try:
         from evalhub_server.main import main as server_main
+
         server_main()
     except ImportError as e:
         print(f"Error: Could not import evalhub_server: {e}", file=sys.stderr)
@@ -41,6 +43,7 @@ def main():
     except KeyboardInterrupt:
         print("\n\nServer stopped by user (Ctrl+C)")
         sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

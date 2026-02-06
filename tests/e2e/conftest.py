@@ -46,6 +46,21 @@ def _kill_process_on_port(port: int) -> bool:
     return False
 
 
+def _run_server(working_dir: str) -> None:
+    """
+    Run the eval-hub server binary in the specified working directory.
+
+    This function is intended to be used as a target for multiprocessing.Process.
+
+    Args:
+        working_dir: Directory containing the config subdirectory
+    """
+    from evalhub_server import get_binary_path
+
+    binary_path = get_binary_path()
+    subprocess.run([binary_path], cwd=working_dir, check=False)
+
+
 def _ensure_server_binary() -> bool:
     """
     TODO: this should be REMOVED when eval-hub-server is moved to a pypi release
@@ -139,7 +154,7 @@ def evalhub_server_with_real_config() -> Generator[str, None, None]:
         shutil.copytree(config_source_dir, config_dir)
 
         # Debug: print directory structure
-        print(f"\n\n===== SERVER DIRECTORY STRUCTURE =====")
+        print("\n\n===== SERVER DIRECTORY STRUCTURE =====")
         print(f"Working dir will be: {tmpdir}")
         for item in sorted(Path(tmpdir).rglob("*")):
             rel = item.relative_to(tmpdir)
@@ -193,7 +208,7 @@ def evalhub_server_with_real_config() -> Generator[str, None, None]:
 
         # Debug: Print server logs
         if log_file.exists():
-            print(f"\n\n===== SERVER LOGS =====")
+            print("\n\n===== SERVER LOGS =====")
             with open(log_file) as f:
                 logs = f.read()
                 # Only print first 3000 chars to avoid flooding output
