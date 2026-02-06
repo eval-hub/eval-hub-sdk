@@ -321,21 +321,63 @@ class DefaultCallbacks(JobCallbacks):
     def report_results(self, results: JobResults) -> None:
         """Report final evaluation results to evalhub or log them.
 
+        This sends the complete results including metrics to the evalhub service.
+
         Args:
             results: Final job results to report
         """
-        # If evalhub available, send completed status event
+        # If evalhub available, send results with completed status event
         if self.sidecar_url and self._httpx_available and self._http_client:
-            completed_update = JobStatusUpdate(
-                status=JobStatus.COMPLETED,
-                phase=JobPhase.COMPLETED,
-                progress=1.0,
-                message=MessageInfo(
-                    message="Evaluation completed successfully",
-                    message_code="evaluation_completed",
-                ),
-            )
-            self.report_status(completed_update)
+            try:
+                url = f"{self.sidecar_url}{self._events_path_template.format(job_id=self.job_id)}"
+
+                # Convert evaluation results to metrics map
+                metrics = {}
+                for result in results.results:
+                    metrics[result.metric_name] = result.metric_value
+
+                # Build status event with results
+                status_event = {
+                    "benchmark_id": self.benchmark_id,
+                    "state": JobStatus.COMPLETED.value,
+                    "message": {
+                        "message": "Evaluation completed successfully",
+                        "message_code": "evaluation_completed",
+                    },
+                    "metrics": metrics,
+                    "completed_at": results.completed_at.isoformat(),
+                    "duration_seconds": int(results.duration_seconds),
+                }
+
+                # Include provider_id if available
+                if self.provider_id:
+                    status_event["provider_id"] = self.provider_id
+
+                # Include OCI artifact reference if available
+                if results.oci_artifact:
+                    status_event["artifacts"] = {
+                        "oci_reference": results.oci_artifact.reference,
+                        "oci_digest": results.oci_artifact.digest,
+                        "size_bytes": results.oci_artifact.size_bytes,
+                    }
+
+                data = {"status_event": status_event}
+
+                response = self._http_client.post(url, json=data, timeout=10.0)
+                response.raise_for_status()
+
+                logger.info(
+                    f"Results reported to evalhub | "
+                    f"Metrics: {len(metrics)} | "
+                    f"Score: {results.overall_score}"
+                )
+
+            except self.httpx.HTTPStatusError as e:
+                logger.error(f"Failed to send results to evalhub (HTTP {e.response.status_code}): {e}")
+                # Fall through to local logging
+            except Exception as e:
+                logger.error(f"Failed to send results to evalhub: {e}")
+                # Fall through to local logging
 
         # Local logging
         logger.info(
