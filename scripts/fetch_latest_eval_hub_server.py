@@ -10,7 +10,7 @@ This script:
 Environment variables:
     GITHUB_TOKEN: Optional GitHub personal access token for API authentication.
                   Without this, API requests are rate-limited.
-                  ALTERNATIVELY use project root's/.github_token file (read-only for Actions) 
+                  ALTERNATIVELY use project root's/.github_token file (read-only for Actions)
 
 Usage:
     python scripts/fetch_latest_eval_hub_server.py
@@ -52,11 +52,13 @@ logger = logging.getLogger(__name__)
 
 class PlatformNotSupportedError(Exception):
     """Raised when the current platform is not supported."""
+
     pass
 
 
 class ArtifactNotFoundError(Exception):
     """Raised when the required artifact is not found in the workflow run."""
+
     pass
 
 

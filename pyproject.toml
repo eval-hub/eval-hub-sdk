@@ -120,6 +120,8 @@ module = [
     "yaml",
     "httpx.*",
     "pydantic_settings",
+    "github",
+    "github.*",
     "evalhub_server.*",
     "evalhub_server",
 ]
