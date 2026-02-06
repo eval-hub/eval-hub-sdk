@@ -1,7 +1,4 @@
 import multiprocessing
-import os
-import platform
-import shutil
 import tempfile
 import time
 from collections.abc import Generator
@@ -12,62 +9,7 @@ import pytest
 from evalhub import SyncEvalHubClient
 from httpx import HTTPStatusError
 
-
-def _run_server(config_parent_dir: str) -> None:
-    os.chdir(config_parent_dir)
-    from evalhub_server.main import main
-
-    main()
-
-
-def _ensure_server_binary() -> bool:
-    """
-    TODO: this should be REMOVED when eval-hub-server is moved to a pypi release
-    TODO: this is temporary until eval-hub-server is release'd on Pypi because we need the binary(ies)
-    """
-    try:
-        from evalhub_server import get_binary_path
-
-        # Check if binary already exists
-        try:
-            binary_path = get_binary_path()
-            return Path(binary_path).exists()
-        except FileNotFoundError:
-            pass
-
-        # Try to copy from local eval-hub repo
-        system = platform.system().lower()
-        machine = platform.machine().lower()
-
-        if system == "darwin":
-            binary_name = (
-                f"eval-hub-darwin-{'arm64' if machine == 'arm64' else 'amd64'}"
-            )
-        elif system == "linux":
-            binary_name = f"eval-hub-linux-{'arm64' if 'aarch64' in machine or 'arm64' in machine else 'amd64'}"
-        else:
-            return False
-
-        # Look for eval-hub repo (assume it's a sibling directory)
-        eval_hub_repo = Path(__file__).parent.parent.parent.parent / "eval-hub"
-        binary_source = eval_hub_repo / "bin" / binary_name
-
-        if binary_source.exists():
-            # Copy to evalhub_server package
-            import evalhub_server
-
-            pkg_dir = Path(evalhub_server.__file__).parent
-            binaries_dir = pkg_dir / "binaries"
-            binaries_dir.mkdir(exist_ok=True)
-
-            binary_dest = binaries_dir / binary_name
-            shutil.copy2(binary_source, binary_dest)
-            binary_dest.chmod(0o755)
-            return True
-
-        return False
-    except Exception:
-        return False
+from .conftest import _ensure_server_binary, _run_server
 
 
 @pytest.fixture
