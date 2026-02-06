@@ -1,9 +1,8 @@
 """Shared fixtures and utilities for E2E tests."""
 
-import multiprocessing
-import os
 import platform
 import shutil
+import subprocess
 import tempfile
 import time
 from collections.abc import Generator
@@ -13,15 +12,46 @@ import httpx
 import pytest
 
 
-def _run_server(config_parent_dir: str, log_file: str | None = None) -> None:
-    os.chdir(config_parent_dir)
-    if log_file:
-        import sys
-        sys.stdout = open(log_file, 'w')
-        sys.stderr = sys.stdout
-    from evalhub_server.main import main
+def _kill_process_on_port(port: int) -> bool:
+    """
+    Kill any process using the specified port.
 
-    main()
+    Returns:
+        bool: True if a process was killed, False if no process was found
+    """
+    try:
+        if platform.system() == "Windows":
+            # Windows: use netstat and taskkill
+            result = subprocess.run(
+                ["netstat", "-ano"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            for line in result.stdout.splitlines():
+                if f":{port}" in line and "LISTENING" in line:
+                    parts = line.split()
+                    pid = parts[-1]
+                    subprocess.run(["taskkill", "/PID", pid, "/F"], timeout=5)
+                    return True
+        else:
+            # Unix-like systems: use lsof
+            result = subprocess.run(
+                ["lsof", "-ti", f":{port}"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            pids = result.stdout.strip().split()
+            if pids:
+                for pid in pids:
+                    subprocess.run(["kill", "-9", pid], timeout=5)
+                return True
+    except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.SubprocessError):
+        pass
+    return False
+
+
 
 
 def _ensure_server_binary() -> bool:
@@ -125,13 +155,27 @@ def evalhub_server_with_real_config() -> Generator[str, None, None]:
         print("=" * 50)
 
         # Create log file for server output
-        log_file = str(Path(tmpdir) / "server.log")
+        log_file = Path(tmpdir) / "server.log"
 
-        # Start server in a separate process
-        server_process = multiprocessing.Process(
-            target=_run_server, args=(str(config_dir.parent), log_file)
-        )
-        server_process.start()
+        # Kill any process already using port 8080
+        port = 8080
+        if _kill_process_on_port(port):
+            print(f"\n⚠️  WARNING: Killed existing process on port {port}")
+            print("    (This is normal if a previous test run didn't clean up properly)\n")
+            # Give the OS a moment to release the port
+            time.sleep(0.5)
+
+        # Get the server binary path and start it directly as a subprocess
+        from evalhub_server import get_binary_path
+        binary_path = get_binary_path()
+
+        with open(log_file, 'w') as log_f:
+            server_process = subprocess.Popen(
+                [binary_path],
+                cwd=str(config_dir.parent),
+                stdout=log_f,
+                stderr=subprocess.STDOUT,
+            )
 
         # Wait for server to be ready
         base_url = "http://localhost:8080"
@@ -147,13 +191,13 @@ def evalhub_server_with_real_config() -> Generator[str, None, None]:
             except (httpx.ConnectError, httpx.TimeoutException):
                 if i == max_retries - 1:
                     server_process.terminate()
-                    server_process.join()
+                    server_process.wait()
                     raise RuntimeError("Server failed to start within expected time")
                 # Exponential backoff: 0.5s, 1s, 2s, 4s
                 time.sleep(base_delay * (2**i))
 
         # Debug: Print server logs
-        if Path(log_file).exists():
+        if log_file.exists():
             print(f"\n\n===== SERVER LOGS =====")
             with open(log_file) as f:
                 logs = f.read()
@@ -166,9 +210,10 @@ def evalhub_server_with_real_config() -> Generator[str, None, None]:
 
         yield base_url
 
-        # Cleanup: terminate the server process
-        server_process.terminate()
-        server_process.join(timeout=5)
-        if server_process.is_alive():
+        # Cleanup: terminate the server subprocess
+        try:
+            server_process.terminate()
+            server_process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
             server_process.kill()
-            server_process.join()
+            server_process.wait()
