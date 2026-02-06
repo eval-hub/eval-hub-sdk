@@ -23,10 +23,7 @@ def _kill_process_on_port(port: int) -> bool:
         if platform.system() == "Windows":
             # Windows: use netstat and taskkill
             result = subprocess.run(
-                ["netstat", "-ano"],
-                capture_output=True,
-                text=True,
-                timeout=5
+                ["netstat", "-ano"], capture_output=True, text=True, timeout=5
             )
             for line in result.stdout.splitlines():
                 if f":{port}" in line and "LISTENING" in line:
@@ -37,10 +34,7 @@ def _kill_process_on_port(port: int) -> bool:
         else:
             # Unix-like systems: use lsof
             result = subprocess.run(
-                ["lsof", "-ti", f":{port}"],
-                capture_output=True,
-                text=True,
-                timeout=5
+                ["lsof", "-ti", f":{port}"], capture_output=True, text=True, timeout=5
             )
             pids = result.stdout.strip().split()
             if pids:
@@ -50,8 +44,6 @@ def _kill_process_on_port(port: int) -> bool:
     except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.SubprocessError):
         pass
     return False
-
-
 
 
 def _ensure_server_binary() -> bool:
@@ -161,15 +153,18 @@ def evalhub_server_with_real_config() -> Generator[str, None, None]:
         port = 8080
         if _kill_process_on_port(port):
             print(f"\n⚠️  WARNING: Killed existing process on port {port}")
-            print("    (This is normal if a previous test run didn't clean up properly)\n")
+            print(
+                "    (This is normal if a previous test run didn't clean up properly)\n"
+            )
             # Give the OS a moment to release the port
             time.sleep(0.5)
 
         # Get the server binary path and start it directly as a subprocess
         from evalhub_server import get_binary_path
+
         binary_path = get_binary_path()
 
-        with open(log_file, 'w') as log_f:
+        with open(log_file, "w") as log_f:
             server_process = subprocess.Popen(
                 [binary_path],
                 cwd=str(config_dir.parent),

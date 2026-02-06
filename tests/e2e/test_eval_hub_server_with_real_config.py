@@ -37,11 +37,15 @@ def test_providers_endpoint_with_real_config(
         print("=" * 50)
 
         assert isinstance(providers, list)
-        assert len(providers) > 0, f"Expected providers to be loaded from config, but got {len(providers)}"
+        assert (
+            len(providers) > 0
+        ), f"Expected providers to be loaded from config, but got {len(providers)}"
 
         # Verify each provider matches the YAML configuration
         for provider in providers:
-            assert provider.id in provider_yamls, f"Provider {provider.id} not found in YAML configs"
+            assert (
+                provider.id in provider_yamls
+            ), f"Provider {provider.id} not found in YAML configs"
             yaml_data = provider_yamls[provider.id]
 
             # Check provider fields
@@ -74,7 +78,9 @@ def test_providers_endpoint_with_real_config(
                 f"{missing_benchmarks}"
             )
 
-            print(f"    ✓ Benchmark count matches YAML: {len(provider_benchmarks)} benchmarks")
+            print(
+                f"    ✓ Benchmark count matches YAML: {len(provider_benchmarks)} benchmarks"
+            )
             print(f"    ✓ All YAML-defined benchmarks found in server response")
 
             # Verify the first benchmark in detail
@@ -82,7 +88,12 @@ def test_providers_endpoint_with_real_config(
                 yaml_first = yaml_benchmarks[0]
                 # Find the corresponding benchmark from server
                 server_first = next(
-                    (b for b in provider_benchmarks if b.benchmark_id == yaml_first["benchmark_id"]), None
+                    (
+                        b
+                        for b in provider_benchmarks
+                        if b.benchmark_id == yaml_first["benchmark_id"]
+                    ),
+                    None,
                 )
 
                 assert server_first is not None, (
@@ -97,7 +108,9 @@ def test_providers_endpoint_with_real_config(
                 assert server_first.category == yaml_first["category"]
                 assert server_first.metrics == yaml_first["metrics"]
                 assert server_first.default_few_shot == yaml_first["num_few_shot"]
-                yaml_dataset_size = yaml_first.get("dataset_size")  # Handle dataset_size: null in YAML becomes 0 or None in server
+                yaml_dataset_size = yaml_first.get(
+                    "dataset_size"
+                )  # Handle dataset_size: null in YAML becomes 0 or None in server
                 if yaml_dataset_size is None:
                     assert server_first.dataset_size in (None, 0), (
                         f"Expected dataset_size to be None or 0 for null YAML value, "
