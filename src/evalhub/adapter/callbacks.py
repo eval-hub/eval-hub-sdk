@@ -33,6 +33,8 @@ class DefaultCallbacks(JobCallbacks):
         # Production (with evalhub for status updates)
         callbacks = DefaultCallbacks(
             job_id="my-job-123",
+            benchmark_id="mmlu",
+            provider_id="lm_evaluation_harness",
             sidecar_url="http://localhost:8080",
             registry_url="ghcr.io",
             registry_username=os.getenv("REGISTRY_USER"),
@@ -42,6 +44,7 @@ class DefaultCallbacks(JobCallbacks):
         # Local development (no evalhub, just logging)
         callbacks = DefaultCallbacks(
             job_id="my-job-123",
+            benchmark_id="mmlu",
             registry_url="localhost:5000",
             insecure=True
         )
@@ -54,6 +57,8 @@ class DefaultCallbacks(JobCallbacks):
     def __init__(
         self,
         job_id: str,
+        benchmark_id: str,
+        provider_id: str | None = None,
         sidecar_url: str | None = None,
         registry_url: str | None = None,
         registry_username: str | None = None,
@@ -68,6 +73,9 @@ class DefaultCallbacks(JobCallbacks):
 
         Args:
             job_id: Job identifier for API endpoint construction.
+            benchmark_id: Benchmark identifier for status event validation.
+            provider_id: Provider identifier (optional). If not provided, status updates
+                        will not include provider_id field.
             sidecar_url: URL of evalhub service for status updates (optional).
                         If None, status updates are logged locally.
             registry_url: OCI registry URL (e.g., "ghcr.io")
@@ -81,6 +89,8 @@ class DefaultCallbacks(JobCallbacks):
                           If not provided, auto-detects OpenShift/Kubernetes CA bundles
         """
         self.job_id = job_id
+        self.benchmark_id = benchmark_id
+        self.provider_id = provider_id
         self.sidecar_url = sidecar_url.rstrip("/") if sidecar_url else None
         self._events_path_template = (
             events_path_template
@@ -246,12 +256,17 @@ class DefaultCallbacks(JobCallbacks):
                 url = f"{self.sidecar_url}{self._events_path_template.format(job_id=self.job_id)}"
 
                 # Transform to eval-hub API format
-                data = {
-                    "status_event": {
-                        "state": update.status.value,
-                        "message": update.message.model_dump(mode="json"),
-                    }
+                status_event = {
+                    "benchmark_id": self.benchmark_id,
+                    "state": update.status.value,
+                    "message": update.message.model_dump(mode="json"),
                 }
+
+                # Include provider_id if available
+                if self.provider_id:
+                    status_event["provider_id"] = self.provider_id
+
+                data = {"status_event": status_event}
 
                 response = self._http_client.post(url, json=data, timeout=10.0)
                 response.raise_for_status()

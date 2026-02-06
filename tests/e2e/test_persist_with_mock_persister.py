@@ -154,7 +154,10 @@ class TestOCIArtifactPersistenceE2E:
 
         # Use DefaultCallbacks with mock registry
         callbacks = DefaultCallbacks(
-            job_id="test-job", registry_url="localhost:5000", insecure=True
+            job_id="test-job",
+            benchmark_id="mmlu",
+            registry_url="localhost:5000",
+            insecure=True,
         )
 
         # Create artifact spec

@@ -191,6 +191,7 @@ adapter = MyFrameworkAdapter(settings=settings)
 
 callbacks = DefaultCallbacks(
     job_id=job_spec.job_id,
+    benchmark_id=job_spec.benchmark_id,
     sidecar_url=job_spec.callback_url,  # SERVICE_URL
     registry_url=settings.registry_url,      # REGISTRY_URL
     registry_username=settings.registry_username,
@@ -294,6 +295,7 @@ adapter = MyFrameworkAdapter(settings=settings)
 # Create callbacks
 callbacks = DefaultCallbacks(
     job_id=job_spec.job_id,
+    benchmark_id=job_spec.benchmark_id,
     sidecar_url=job_spec.callback_url,
     registry_url=settings.registry_url,
     registry_username=settings.registry_username,
@@ -546,6 +548,7 @@ adapter = MyFrameworkAdapter(settings=settings)
 # Create callbacks
 callbacks = DefaultCallbacks(
     job_id=job_spec.job_id,
+    benchmark_id=job_spec.benchmark_id,
     sidecar_url=job_spec.callback_url,
     registry_url=settings.registry_url,
     insecure=settings.registry_insecure,
