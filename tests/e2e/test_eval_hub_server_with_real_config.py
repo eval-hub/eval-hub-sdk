@@ -21,7 +21,7 @@ def test_providers_endpoint_with_real_config(
         providers = client.providers.list()
         print(f"\n\n===== PROVIDERS COUNT: {len(providers)} =====")
         for p in providers:
-            print(f"  - {p.provider_id}: {p.provider_name}")
+            print(f"  - {p.id}: {p.label}")
         print("=" * 50)
         assert isinstance(providers, list)
         assert len(providers) > 0, f"Expected providers to be loaded from config, but got {len(providers)}"
