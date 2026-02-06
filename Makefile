@@ -17,7 +17,7 @@ ruff:
 
 .PHONY: mypy
 mypy:
-	uv run mypy src tests
+	uv run mypy --config-file=pyproject.toml src tests
 
 .PHONY: tidy
 tidy: ruff mypy
