@@ -7,10 +7,8 @@ from typing import Any
 from ..models.api import JobStatus
 from .models import (
     JobCallbacks,
-    JobPhase,
     JobResults,
     JobStatusUpdate,
-    MessageInfo,
     OCIArtifactResult,
     OCIArtifactSpec,
 )
@@ -259,7 +257,9 @@ class DefaultCallbacks(JobCallbacks):
                 status_event = {
                     "benchmark_id": self.benchmark_id,
                     "benchmark_name": self.benchmark_id,
+                    "state": update.status.value,
                     "status": update.status.value,
+                    "message": update.message.model_dump(mode="json"),
                 }
 
                 # Include error details for failed updates
@@ -344,7 +344,12 @@ class DefaultCallbacks(JobCallbacks):
                 status_event = {
                     "benchmark_id": self.benchmark_id,
                     "benchmark_name": self.benchmark_id,
+                    "state": JobStatus.COMPLETED.value,
                     "status": JobStatus.COMPLETED.value,
+                    "message": {
+                        "message": "Evaluation completed successfully",
+                        "message_code": "evaluation_completed",
+                    },
                     "metrics": metrics,
                     "completed_at": results.completed_at.isoformat(),
                     "duration_seconds": int(results.duration_seconds),
