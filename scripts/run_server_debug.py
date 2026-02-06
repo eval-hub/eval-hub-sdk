@@ -7,7 +7,7 @@ from pathlib import Path
 
 def main():
     # Get the config directory path
-    config_dir = Path(__file__).parent / "tests" / "e2e"
+    config_dir = Path(__file__).parent.parent / "tests" / "e2e"
 
     if not config_dir.exists():
         print(f"Error: Config directory not found: {config_dir}", file=sys.stderr)
