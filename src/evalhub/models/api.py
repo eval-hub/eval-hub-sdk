@@ -68,6 +68,8 @@ class ModelConfig(BaseModel):
 class BenchmarkInfo(BaseModel):
     """Information about an available benchmark."""
 
+    model_config = ConfigDict(populate_by_name=True)
+
     benchmark_id: str = Field(..., description="Unique benchmark identifier")
     name: str = Field(..., description="Human-readable benchmark name")
     description: str | None = Field(default=None, description="Benchmark description")
@@ -81,7 +83,7 @@ class BenchmarkInfo(BaseModel):
         default=True, description="Whether benchmark supports few-shot evaluation"
     )
     default_few_shot: int | None = Field(
-        default=None, description="Default number of few-shot examples"
+        default=None, alias="num_few_shot", description="Default number of few-shot examples"
     )
     custom_config_schema: dict[str, Any] | None = Field(
         default=None, description="JSON schema for custom benchmark configuration"
