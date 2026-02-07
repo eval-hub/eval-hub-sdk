@@ -68,8 +68,6 @@ class ModelConfig(BaseModel):
 class BenchmarkInfo(BaseModel):
     """Information about an available benchmark."""
 
-    model_config = ConfigDict(populate_by_name=True)
-
     benchmark_id: str = Field(..., description="Unique benchmark identifier")
     name: str = Field(..., description="Human-readable benchmark name")
     description: str | None = Field(default=None, description="Benchmark description")
