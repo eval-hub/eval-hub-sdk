@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 import yaml
 from evalhub import SyncEvalHubClient
-from httpx import HTTPStatusError
 
 
 @pytest.mark.e2e
@@ -84,9 +83,9 @@ def test_providers_endpoint_with_real_config(
             print("    ✓ All YAML-defined benchmarks found in server response")
 
             # Verify all benchmarks in detail
-            assert yaml_benchmarks, (
-                f"Provider {provider.id}: expected benchmarks in YAML config"
-            )
+            assert (
+                yaml_benchmarks
+            ), f"Provider {provider.id}: expected benchmarks in YAML config"
 
             for yaml_benchmark in yaml_benchmarks:
                 # Find the corresponding benchmark from server
@@ -110,7 +109,9 @@ def test_providers_endpoint_with_real_config(
                 assert server_benchmark.description == yaml_benchmark["description"]
                 assert server_benchmark.category == yaml_benchmark["category"]
                 assert server_benchmark.metrics == yaml_benchmark["metrics"]
-                assert server_benchmark.default_few_shot == yaml_benchmark["num_few_shot"]
+                assert (
+                    server_benchmark.default_few_shot == yaml_benchmark["num_few_shot"]
+                )
                 yaml_dataset_size = yaml_benchmark.get(
                     "dataset_size"
                 )  # Handle dataset_size: null in YAML becomes 0 or None in server
