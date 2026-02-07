@@ -82,9 +82,8 @@ class BenchmarkInfo(BaseModel):
     supports_few_shot: bool = Field(
         default=True, description="Whether benchmark supports few-shot evaluation"
     )
-    default_few_shot: int | None = Field(
+    num_few_shot: int | None = Field(
         default=None,
-        alias="num_few_shot",
         description="Default number of few-shot examples",
     )
     custom_config_schema: dict[str, Any] | None = Field(

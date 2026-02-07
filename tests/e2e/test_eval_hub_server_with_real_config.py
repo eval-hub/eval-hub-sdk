@@ -109,9 +109,7 @@ def test_providers_endpoint_with_real_config(
                 assert server_benchmark.description == yaml_benchmark["description"]
                 assert server_benchmark.category == yaml_benchmark["category"]
                 assert server_benchmark.metrics == yaml_benchmark["metrics"]
-                assert (
-                    server_benchmark.num_few_shot == yaml_benchmark["num_few_shot"]
-                )
+                assert server_benchmark.num_few_shot == yaml_benchmark["num_few_shot"]
                 yaml_dataset_size = yaml_benchmark.get(
                     "dataset_size"
                 )  # Handle dataset_size: null in YAML becomes 0 or None in server
