@@ -35,7 +35,7 @@ def main() -> None:
     try:
         from evalhub_server.main import main as server_main
 
-        server_main()
+        server_main(["--local"])
     except ImportError as e:
         print(f"Error: Could not import evalhub_server: {e}", file=sys.stderr)
         print("Make sure the evalhub-server package is installed.", file=sys.stderr)
