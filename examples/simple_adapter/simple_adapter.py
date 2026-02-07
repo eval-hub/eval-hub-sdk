@@ -67,7 +67,7 @@ class ExampleAdapter(FrameworkAdapter):
             RuntimeError: If evaluation fails
         """
         start_time = time.time()
-        logger.info(f"Starting job {config.job_id} for benchmark {config.benchmark_id}")
+        logger.info(f"Starting job {config.id} for benchmark {config.benchmark_id}")
 
         try:
             # Phase 1: Initialize
@@ -132,7 +132,7 @@ class ExampleAdapter(FrameworkAdapter):
 
             overall_score = self._compute_overall_score(results)
             output_files = self._save_detailed_results(
-                config.job_id, config.benchmark_id, results
+                config.id, config.benchmark_id, results
             )
             logger.info(f"Results saved to {len(output_files)} files")
 
@@ -156,16 +156,16 @@ class ExampleAdapter(FrameworkAdapter):
                         files=output_files,
                         base_path=Path("/tmp/job_results"),
                         title=f"Evaluation results for {config.benchmark_id}",
-                        description=f"Results from job {config.job_id}",
+                        description=f"Results from job {config.id}",
                         annotations={
-                            "job_id": config.job_id,
+                            "job_id": config.id,
                             "benchmark_id": config.benchmark_id,
                             "model_name": config.model.name,
                             "overall_score": str(overall_score)
                             if overall_score
                             else "N/A",
                         },
-                        job_id=config.job_id,
+                        id=config.id,
                         benchmark_id=config.benchmark_id,
                         model_name=config.model.name,
                     )
@@ -177,7 +177,7 @@ class ExampleAdapter(FrameworkAdapter):
 
             # Return results
             return JobResults(
-                job_id=config.job_id,
+                id=config.id,
                 benchmark_id=config.benchmark_id,
                 model_name=config.model.name,
                 results=results,
@@ -417,13 +417,13 @@ def main() -> None:
         def report_results(self, results: JobResults) -> None:
             # In production: POST to http://localhost:8080/results
             logger.info(
-                f"Job {results.job_id} completed with score {results.overall_score}"
+                f"Job {results.id} completed with score {results.overall_score}"
             )
 
     try:
         # Create adapter (automatically loads JobSpec from ConfigMap)
         adapter = ExampleAdapter()
-        logger.info(f"Loaded job {adapter.job_spec.job_id}")
+        logger.info(f"Loaded job {adapter.job_spec.id}")
         logger.info(f"Benchmark: {adapter.job_spec.benchmark_id}")
 
         # Create callbacks
@@ -431,7 +431,7 @@ def main() -> None:
 
         # Run benchmark job (pass self.job_spec or override with custom spec for testing)
         results = adapter.run_benchmark_job(adapter.job_spec, callbacks)
-        logger.info(f"Job completed successfully: {results.job_id}")
+        logger.info(f"Job completed successfully: {results.id}")
         logger.info(f"Overall score: {results.overall_score}")
 
         # Report final results

@@ -32,7 +32,7 @@ with SyncEvalHubClient() as client:  # type: SyncEvalHubClient
         providers = client.providers.list()
         print(f"\n✓ Found {len(providers)} providers")
         for provider in providers[:3]:  # Show first 3
-            print(f"  - {provider.id}: {provider.label}")
+            print(f"  - {provider.provider_id}: {provider.provider_name}")
     except Exception as e:
         print(f"✗ Failed to list providers: {e}")
 
@@ -41,7 +41,7 @@ with SyncEvalHubClient() as client:  # type: SyncEvalHubClient
         benchmarks = client.benchmarks.list(category="math")
         print(f"\n✓ Found {len(benchmarks)} math benchmarks")
         for benchmark in benchmarks[:3]:  # Show first 3
-            print(f"  - {benchmark.id}: {benchmark.label}")
+            print(f"  - {benchmark.benchmark_id}: {benchmark.name}")
     except Exception as e:
         print(f"✗ Failed to list benchmarks: {e}")
 

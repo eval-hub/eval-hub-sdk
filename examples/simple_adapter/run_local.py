@@ -49,21 +49,21 @@ class LocalCallbacks(JobCallbacks):
         """Mock OCI artifact creation for local testing."""
         logger.info(
             f"Would create OCI artifact with {len(spec.files)} files "
-            f"for job {spec.job_id}"
+            f"for job {spec.id}"
         )
 
         # In local mode, we just return a mock result
         # In production, this would push to an actual registry
         return OCIArtifactResult(
             digest="sha256:local-test",
-            reference=f"localhost/eval-results/{spec.benchmark_id}:{spec.job_id}",
+            reference=f"localhost/eval-results/{spec.benchmark_id}:{spec.id}",
             size_bytes=sum(f.stat().st_size for f in spec.files if f.exists()),
         )
 
     def report_results(self, results: JobResults) -> None:
         """Print final results to console."""
         logger.info(
-            f"Job {results.job_id} completed | "
+            f"Job {results.id} completed | "
             f"Benchmark: {results.benchmark_id} | "
             f"Model: {results.model_name} | "
             f"Overall Score: {results.overall_score} | "
@@ -133,7 +133,7 @@ def main() -> None:
         logger.info("=" * 60)
         logger.info("EVALUATION COMPLETE")
         logger.info("=" * 60)
-        logger.info(f"Job ID: {results.job_id}")
+        logger.info(f"Job ID: {results.id}")
         logger.info(f"Benchmark: {results.benchmark_id}")
         logger.info(f"Overall Score: {results.overall_score}")
         logger.info(f"Examples Evaluated: {results.num_examples_evaluated}")
