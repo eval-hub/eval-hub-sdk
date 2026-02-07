@@ -27,7 +27,7 @@ def mock_job_spec_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Create a temporary job spec file and set environment variable."""
     # Create test job spec
     job_spec = {
-        "job_id": "test-job-001",
+        "id": "test-job-001",
         "benchmark_id": "mmlu",
         "model": {"url": "http://localhost:8000", "name": "test-model"},
         "num_examples": 10,
@@ -51,7 +51,7 @@ class TestJobSpec:
     def test_job_spec_creation(self) -> None:
         """Test creating a valid JobSpec."""
         spec = JobSpec(
-            job_id="test-job-001",
+            id="test-job-001",
             benchmark_id="mmlu",
             model=ModelConfig(url="http://localhost:8000", name="test-model"),
             num_examples=10,
@@ -59,7 +59,7 @@ class TestJobSpec:
             callback_url="http://localhost:8080",
         )
 
-        assert spec.job_id == "test-job-001"
+        assert spec.id == "test-job-001"
         assert spec.benchmark_id == "mmlu"
         assert spec.model.name == "test-model"
         assert spec.num_examples == 10
@@ -69,14 +69,14 @@ class TestJobSpec:
     def test_creating_jobspec_with_minimal_fields(self) -> None:
         """Test creating JobSpec with minimal mandatory fields."""
         spec = JobSpec(
-            job_id="test-job-002",
+            id="test-job-002",
             benchmark_id="hellaswag",
             model=ModelConfig(url="http://localhost:8000", name="model"),
             benchmark_config={},
             callback_url="http://localhost:8080",
         )
 
-        assert spec.job_id == "test-job-002"
+        assert spec.id == "test-job-002"
         assert spec.benchmark_id == "hellaswag"
         assert spec.num_examples is None
         assert spec.benchmark_config == {}
@@ -84,7 +84,7 @@ class TestJobSpec:
     def test_jobspec_with_benchmarkspecific_configuration(self) -> None:
         """Test JobSpec with benchmark-specific configuration."""
         spec = JobSpec(
-            job_id="test-job-003",
+            id="test-job-003",
             benchmark_id="mmlu",
             model=ModelConfig(url="http://localhost:8000", name="model"),
             benchmark_config={"subject": "physics", "difficulty": "hard"},
@@ -96,7 +96,7 @@ class TestJobSpec:
     def test_jobspec_with_custom_tags(self) -> None:
         """Test JobSpec with custom tags."""
         spec = JobSpec(
-            job_id="test-job-004",
+            id="test-job-004",
             benchmark_id="arc",
             model=ModelConfig(url="http://localhost:8000", name="model"),
             benchmark_config={},
@@ -109,7 +109,7 @@ class TestJobSpec:
     def test_jobspec_can_be_serialized_to_json(self) -> None:
         """Test JobSpec can be serialized to JSON."""
         spec = JobSpec(
-            job_id="test-job-005",
+            id="test-job-005",
             benchmark_id="gsm8k",
             model=ModelConfig(url="http://localhost:8000", name="model"),
             benchmark_config={},
@@ -119,13 +119,13 @@ class TestJobSpec:
 
         json_data = spec.model_dump()
 
-        assert json_data["job_id"] == "test-job-005"
+        assert json_data["id"] == "test-job-005"
         assert json_data["benchmark_id"] == "gsm8k"
         assert json_data["num_examples"] == 50
 
         # Can recreate from JSON
         spec_2 = JobSpec(**json_data)
-        assert spec_2.job_id == spec.job_id
+        assert spec_2.id == spec.id
 
 
 class TestJobStatusUpdate:
@@ -211,7 +211,7 @@ class TestOCIArtifactSpec:
 
         spec = OCIArtifactSpec(
             files=files,
-            job_id="test-job-001",
+            id="test-job-001",
             benchmark_id="mmlu",
             model_name="test-model",
             title="Test Results",
@@ -219,7 +219,7 @@ class TestOCIArtifactSpec:
         )
 
         assert spec.files == files
-        assert spec.job_id == "test-job-001"
+        assert spec.id == "test-job-001"
         assert spec.benchmark_id == "mmlu"
         assert spec.model_name == "test-model"
         assert spec.title == "Test Results"
@@ -229,7 +229,7 @@ class TestOCIArtifactSpec:
         spec = OCIArtifactSpec(
             files=[Path("results.json")],
             base_path=Path("/tmp/job-001"),
-            job_id="test-job-001",
+            id="test-job-001",
             benchmark_id="mmlu",
             model_name="model",
         )
@@ -240,7 +240,7 @@ class TestOCIArtifactSpec:
         """Test artifact spec with custom annotations."""
         spec = OCIArtifactSpec(
             files=[Path("results.json")],
-            job_id="test-job-001",
+            id="test-job-001",
             benchmark_id="mmlu",
             model_name="model",
             annotations={
@@ -276,7 +276,7 @@ class TestJobResults:
     def test_creating_job_results(self) -> None:
         """Test creating job results."""
         results = JobResults(
-            job_id="test-job-001",
+            id="test-job-001",
             benchmark_id="mmlu",
             model_name="test-model",
             results=[
@@ -288,7 +288,7 @@ class TestJobResults:
             duration_seconds=125.5,
         )
 
-        assert results.job_id == "test-job-001"
+        assert results.id == "test-job-001"
         assert results.benchmark_id == "mmlu"
         assert results.model_name == "test-model"
         assert len(results.results) == 1
@@ -299,7 +299,7 @@ class TestJobResults:
     def test_job_results_with_overall_score(self) -> None:
         """Test job results with overall score."""
         results = JobResults(
-            job_id="test-job-001",
+            id="test-job-001",
             benchmark_id="mmlu",
             model_name="model",
             results=[],
@@ -313,7 +313,7 @@ class TestJobResults:
     def test_job_results_with_evaluation_metadata(self) -> None:
         """Test job results with evaluation metadata."""
         results = JobResults(
-            job_id="test-job-001",
+            id="test-job-001",
             benchmark_id="mmlu",
             model_name="model",
             results=[],
@@ -338,7 +338,7 @@ class TestJobResults:
         )
 
         results = JobResults(
-            job_id="test-job-001",
+            id="test-job-001",
             benchmark_id="mmlu",
             model_name="model",
             results=[],
@@ -353,7 +353,7 @@ class TestJobResults:
     def test_that_completed_at_is_automatically_set(self) -> None:
         """Test that completed_at is automatically set."""
         results = JobResults(
-            job_id="test-job-001",
+            id="test-job-001",
             benchmark_id="mmlu",
             model_name="model",
             results=[],
@@ -409,7 +409,7 @@ class TestJobCallbacks:
         # Test create_oci_artifact
         spec = OCIArtifactSpec(
             files=[Path("/tmp/test.json")],
-            job_id="test",
+            id="test",
             benchmark_id="mmlu",
             model_name="model",
         )
@@ -437,7 +437,7 @@ class TestFrameworkAdapter:
                 # Unused but required by interface
                 _ = callbacks
                 return JobResults(
-                    job_id=config.job_id,
+                    id=config.id,
                     benchmark_id=config.benchmark_id,
                     model_name=config.model.name,
                     results=[],
@@ -479,7 +479,7 @@ class TestFrameworkAdapter:
 
                 # Return results
                 return JobResults(
-                    job_id=config.job_id,
+                    id=config.id,
                     benchmark_id=config.benchmark_id,
                     model_name=config.model.name,
                     results=[
@@ -516,7 +516,7 @@ class TestFrameworkAdapter:
         adapter = TestAdapter()
         callbacks = MockCallbacks()
         spec = JobSpec(
-            job_id="test-job-001",
+            id="test-job-001",
             benchmark_id="mmlu",
             model=ModelConfig(url="http://localhost:8000", name="test-model"),
             benchmark_config={},
@@ -526,7 +526,7 @@ class TestFrameworkAdapter:
         results = adapter.run_benchmark_job(spec, callbacks)
 
         # Verify results
-        assert results.job_id == "test-job-001"
+        assert results.id == "test-job-001"
         assert results.benchmark_id == "mmlu"
         assert len(results.results) == 1
         assert results.results[0].metric_value == 0.85

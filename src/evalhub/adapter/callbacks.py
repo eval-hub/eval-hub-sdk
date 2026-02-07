@@ -318,7 +318,7 @@ class DefaultCallbacks(JobCallbacks):
         Raises:
             RuntimeError: If artifact creation fails
         """
-        logger.info(f"Creating OCI artifact for job {spec.job_id}")
+        logger.info(f"Creating OCI artifact for job {spec.id}")
         return self.persister.persist(spec)
 
     def report_results(self, results: JobResults) -> None:
@@ -387,7 +387,7 @@ class DefaultCallbacks(JobCallbacks):
 
         # Local logging
         logger.info(
-            f"Job {results.job_id} completed | "
+            f"Job {results.id} completed | "
             f"Benchmark: {results.benchmark_id} | "
             f"Model: {results.model_name} | "
             f"Score: {results.overall_score} | "

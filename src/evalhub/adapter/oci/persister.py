@@ -75,7 +75,7 @@ class OCIArtifactPersister:
                     files_count = sum(1 for f in source.rglob("*") if f.is_file())
 
         return PersistResponse(
-            job_id=job.id,
+            id=job.id,
             oci_ref=f"{coordinate.oci_ref}@sha256:{'0' * 64}",
             digest=f"sha256:{'0' * 64}",
             files_count=files_count,

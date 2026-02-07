@@ -185,19 +185,23 @@ class TestProvidersClient:
 
     @pytest.fixture
     def mock_providers_data(self) -> dict[str, Any]:
-        """Mock provider data for tests (as returned by API)."""
+        """Mock provider data for tests (as returned by Go API)."""
         return {
             "total_count": 2,
             "items": [
                 {
-                    "id": "lm_evaluation_harness",
-                    "label": "LM Evaluation Harness",
-                    "supported_benchmarks": [],
+                    "provider_id": "lm_evaluation_harness",
+                    "provider_name": "LM Evaluation Harness",
+                    "description": "Evaluation harness for language models",
+                    "provider_type": "lm_evaluation_harness",
+                    "benchmarks": [],
                 },
                 {
-                    "id": "ragas",
-                    "label": "RAGAS",
-                    "supported_benchmarks": [],
+                    "provider_id": "ragas",
+                    "provider_name": "RAGAS",
+                    "description": "RAG Assessment framework",
+                    "provider_type": "ragas",
+                    "benchmarks": [],
                 },
             ],
         }
@@ -256,7 +260,7 @@ class TestProvidersClient:
                 providers = client.list()
 
                 assert len(providers) >= 2
-                assert any(p.id == "lm_evaluation_harness" for p in providers)
+                assert any(p.provider_id == "lm_evaluation_harness" for p in providers)
 
                 if mock_request:
                     mock_request.assert_called_once()
@@ -355,7 +359,7 @@ class TestEvaluationsClient:
     def mock_job_data(self) -> dict[str, Any]:
         """Mock evaluation job data for tests."""
         return {
-            "job_id": "job_123",
+            "id": "job_123",
             "status": "pending",
             "request": {
                 "benchmark_id": "gsm8k",
@@ -526,7 +530,7 @@ class TestEvalHubClient:
         """
         client = SyncEvalHubClient()
         mock_job_data = {
-            "job_id": "job_123",
+            "id": "job_123",
             "status": "pending",
             "request": {
                 "benchmark_id": "gsm8k",

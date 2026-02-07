@@ -147,9 +147,7 @@ class EvaluationResult(BaseModel):
 class EvaluationJob(BaseModel):
     """Evaluation job information."""
 
-    model_config = ConfigDict(populate_by_name=True)
-
-    id: str = Field(..., description="Unique job identifier", alias="job_id")
+    id: str = Field(..., description="Unique job identifier")
     status: JobStatus = Field(..., description="Current job status")
     evaluation_status: EvaluationStatus | None = Field(
         default=None, description="Detailed evaluation status"
@@ -199,13 +197,9 @@ class EvaluationJob(BaseModel):
 class JobsList(BaseModel):
     """List of evaluation jobs response."""
 
-    model_config = ConfigDict(populate_by_name=True)
-
-    total_count: int = Field(
-        ..., alias="total_jobs", description="Total number of jobs"
-    )
+    total_count: int = Field(..., description="Total number of jobs")
     items: list[EvaluationJob] = Field(
-        default_factory=list, alias="jobs", description="List of evaluation jobs"
+        default_factory=list, description="List of evaluation jobs"
     )
 
     @field_validator("items", mode="before")
@@ -265,11 +259,9 @@ class EvaluationJobFilesLocation(BaseModel):
     """Files location for persisting as OCI artifacts for an evaluation job."""
 
     model_config = ConfigDict(
-        populate_by_name=True,
-        serialize_by_alias=True,
         json_schema_extra={
             "example": {
-                "job_id": "job_123",
+                "id": "job_123",
                 "path": "/tmp/lighteval_output/job_123",
                 "metadata": {
                     "framework": "lighteval",
@@ -279,7 +271,7 @@ class EvaluationJobFilesLocation(BaseModel):
         },
     )
 
-    id: str = Field(..., description="Job identifier", alias="job_id")
+    id: str = Field(..., description="Job identifier")
     path: str | None = Field(
         default=None,
         description="Directory path containing files to persist. None if no files to persist.",
@@ -294,11 +286,9 @@ class PersistResponse(BaseModel):
     """Response from OCI artifact persistence operation."""
 
     model_config = ConfigDict(
-        populate_by_name=True,
-        serialize_by_alias=True,
         json_schema_extra={
             "example": {
-                "job_id": "job_123",
+                "id": "job_123",
                 "oci_ref": "ghcr.io/org/repo:latest@sha256:abc123...",
                 "digest": "sha256:abc123...",
                 "files_count": 42,
@@ -307,7 +297,7 @@ class PersistResponse(BaseModel):
         },
     )
 
-    id: str = Field(..., description="Job identifier", alias="job_id")
+    id: str = Field(..., description="Job identifier")
     oci_ref: str = Field(..., description="Full OCI reference including digest")
     digest: str = Field(..., description="SHA256 digest of artifact")
     files_count: int = Field(..., description="Number of files persisted")
@@ -316,33 +306,26 @@ class PersistResponse(BaseModel):
     )
 
 
-class SupportedBenchmark(BaseModel):
-    """Reference to a supported benchmark."""
-
-    id: str = Field(..., description="Benchmark identifier")
-
-
 class Provider(BaseModel):
-    """Provider information from EvalHub API."""
+    """Provider information from EvalHub API.
 
-    id: str = Field(..., description="Provider identifier")
-    label: str = Field(..., description="Provider display name")
-    supported_benchmarks: list[SupportedBenchmark] = Field(
-        default_factory=list, description="Supported benchmarks"
+    Matches the Go ProviderResource structure from pkg/api/providers.go
+    """
+
+    provider_id: str = Field(..., description="Provider identifier")
+    provider_name: str = Field(..., description="Provider display name")
+    description: str = Field(..., description="Provider description")
+    provider_type: str = Field(..., description="Provider type")
+    benchmarks: list["Benchmark"] = Field(
+        default_factory=list, description="Benchmarks supported by this provider"
     )
 
 
 class ProviderList(BaseModel):
     """List of providers response."""
 
-    model_config = ConfigDict(populate_by_name=True)
-
-    total_count: int = Field(
-        ..., alias="total_providers", description="Total number of providers"
-    )
-    items: list[Provider] = Field(
-        default_factory=list, alias="providers", description="List of providers"
-    )
+    total_count: int = Field(..., description="Total number of providers")
+    items: list[Provider] = Field(default_factory=list, description="List of providers")
 
     @field_validator("items", mode="before")
     @classmethod
@@ -354,36 +337,31 @@ class ProviderList(BaseModel):
 class Benchmark(BaseModel):
     """Benchmark information from EvalHub API."""
 
-    model_config = ConfigDict(populate_by_name=True)
-
-    id: str = Field(
-        ..., description="Unique benchmark identifier", alias="benchmark_id"
+    benchmark_id: str = Field(..., description="Unique benchmark identifier")
+    provider_id: str | None = Field(
+        None, description="Provider that owns this benchmark"
     )
-    provider_id: str = Field(..., description="Provider that owns this benchmark")
-    label: str = Field(..., description="Human-readable benchmark name", alias="name")
+    name: str = Field(..., description="Human-readable benchmark name")
     description: str = Field(..., description="Benchmark description")
     category: str = Field(..., description="Benchmark category")
     metrics: list[str] = Field(..., description="List of metrics")
     num_few_shot: int = Field(..., description="Number of few-shot examples")
-    dataset_size: int | None = Field(None, description="Size of the evaluation dataset")
+    dataset_size: int = Field(..., description="Size of the evaluation dataset")
     tags: list[str] = Field(default_factory=list, description="Tags for categorization")
 
 
 class BenchmarksList(BaseModel):
     """List of benchmarks response."""
 
-    model_config = ConfigDict(populate_by_name=True)
-
     total_count: int = Field(..., description="Total number of benchmarks")
-    items: list[Benchmark] = Field(
-        ..., alias="benchmarks", description="List of benchmarks"
-    )
+    items: list[Benchmark] = Field(..., description="List of benchmarks")
 
 
 class Resource(BaseModel):
     """Resource metadata."""
 
     id: str = Field(..., description="Resource identifier")
+    tenant: str = Field(..., description="Tenant identifier")
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
 
@@ -391,10 +369,8 @@ class Resource(BaseModel):
 class BenchmarkReference(BaseModel):
     """Reference to a benchmark within a collection."""
 
-    model_config = ConfigDict(populate_by_name=True)
-
     provider_id: str = Field(..., description="Provider identifier")
-    id: str = Field(..., description="Benchmark identifier", alias="benchmark_id")
+    benchmark_id: str = Field(..., description="Benchmark identifier")
     weight: float = Field(default=1.0, description="Benchmark weight in collection")
     config: dict[str, Any] = Field(
         default_factory=dict, description="Benchmark configuration"
@@ -417,14 +393,8 @@ class Collection(BaseModel):
 class CollectionList(BaseModel):
     """List of collections response."""
 
-    model_config = ConfigDict(populate_by_name=True)
-
-    total_count: int = Field(
-        ..., alias="total_collections", description="Total number of collections"
-    )
-    items: list[Collection] = Field(
-        ..., alias="collections", description="Collection resources"
-    )
+    total_count: int = Field(..., description="Total number of collections")
+    items: list[Collection] = Field(..., description="Collection resources")
     # Pagination fields
     first: dict[str, str] | None = Field(None, description="Link to first page")
     next: dict[str, str] | None = Field(None, description="Link to next page")

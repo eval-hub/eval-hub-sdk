@@ -73,7 +73,7 @@ class JobSpec(BaseModel):
     # ============================================================================
 
     # Job identification (mandatory)
-    job_id: str = Field(..., description="Unique job identifier from service")
+    id: str = Field(..., description="Unique job identifier from service")
     benchmark_id: str = Field(..., description="Benchmark to evaluate")
 
     # Model configuration (mandatory)
@@ -202,7 +202,7 @@ class OCIArtifactSpec(BaseModel):
     )
 
     # Job context
-    job_id: str = Field(..., description="Job ID for tracking")
+    id: str = Field(..., description="Job ID for tracking")
     benchmark_id: str = Field(..., description="Benchmark ID")
     model_name: str = Field(..., description="Model name")
 
@@ -225,7 +225,7 @@ class JobResults(BaseModel):
     """
 
     # Core results
-    job_id: str = Field(..., description="Job identifier")
+    id: str = Field(..., description="Job identifier")
     benchmark_id: str = Field(..., description="Benchmark that was evaluated")
     model_name: str = Field(..., description="Model that was evaluated")
     results: list[EvaluationResult] = Field(..., description="Evaluation results")

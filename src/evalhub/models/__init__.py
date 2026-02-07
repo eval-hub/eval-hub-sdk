@@ -24,7 +24,6 @@ from .api import (
     Provider,
     ProviderList,
     Resource,
-    SupportedBenchmark,
 )
 
 __all__ = [
@@ -38,7 +37,6 @@ __all__ = [
     "JobsList",
     "EvaluationResponse",
     # Provider & Benchmark models
-    "SupportedBenchmark",
     "Provider",
     "ProviderList",
     "Benchmark",

@@ -60,12 +60,12 @@ class OCIArtifactPersister:
             OCIArtifactResult: Persistence result
         """
         files_location = EvaluationJobFilesLocation(
-            job_id=spec.job_id,
+            id=spec.id,
             path=str(spec.base_path or spec.files[0].parent),
         )
 
         coordinate = OCICoordinate(
-            oci_ref=f"{self.registry_url}/eval-results/{spec.benchmark_id}:{spec.job_id}",
+            oci_ref=f"{self.registry_url}/eval-results/{spec.benchmark_id}:{spec.id}",
             oci_subject=None,
         )
 
@@ -75,7 +75,7 @@ class OCIArtifactPersister:
         )
 
         job = EvaluationJob(
-            job_id=spec.job_id,
+            id=spec.id,
             status=JobStatus.RUNNING,
             request=request,
             submitted_at=datetime.now(UTC),

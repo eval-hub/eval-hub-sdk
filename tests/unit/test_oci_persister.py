@@ -47,7 +47,7 @@ class TestOCIArtifactPersisterBridge:
         spec = OCIArtifactSpec(
             files=[test_dir / "file1.txt", test_dir / "file2.txt"],
             base_path=test_dir,
-            job_id="test_job",
+            id="test_job",
             benchmark_id="mmlu",
             model_name="test_model",
             title="Test Results",
@@ -71,7 +71,7 @@ class TestOCIArtifactPersisterBridge:
         spec = OCIArtifactSpec(
             files=[],
             base_path=test_dir,
-            job_id="test_job",
+            id="test_job",
             benchmark_id="test",
             model_name="model",
         )
@@ -98,7 +98,7 @@ class TestOCIArtifactPersisterBridge:
         spec = OCIArtifactSpec(
             files=[test_dir / "result.json"],
             base_path=test_dir,
-            job_id="test_job",
+            id="test_job",
             benchmark_id="test",
             model_name="model",
         )
@@ -119,7 +119,7 @@ class TestOCIArtifactPersisterBridge:
         spec = OCIArtifactSpec(
             files=[test_dir / "file.txt"],
             base_path=test_dir,
-            job_id="job-123",
+            id="job-123",
             benchmark_id="gsm8k",
             model_name="model",
         )
@@ -146,12 +146,10 @@ class TestOriginalOCIPersister:
         (test_dir / "file2.txt").write_text("test content 2")
 
         persister = OriginalPersister()
-        files_location = EvaluationJobFilesLocation(
-            job_id="test_job", path=str(test_dir)
-        )
+        files_location = EvaluationJobFilesLocation(id="test_job", path=str(test_dir))
 
         job = EvaluationJob(
-            job_id="test_job",
+            id="test_job",
             status=JobStatus.COMPLETED,
             request=EvaluationRequest(
                 benchmark_id="test_benchmark",
@@ -185,12 +183,10 @@ class TestOriginalOCIPersister:
         test_dir.mkdir()
 
         persister = OriginalPersister()
-        files_location = EvaluationJobFilesLocation(
-            job_id="test_job", path=str(test_dir)
-        )
+        files_location = EvaluationJobFilesLocation(id="test_job", path=str(test_dir))
 
         job = EvaluationJob(
-            job_id="test_job",
+            id="test_job",
             status=JobStatus.COMPLETED,
             request=EvaluationRequest(
                 benchmark_id="test",
@@ -228,12 +224,10 @@ class TestOriginalOCIPersister:
         (subdir / "file3.json").write_text("{}")
 
         persister = OriginalPersister()
-        files_location = EvaluationJobFilesLocation(
-            job_id="test_job", path=str(test_dir)
-        )
+        files_location = EvaluationJobFilesLocation(id="test_job", path=str(test_dir))
 
         job = EvaluationJob(
-            job_id="test_job",
+            id="test_job",
             status=JobStatus.COMPLETED,
             request=EvaluationRequest(
                 benchmark_id="test",

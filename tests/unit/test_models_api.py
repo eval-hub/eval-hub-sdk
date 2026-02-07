@@ -132,7 +132,7 @@ class TestEvaluationJob:
         now = datetime.now(UTC)
 
         job = EvaluationJob(
-            job_id="job_123",
+            id="job_123",
             status=JobStatus.PENDING,
             request=request,
             submitted_at=now,
@@ -153,7 +153,7 @@ class TestEvaluationJob:
         now = datetime.now(UTC)
 
         job = EvaluationJob(
-            job_id="job_456",
+            id="job_456",
             status=JobStatus.COMPLETED,
             request=request,
             submitted_at=now,
@@ -172,7 +172,7 @@ class TestEvaluationJob:
         now = datetime.now(UTC)
 
         job = EvaluationJob(
-            job_id="job_error",
+            id="job_error",
             status=JobStatus.FAILED,
             request=request,
             submitted_at=now,
@@ -394,39 +394,36 @@ class TestListModelsServerCompatibility:
     """Test cases for list models to ensure server API compatibility.
 
     These tests verify that the client models correctly parse server responses
-    using field aliases (e.g., server's 'providers' -> client's 'items').
+    using the consistent naming that the Go API uses (items, total_count).
     """
 
     def test_provider_list_with_server_fields(self) -> None:
         """Test ProviderList parses server response format."""
-        # Server returns 'providers' and 'total_providers'
+        # Go API returns 'items' and 'total_count'
         server_response = {
-            "providers": [{"id": "lm_eval", "label": "LM Evaluation Harness"}],
-            "total_providers": 1,
+            "items": [
+                {
+                    "provider_id": "lm_eval",
+                    "provider_name": "LM Evaluation Harness",
+                    "description": "Evaluation harness for language models",
+                    "provider_type": "lm_evaluation_harness",
+                    "benchmarks": [],
+                }
+            ],
+            "total_count": 1,
         }
 
         provider_list = ProviderList.model_validate(server_response)
         assert provider_list.total_count == 1
         assert len(provider_list.items) == 1
-        assert provider_list.items[0].id == "lm_eval"
-
-    def test_provider_list_with_client_fields(self) -> None:
-        """Test ProviderList also accepts normalized client field names."""
-        # Client can also use normalized field names
-        client_data = {
-            "items": [{"id": "ragas", "label": "RAGAS"}],
-            "total_count": 1,
-        }
-
-        provider_list = ProviderList.model_validate(client_data)
-        assert provider_list.total_count == 1
-        assert len(provider_list.items) == 1
+        assert provider_list.items[0].provider_id == "lm_eval"
+        assert provider_list.items[0].provider_name == "LM Evaluation Harness"
 
     def test_benchmarks_list_with_server_fields(self) -> None:
         """Test BenchmarksList parses server response format."""
-        # Server returns 'benchmarks'
+        # Go API returns 'items' and 'total_count'
         server_response = {
-            "benchmarks": [
+            "items": [
                 {
                     "benchmark_id": "mmlu",
                     "provider_id": "lm_eval",
@@ -435,26 +432,27 @@ class TestListModelsServerCompatibility:
                     "category": "knowledge",
                     "metrics": ["accuracy"],
                     "num_few_shot": 5,
+                    "dataset_size": 1000,
+                    "tags": [],
                 }
             ],
             "total_count": 1,
-            "providers": [],
-            "categories": [],
         }
 
         benchmarks_list = BenchmarksList.model_validate(server_response)
         assert benchmarks_list.total_count == 1
         assert len(benchmarks_list.items) == 1
-        assert benchmarks_list.items[0].id == "mmlu"
+        assert benchmarks_list.items[0].benchmark_id == "mmlu"
 
     def test_collection_list_with_server_fields(self) -> None:
         """Test CollectionList parses server response format."""
-        # Server returns 'collections' and 'total_collections'
+        # Go API returns 'items' and 'total_count'
         server_response = {
-            "collections": [
+            "items": [
                 {
                     "resource": {
                         "id": "healthcare_v1",
+                        "tenant": "default",
                         "created_at": "2026-01-27T12:00:00Z",
                         "updated_at": "2026-01-27T12:00:00Z",
                     },
@@ -466,7 +464,7 @@ class TestListModelsServerCompatibility:
                     ],
                 }
             ],
-            "total_collections": 1,
+            "total_count": 1,
         }
 
         collection_list = CollectionList.model_validate(server_response)
@@ -476,9 +474,9 @@ class TestListModelsServerCompatibility:
 
     def test_jobs_list_with_server_fields(self) -> None:
         """Test JobsList parses server response format."""
-        # Server returns 'jobs' and 'total_jobs'
+        # Go API returns 'items' and 'total_count'
         server_response = {
-            "jobs": [
+            "items": [
                 {
                     "id": "job-123",
                     "status": "completed",
@@ -491,7 +489,7 @@ class TestListModelsServerCompatibility:
                     "completed_at": "2026-01-27T12:30:00Z",
                 }
             ],
-            "total_jobs": 1,
+            "total_count": 1,
         }
 
         jobs_list = JobsList.model_validate(server_response)
@@ -502,8 +500,8 @@ class TestListModelsServerCompatibility:
     def test_empty_provider_list(self) -> None:
         """Test ProviderList handles empty server response."""
         server_response = {
-            "providers": [],
-            "total_providers": 0,
+            "items": [],
+            "total_count": 0,
         }
 
         provider_list = ProviderList.model_validate(server_response)
@@ -513,10 +511,8 @@ class TestListModelsServerCompatibility:
     def test_empty_benchmarks_list(self) -> None:
         """Test BenchmarksList handles empty server response."""
         server_response = {
-            "benchmarks": [],
+            "items": [],
             "total_count": 0,
-            "providers": [],
-            "categories": [],
         }
 
         benchmarks_list = BenchmarksList.model_validate(server_response)

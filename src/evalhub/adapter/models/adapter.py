@@ -67,7 +67,7 @@ class FrameworkAdapter(ABC):
 
         # Run the job
         callbacks = DefaultCallbacks(
-            job_id=adapter.job_spec.job_id,
+            job_id=adapter.job_spec.id,
             sidecar_url=adapter.job_spec.callback_url,
             ...
         )

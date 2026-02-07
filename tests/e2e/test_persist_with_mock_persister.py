@@ -63,7 +63,7 @@ class TestOCIArtifactPersistenceE2E:
                 created_artifacts.append(spec)
                 return OCIArtifactResult(
                     digest="sha256:test123",
-                    reference=f"ghcr.io/test/{spec.job_id}@sha256:test123",
+                    reference=f"ghcr.io/test/{spec.id}@sha256:test123",
                     size_bytes=1024,
                 )
 
@@ -80,7 +80,7 @@ class TestOCIArtifactPersistenceE2E:
             ) -> JobResults:
                 """Run minimal benchmark job that creates artifacts."""
                 # Create test files
-                output_dir = tmp_path / config.job_id
+                output_dir = tmp_path / config.id
                 output_dir.mkdir(parents=True, exist_ok=True)
                 results_file = output_dir / "results.json"
                 results_file.write_text('{"score": 0.85}')
@@ -90,7 +90,7 @@ class TestOCIArtifactPersistenceE2E:
                     OCIArtifactSpec(
                         files=[results_file],
                         base_path=output_dir,
-                        job_id=config.job_id,
+                        id=config.id,
                         benchmark_id=config.benchmark_id,
                         model_name=config.model.name,
                     )
@@ -98,7 +98,7 @@ class TestOCIArtifactPersistenceE2E:
 
                 # Return results
                 return JobResults(
-                    job_id=config.job_id,
+                    id=config.id,
                     benchmark_id=config.benchmark_id,
                     model_name=config.model.name,
                     results=[
@@ -119,7 +119,7 @@ class TestOCIArtifactPersistenceE2E:
         callbacks = TestCallbacks()
 
         spec = JobSpec(
-            job_id="e2e-test-001",
+            id="e2e-test-001",
             benchmark_id="mmlu",
             model=ModelConfig(url="http://localhost:8000", name="test-model"),
             benchmark_config={},
@@ -132,7 +132,7 @@ class TestOCIArtifactPersistenceE2E:
         # Verify artifact was created
         assert len(created_artifacts) == 1
         artifact_spec = created_artifacts[0]
-        assert artifact_spec.job_id == "e2e-test-001"
+        assert artifact_spec.id == "e2e-test-001"
         assert artifact_spec.benchmark_id == "mmlu"
         assert artifact_spec.model_name == "test-model"
 
@@ -164,7 +164,7 @@ class TestOCIArtifactPersistenceE2E:
         spec = OCIArtifactSpec(
             files=[test_dir / "results.json", test_dir / "summary.txt"],
             base_path=test_dir,
-            job_id="test-job",
+            id="test-job",
             benchmark_id="mmlu",
             model_name="test-model",
             title="Test Results",
@@ -207,13 +207,13 @@ class TestOCIArtifactPersistenceE2E:
         # Setup persister
         persister = OriginalPersister()
         files_location = EvaluationJobFilesLocation(
-            job_id="integration-test", path=str(test_dir)
+            id="integration-test", path=str(test_dir)
         )
 
         coordinate = OCICoordinate(oci_ref="ghcr.io/test/integration:latest")
 
         job = EvaluationJob(
-            job_id="integration-test",
+            id="integration-test",
             status=JobStatus.COMPLETED,
             request=EvaluationRequest(
                 benchmark_id="test",

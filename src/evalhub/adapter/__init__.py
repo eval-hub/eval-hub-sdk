@@ -38,14 +38,14 @@ Quick Start:
             if output_files:
                 artifact = callbacks.create_oci_artifact(OCIArtifactSpec(
                     files=output_files,
-                    job_id=config.job_id,
+                    id=config.id,
                     benchmark_id=config.benchmark_id,
                     model_name=config.model.name
                 ))
 
             # Return results
             return JobResults(
-                job_id=config.job_id,
+                id=config.id,
                 benchmark_id=config.benchmark_id,
                 model_name=config.model.name,
                 results=results,
