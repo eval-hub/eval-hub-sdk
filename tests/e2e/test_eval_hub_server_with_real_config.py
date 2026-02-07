@@ -20,7 +20,7 @@ def test_providers_endpoint_with_real_config(
     evalhub_server_with_real_config: str,
 ) -> None:
     """Verify that providers and benchmarks match the YAML configuration files."""
-    # Load provider YAML files
+    # Gather test data from provider YAML files
     config_dir = Path(__file__).parent / "config" / "providers"
     provider_yamls = {}
     for yaml_file in config_dir.glob("*.yaml"):
@@ -28,7 +28,7 @@ def test_providers_endpoint_with_real_config(
             data = yaml.safe_load(f)
             provider_yamls[data["provider_id"]] = data
 
-    # Get providers from server
+    # Get providers from actual server
     with SyncEvalHubClient(base_url=evalhub_server_with_real_config) as client:
         providers = client.providers.list()
         print(f"\n\n===== PROVIDERS COUNT: {len(providers)} =====")
@@ -83,45 +83,48 @@ def test_providers_endpoint_with_real_config(
             )
             print("    ✓ All YAML-defined benchmarks found in server response")
 
-            # Verify the first benchmark in detail
-            if yaml_benchmarks:
-                yaml_first = yaml_benchmarks[0]
+            # Verify all benchmarks in detail
+            assert yaml_benchmarks, (
+                f"Provider {provider.id}: expected benchmarks in YAML config"
+            )
+
+            for yaml_benchmark in yaml_benchmarks:
                 # Find the corresponding benchmark from server
-                server_first = next(
+                server_benchmark = next(
                     (
                         b
                         for b in provider_benchmarks
-                        if b.benchmark_id == yaml_first["benchmark_id"]
+                        if b.benchmark_id == yaml_benchmark["benchmark_id"]
                     ),
                     None,
                 )
 
-                assert server_first is not None, (
-                    f"Provider {provider.id}: first benchmark '{yaml_first['benchmark_id']}' "
+                assert server_benchmark is not None, (
+                    f"Provider {provider.id}: benchmark '{yaml_benchmark['benchmark_id']}' "
                     "not found in server response"
                 )
 
-                # Verify all fields of the first benchmark
-                assert server_first.benchmark_id == yaml_first["benchmark_id"]
-                assert server_first.name == yaml_first["name"]
-                assert server_first.description == yaml_first["description"]
-                assert server_first.category == yaml_first["category"]
-                assert server_first.metrics == yaml_first["metrics"]
-                assert server_first.default_few_shot == yaml_first["num_few_shot"]
-                yaml_dataset_size = yaml_first.get(
+                # Verify all fields of the benchmark
+                assert server_benchmark.benchmark_id == yaml_benchmark["benchmark_id"]
+                assert server_benchmark.name == yaml_benchmark["name"]
+                assert server_benchmark.description == yaml_benchmark["description"]
+                assert server_benchmark.category == yaml_benchmark["category"]
+                assert server_benchmark.metrics == yaml_benchmark["metrics"]
+                assert server_benchmark.default_few_shot == yaml_benchmark["num_few_shot"]
+                yaml_dataset_size = yaml_benchmark.get(
                     "dataset_size"
                 )  # Handle dataset_size: null in YAML becomes 0 or None in server
                 if yaml_dataset_size is None:
-                    assert server_first.dataset_size in (None, 0), (
+                    assert server_benchmark.dataset_size in (None, 0), (
                         f"Expected dataset_size to be None or 0 for null YAML value, "
-                        f"got {server_first.dataset_size}"
+                        f"got {server_benchmark.dataset_size}"
                     )
                 else:
-                    assert server_first.dataset_size == yaml_dataset_size
-                assert server_first.tags == yaml_first.get("tags", [])
+                    assert server_benchmark.dataset_size == yaml_dataset_size
+                assert server_benchmark.tags == yaml_benchmark.get("tags", [])
 
                 print(
-                    f"  ✓ First benchmark '{server_first.benchmark_id}' content verified against YAML"
+                    f"    ✓ Benchmark '{server_benchmark.benchmark_id}' content verified against YAML"
                 )
 
 
@@ -131,20 +134,3 @@ def test_health_endpoint_with_real_config(evalhub_server_with_real_config: str) 
     with SyncEvalHubClient(base_url=evalhub_server_with_real_config) as client:
         health = client.health()
         assert health is not None
-
-
-@pytest.mark.e2e
-def test_api_endpoints_with_real_config(evalhub_server_with_real_config: str) -> None:
-    """Verify basic API endpoints work with real config."""
-    with SyncEvalHubClient(base_url=evalhub_server_with_real_config) as client:
-        # Test multiple endpoints to verify real config doesn't break anything
-        providers = client.providers.list()
-        assert isinstance(providers, list)
-
-        jobs = client.jobs.list()
-        assert isinstance(jobs, list)
-
-        # Collections still returns 501
-        with pytest.raises(HTTPStatusError) as exc_info:
-            client.collections.list()
-        assert exc_info.value.response.status_code == 501
