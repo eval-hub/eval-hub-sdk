@@ -25,7 +25,11 @@ def test_providers_endpoint_with_real_config(
     for yaml_file in config_dir.glob("*.yaml"):
         with open(yaml_file) as f:
             data = yaml.safe_load(f)
-            provider_yamls[data["provider_id"]] = data
+            provider_id = data["provider_id"]
+            assert (
+                provider_id not in provider_yamls
+            ), f"Duplicate provider_id '{provider_id}' in {yaml_file}"
+            provider_yamls[provider_id] = data
 
     # Get providers from actual server
     with SyncEvalHubClient(base_url=evalhub_server_with_real_config) as client:
