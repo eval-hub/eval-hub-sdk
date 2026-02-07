@@ -22,7 +22,7 @@ def mock_job_spec_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Create a temporary job spec file and set environment variable."""
     # Create test job spec
     job_spec = {
-        "job_id": "test-job-001",
+        "id": "test-job-001",
         "benchmark_id": "mmlu",
         "model": {"url": "http://localhost:8000", "name": "test-model"},
         "num_examples": 10,
