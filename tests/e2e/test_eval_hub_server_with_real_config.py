@@ -32,7 +32,7 @@ def test_providers_endpoint_with_real_config(
         providers = client.providers.list()
         print(f"\n\n===== PROVIDERS COUNT: {len(providers)} =====")
         for p in providers:
-            print(f"  - {p.id}: {p.label}")
+            print(f"  - {p.provider_id}: {p.provider_name}")
         print("=" * 50)
 
         assert isinstance(providers, list)
@@ -43,27 +43,27 @@ def test_providers_endpoint_with_real_config(
         # Verify each provider matches the YAML configuration
         for provider in providers:
             assert (
-                provider.id in provider_yamls
-            ), f"Provider {provider.id} not found in YAML configs"
-            yaml_data = provider_yamls[provider.id]
+                provider.provider_id in provider_yamls
+            ), f"Provider {provider.provider_id} not found in YAML configs"
+            yaml_data = provider_yamls[provider.provider_id]
 
             # Check provider fields
-            assert provider.label == yaml_data["provider_name"], (
-                f"Provider {provider.id}: label mismatch. "
-                f"Expected '{yaml_data['provider_name']}', got '{provider.label}'"
+            assert provider.provider_name == yaml_data["provider_name"], (
+                f"Provider {provider.provider_id}: label mismatch. "
+                f"Expected '{yaml_data['provider_name']}', got '{provider.provider_name}'"
             )
 
             # Get benchmarks from provider object
             provider_benchmarks = provider.benchmarks
             yaml_benchmarks = yaml_data.get("benchmarks", [])
 
-            print(f"\n  Provider {provider.id}:")
+            print(f"\n  Provider {provider.provider_id}:")
             print(f"    Provider has {len(provider_benchmarks)} benchmarks")
             print(f"    YAML defines {len(yaml_benchmarks)} benchmarks")
 
             # Verify benchmark count matches exactly
             assert len(provider_benchmarks) == len(yaml_benchmarks), (
-                f"Provider {provider.id}: benchmark count mismatch. "
+                f"Provider {provider.provider_id}: benchmark count mismatch. "
                 f"Expected {len(yaml_benchmarks)}, got {len(provider_benchmarks)}"
             )
 
@@ -73,7 +73,7 @@ def test_providers_endpoint_with_real_config(
 
             missing_benchmarks = yaml_benchmark_ids - provider_benchmark_ids
             assert not missing_benchmarks, (
-                f"Provider {provider.id}: benchmarks defined in YAML are missing from server: "
+                f"Provider {provider.provider_id}: benchmarks defined in YAML are missing from server: "
                 f"{missing_benchmarks}"
             )
 
@@ -85,7 +85,7 @@ def test_providers_endpoint_with_real_config(
             # Verify all benchmarks in detail
             assert (
                 yaml_benchmarks
-            ), f"Provider {provider.id}: expected benchmarks in YAML config"
+            ), f"Provider {provider.provider_id}: expected benchmarks in YAML config"
 
             for yaml_benchmark in yaml_benchmarks:
                 # Find the corresponding benchmark from server
@@ -99,7 +99,7 @@ def test_providers_endpoint_with_real_config(
                 )
 
                 assert server_benchmark is not None, (
-                    f"Provider {provider.id}: benchmark '{yaml_benchmark['benchmark_id']}' "
+                    f"Provider {provider.provider_id}: benchmark '{yaml_benchmark['benchmark_id']}' "
                     "not found in server response"
                 )
 
@@ -110,7 +110,7 @@ def test_providers_endpoint_with_real_config(
                 assert server_benchmark.category == yaml_benchmark["category"]
                 assert server_benchmark.metrics == yaml_benchmark["metrics"]
                 assert (
-                    server_benchmark.default_few_shot == yaml_benchmark["num_few_shot"]
+                    server_benchmark.num_few_shot == yaml_benchmark["num_few_shot"]
                 )
                 yaml_dataset_size = yaml_benchmark.get(
                     "dataset_size"
