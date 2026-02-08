@@ -25,10 +25,10 @@ def test_providers_endpoint_with_real_config(
     for yaml_file in config_dir.glob("*.yaml"):
         with open(yaml_file) as f:
             data = yaml.safe_load(f)
-            provider_id = data["provider_id"]
+            provider_id = data["id"]
             assert (
                 provider_id not in provider_yamls
-            ), f"Duplicate provider_id '{provider_id}' in {yaml_file}"
+            ), f"Duplicate provider.id '{provider_id}' in {yaml_file}"
             provider_yamls[provider_id] = data
 
     # Get providers from actual server
@@ -52,9 +52,9 @@ def test_providers_endpoint_with_real_config(
             yaml_data = provider_yamls[provider.id]
 
             # Check provider fields
-            assert provider.name == yaml_data["provider_name"], (
+            assert provider.name == yaml_data["name"], (
                 f"Provider {provider.id}: label mismatch. "
-                f"Expected '{yaml_data['provider_name']}', got '{provider.name}'"
+                f"Expected '{yaml_data['name']}', got '{provider.name}'"
             )
 
             # Get benchmarks from provider object
@@ -72,7 +72,7 @@ def test_providers_endpoint_with_real_config(
             )
 
             # Verify that all benchmarks defined in YAML are present in server response
-            yaml_benchmark_ids = {b["benchmark_id"] for b in yaml_benchmarks}
+            yaml_benchmark_ids = {b["id"] for b in yaml_benchmarks}
             provider_benchmark_ids = {b.id for b in provider_benchmarks}
 
             missing_benchmarks = yaml_benchmark_ids - provider_benchmark_ids
@@ -94,26 +94,25 @@ def test_providers_endpoint_with_real_config(
             for yaml_benchmark in yaml_benchmarks:
                 # Find the corresponding benchmark from server
                 server_benchmark = next(
-                    (
-                        b
-                        for b in provider_benchmarks
-                        if b.id == yaml_benchmark["benchmark_id"]
-                    ),
+                    (b for b in provider_benchmarks if b.id == yaml_benchmark["id"]),
                     None,
                 )
 
                 assert server_benchmark is not None, (
-                    f"Provider {provider.id}: benchmark '{yaml_benchmark['benchmark_id']}' "
+                    f"Provider {provider.id}: benchmark '{yaml_benchmark['id']}' "
                     "not found in server response"
                 )
 
                 # Verify all fields of the benchmark
-                assert server_benchmark.id == yaml_benchmark["benchmark_id"]
+                assert server_benchmark.id == yaml_benchmark["id"]
                 assert server_benchmark.name == yaml_benchmark["name"]
                 assert server_benchmark.description == yaml_benchmark["description"]
                 assert server_benchmark.category == yaml_benchmark["category"]
                 assert server_benchmark.metrics == yaml_benchmark["metrics"]
-                assert server_benchmark.num_few_shot == yaml_benchmark["num_few_shot"]
+                yaml_num_few_shot = yaml_benchmark.get(
+                    "num_few_shot", 0
+                )  # Handle num_few_shot: null or missing in YAML, becomes 0 in server
+                assert server_benchmark.num_few_shot == yaml_num_few_shot
                 yaml_dataset_size = yaml_benchmark.get(
                     "dataset_size"
                 )  # Handle dataset_size: null in YAML becomes 0 or None in server

@@ -1,13 +1,12 @@
-provider_id: lm_evaluation_harness
-provider_name: LM Evaluation Harness
+id: lm_evaluation_harness
+name: LM Evaluation Harness
 description: Comprehensive evaluation framework for language models with 167 benchmarks
-provider_type: builtin
-base_url: null
+type: builtin
 runtime:
   k8s:
-    image: quay.io/eval-hub/lm_evaluation_harness:latest
+    image: quay.io/opendatahub/ta-lmes-job:odh-3.4
     entrypoint:
-      - python
+      - /opt/app-root/bin/python
       - /opt/app-root/src/main.py
     cpu_request: 100m
     memory_request: 128Mi
@@ -20,7 +19,7 @@ runtime:
     # reserved for local runtime
 
 benchmarks:
-  - benchmark_id: arc_easy
+  - id: arc_easy
     name: ARC Easy
     description: ARC Easy evaluation benchmark - AI2 Reasoning Challenge (Easy)
     category: reasoning
@@ -33,7 +32,7 @@ benchmarks:
       - reasoning
       - science
       - lm_eval
-  - benchmark_id: AraDiCE_boolq_lev
+  - id: AraDiCE_boolq_lev
     name: Aradice Boolq Lev
     description: Aradice Boolq Lev evaluation benchmark
     category: general
@@ -44,7 +43,7 @@ benchmarks:
     tags:
       - general
       - lm_eval
-  - benchmark_id: blimp
+  - id: blimp
     name: Blimp
     description: Blimp evaluation benchmark
     category: general
@@ -55,4 +54,4 @@ benchmarks:
     tags:
       - general
       - lm_eval
-# simplify testing by only testing few benchmarks...
+# truncated for E2E testing purposes.
