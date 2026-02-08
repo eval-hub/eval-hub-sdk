@@ -1,5 +1,8 @@
 # EvalHub SDK
 
+[![PyPI version](https://img.shields.io/pypi/v/eval-hub-sdk.svg)](https://pypi.org/project/eval-hub-sdk/)
+[![CI](https://github.com/eval-hub/eval-hub-sdk/actions/workflows/test.yml/badge.svg)](https://github.com/eval-hub/eval-hub-sdk/actions/workflows/test.yml)
+
 **Framework Adapter SDK for EvalHub Integration**
 
 The EvalHub SDK provides a standardized way to create framework adapters that can be consumed by EvalHub, enabling a "Bring Your Own Framework" (BYOF) approach for evaluation frameworks.
