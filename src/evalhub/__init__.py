@@ -25,6 +25,7 @@ Installation extras:
 
 # Always available - core models
 from .models import (
+    BenchmarkConfig,
     BenchmarkInfo,
     ErrorResponse,
     EvaluationJob,
@@ -35,15 +36,17 @@ from .models import (
     FrameworkInfo,
     HealthResponse,
     JobStatus,
+    JobSubmissionRequest,
     ModelConfig,
 )
 
-__version__ = "0.1.0a4"
+__version__ = "0.1.0a5"
 
 # Base exports - always available
 __all__ = [
     "__version__",
     # Core data models
+    "BenchmarkConfig",
     "BenchmarkInfo",
     "ErrorResponse",
     "EvaluationJob",
@@ -54,6 +57,7 @@ __all__ = [
     "FrameworkInfo",
     "HealthResponse",
     "JobStatus",
+    "JobSubmissionRequest",
     "ModelConfig",
 ]
 

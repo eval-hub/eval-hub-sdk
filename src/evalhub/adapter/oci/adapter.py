@@ -5,9 +5,11 @@ import logging
 from datetime import UTC, datetime
 
 from ...models.api import (
+    BenchmarkConfig,
     EvaluationJob,
     EvaluationJobFilesLocation,
-    EvaluationRequest,
+    EvaluationJobResource,
+    EvaluationJobStatus,
     JobStatus,
     ModelConfig,
     OCICoordinate,
@@ -69,16 +71,27 @@ class OCIArtifactPersister:
             oci_subject=None,
         )
 
-        request = EvaluationRequest(
-            benchmark_id=spec.benchmark_id,
-            model=ModelConfig(url="http://localhost", name=spec.model_name),
+        # Create job structure for OCI persistence (adapter SDK use)
+        job_resource = EvaluationJobResource(
+            id=spec.id,
+            tenant="default",
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+
+        job_status = EvaluationJobStatus(
+            state=JobStatus.RUNNING,
+        )
+
+        benchmark_config = BenchmarkConfig(
+            id=spec.benchmark_id, provider_id="unknown", parameters={}
         )
 
         job = EvaluationJob(
-            id=spec.id,
-            status=JobStatus.RUNNING,
-            request=request,
-            submitted_at=datetime.now(UTC),
+            resource=job_resource,
+            status=job_status,
+            model=ModelConfig(url="http://localhost", name=spec.model_name),
+            benchmarks=[benchmark_config],
         )
 
         response = await self._persister.persist(files_location, coordinate, job)

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "eval-hub-sdk"
-version = "0.1.0a4"
+version = "0.1.0a5"
 description = "Python SDK for EvalHub: common models, REST API client, and framework adapter SDK"
 authors = [
     {name = "Rui Vieira", email = "rui@redhat.com"},
@@ -119,7 +119,10 @@ module = [
     "yaml.*",
     "yaml",
     "httpx.*",
+    "pydantic.*",
     "pydantic_settings",
+    "rich.*",
+    "rich",
     "github",
     "github.*",
     "evalhub_server.*",

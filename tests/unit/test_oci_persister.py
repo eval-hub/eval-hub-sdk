@@ -7,9 +7,11 @@ import pytest
 from evalhub.adapter.models import OCIArtifactResult, OCIArtifactSpec
 from evalhub.adapter.oci import OCIArtifactPersister
 from evalhub.models.api import (
+    BenchmarkConfig,
     EvaluationJob,
     EvaluationJobFilesLocation,
-    EvaluationRequest,
+    EvaluationJobResource,
+    EvaluationJobStatus,
     JobStatus,
     ModelConfig,
     OCICoordinate,
@@ -148,14 +150,23 @@ class TestOriginalOCIPersister:
         persister = OriginalPersister()
         files_location = EvaluationJobFilesLocation(id="test_job", path=str(test_dir))
 
+        now = datetime.now(UTC)
         job = EvaluationJob(
-            id="test_job",
-            status=JobStatus.COMPLETED,
-            request=EvaluationRequest(
-                benchmark_id="test_benchmark",
-                model=ModelConfig(url="http://localhost:8000/v1", name="test_model"),
+            resource=EvaluationJobResource(
+                id="test_job",
+                tenant="default",
+                created_at=now,
+                updated_at=now,
             ),
-            submitted_at=datetime.now(UTC),
+            status=EvaluationJobStatus(state=JobStatus.COMPLETED),
+            model=ModelConfig(url="http://localhost:8000/v1", name="test_model"),
+            benchmarks=[
+                BenchmarkConfig(
+                    id="test_benchmark",
+                    provider_id="test_provider",
+                    parameters={},
+                )
+            ],
         )
 
         coordinate = OCICoordinate(oci_ref="ghcr.io/test/repo:latest")
@@ -185,14 +196,19 @@ class TestOriginalOCIPersister:
         persister = OriginalPersister()
         files_location = EvaluationJobFilesLocation(id="test_job", path=str(test_dir))
 
+        now = datetime.now(UTC)
         job = EvaluationJob(
-            id="test_job",
-            status=JobStatus.COMPLETED,
-            request=EvaluationRequest(
-                benchmark_id="test",
-                model=ModelConfig(url="http://localhost:8000/v1", name="test_model"),
+            resource=EvaluationJobResource(
+                id="test_job",
+                tenant="default",
+                created_at=now,
+                updated_at=now,
             ),
-            submitted_at=datetime.now(UTC),
+            status=EvaluationJobStatus(state=JobStatus.COMPLETED),
+            model=ModelConfig(url="http://localhost:8000/v1", name="test_model"),
+            benchmarks=[
+                BenchmarkConfig(id="test", provider_id="test_provider", parameters={})
+            ],
         )
 
         coordinate = OCICoordinate(oci_ref="ghcr.io/test/repo:latest")
@@ -226,14 +242,19 @@ class TestOriginalOCIPersister:
         persister = OriginalPersister()
         files_location = EvaluationJobFilesLocation(id="test_job", path=str(test_dir))
 
+        now = datetime.now(UTC)
         job = EvaluationJob(
-            id="test_job",
-            status=JobStatus.COMPLETED,
-            request=EvaluationRequest(
-                benchmark_id="test",
-                model=ModelConfig(url="http://localhost:8000/v1", name="test_model"),
+            resource=EvaluationJobResource(
+                id="test_job",
+                tenant="default",
+                created_at=now,
+                updated_at=now,
             ),
-            submitted_at=datetime.now(UTC),
+            status=EvaluationJobStatus(state=JobStatus.COMPLETED),
+            model=ModelConfig(url="http://localhost:8000/v1", name="test_model"),
+            benchmarks=[
+                BenchmarkConfig(id="test", provider_id="test_provider", parameters={})
+            ],
         )
 
         coordinate = OCICoordinate(oci_ref="ghcr.io/test/repo:latest")

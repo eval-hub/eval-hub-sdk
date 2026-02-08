@@ -145,54 +145,154 @@ class EvaluationResult(BaseModel):
     )
 
 
-class EvaluationJob(BaseModel):
-    """Evaluation job information."""
+class MessageInfo(BaseModel):
+    """Message information with code."""
+
+    message: str = Field(..., description="Message text")
+    message_code: str = Field(..., description="Message code")
+
+
+class EvaluationJobResource(BaseModel):
+    """Resource information for an evaluation job."""
 
     id: str = Field(..., description="Unique job identifier")
-    status: JobStatus = Field(..., description="Current job status")
-    evaluation_status: EvaluationStatus | None = Field(
-        default=None, description="Detailed evaluation status"
+    tenant: str = Field(..., description="Tenant identifier")
+    created_at: datetime = Field(..., description="When the job was created")
+    updated_at: datetime = Field(..., description="When the job was last updated")
+    mlflow_experiment_id: str | None = Field(
+        default=None, description="MLFlow experiment ID"
+    )
+    message: MessageInfo | None = Field(default=None, description="Status message")
+
+
+class EvaluationJobState(BaseModel):
+    """State information for an evaluation job."""
+
+    state: str = Field(..., description="Job state")
+    message: MessageInfo | None = Field(default=None, description="State message")
+
+
+class BenchmarkStatus(BaseModel):
+    """Status of a benchmark in an evaluation job."""
+
+    id: str = Field(..., description="Benchmark identifier")
+    provider_id: str = Field(..., description="Provider identifier")
+    status: JobStatus = Field(..., description="Benchmark status")
+    message: MessageInfo | None = Field(default=None, description="Status message")
+
+    # Convenience property for consistency with job state
+    @property
+    def state(self) -> JobStatus:
+        """Get benchmark state (alias for status)."""
+        return self.status
+
+
+class EvaluationJobStatus(BaseModel):
+    """Status information for an evaluation job."""
+
+    state: JobStatus = Field(..., description="Job state")
+    message: MessageInfo | None = Field(default=None, description="Status message")
+    benchmarks: list[BenchmarkStatus] = Field(
+        default_factory=list, description="Benchmark statuses"
     )
 
-    # Request information
-    request: EvaluationRequest = Field(..., description="Original evaluation request")
 
-    # Timing information
-    submitted_at: datetime = Field(..., description="When the job was submitted")
-    started_at: datetime | None = Field(
-        default=None, description="When evaluation started"
+class BenchmarkResult(BaseModel):
+    """Results from a single benchmark evaluation."""
+
+    id: str = Field(..., description="Benchmark identifier")
+    provider_id: str = Field(..., description="Provider identifier")
+    metrics: dict[str, Any] = Field(
+        default_factory=dict, description="Benchmark metrics"
     )
-    completed_at: datetime | None = Field(
-        default=None, description="When evaluation completed"
+    artifacts: dict[str, Any] = Field(
+        default_factory=dict, description="Benchmark artifacts"
+    )
+    mlflow_run_id: str | None = Field(
+        default=None, description="MLFlow run ID if tracking enabled"
+    )
+    logs_path: str | None = Field(default=None, description="Path to evaluation logs")
+
+
+class EvaluationJobResults(BaseModel):
+    """Results from an evaluation job."""
+
+    total_evaluations: int = Field(..., description="Total number of evaluations")
+    completed_evaluations: int = Field(
+        default=0, description="Number of completed evaluations"
+    )
+    failed_evaluations: int = Field(
+        default=0, description="Number of failed evaluations"
+    )
+    benchmarks: list[BenchmarkResult] = Field(
+        default_factory=list, description="Benchmark results"
+    )
+    mlflow_experiment_url: str | None = Field(
+        default=None, description="MLFlow experiment URL if tracking enabled"
     )
 
-    # Progress information
-    progress: float | None = Field(
-        default=None, description="Progress percentage (0.0 to 1.0)"
-    )
-    current_step: str | None = Field(
-        default=None, description="Current step description"
-    )
-    total_steps: int | None = Field(default=None, description="Total number of steps")
-    completed_steps: int | None = Field(
-        default=None, description="Number of completed steps"
+
+class BenchmarkConfig(BaseModel):
+    """Benchmark configuration for job submission."""
+
+    id: str = Field(..., description="Benchmark identifier")
+    provider_id: str = Field(..., description="Provider identifier")
+    parameters: dict[str, Any] = Field(
+        default_factory=dict, description="Benchmark-specific parameters"
     )
 
-    # Error information
-    error: ErrorInfo | None = Field(
-        default=None, description="Error information if failed"
+
+class JobSubmissionRequest(BaseModel):
+    """Request to submit an evaluation job."""
+
+    model: ModelConfig = Field(..., description="Model configuration")
+    benchmarks: list[BenchmarkConfig] = Field(
+        ..., description="List of benchmarks to evaluate", min_length=1
     )
-    error_details: dict[str, Any] | None = Field(
-        default=None, description="Detailed error information"
+    timeout_minutes: int | None = Field(
+        default=None, description="Job timeout in minutes"
+    )
+    retry_attempts: int | None = Field(
+        default=None, description="Number of retry attempts on failure"
     )
 
-    # Resource usage
-    estimated_duration: int | None = Field(
-        default=None, description="Estimated duration in seconds"
+
+class EvaluationJob(BaseModel):
+    """Evaluation job information from the API.
+
+    Matches EvaluationJobResource from the Go API.
+    """
+
+    resource: EvaluationJobResource = Field(..., description="Resource metadata")
+    status: EvaluationJobStatus | None = Field(
+        default=None, description="Job status information"
     )
-    actual_duration: int | None = Field(
-        default=None, description="Actual duration in seconds"
+    results: EvaluationJobResults | None = Field(
+        default=None, description="Job results"
     )
+
+    # Embedded EvaluationJobConfig fields
+    model: ModelConfig = Field(..., description="Model configuration")
+    benchmarks: list[BenchmarkConfig] = Field(
+        ..., description="Benchmark configurations"
+    )
+    timeout_minutes: int | None = Field(
+        default=None, description="Job timeout in minutes"
+    )
+    retry_attempts: int | None = Field(
+        default=None, description="Number of retry attempts"
+    )
+
+    # Convenience properties to access nested fields
+    @property
+    def id(self) -> str:
+        """Get job ID from resource."""
+        return self.resource.id
+
+    @property
+    def state(self) -> JobStatus:
+        """Get job state."""
+        return self.status.state if self.status else JobStatus.PENDING
 
 
 class JobsList(BaseModel):
@@ -313,10 +413,10 @@ class Provider(BaseModel):
     Matches the Go ProviderResource structure from pkg/api/providers.go
     """
 
-    provider_id: str = Field(..., description="Provider identifier")
-    provider_name: str = Field(..., description="Provider display name")
+    id: str = Field(..., description="Provider identifier")
+    name: str = Field(..., description="Provider display name")
     description: str = Field(..., description="Provider description")
-    provider_type: str = Field(..., description="Provider type")
+    type: str = Field(..., description="Provider type")
     benchmarks: list["Benchmark"] = Field(
         default_factory=list, description="Benchmarks supported by this provider"
     )
@@ -338,16 +438,16 @@ class ProviderList(BaseModel):
 class Benchmark(BaseModel):
     """Benchmark information from EvalHub API."""
 
-    benchmark_id: str = Field(..., description="Unique benchmark identifier")
+    id: str = Field(..., description="Unique benchmark identifier")
     provider_id: str | None = Field(
         None, description="Provider that owns this benchmark"
     )
     name: str = Field(..., description="Human-readable benchmark name")
     description: str = Field(..., description="Benchmark description")
     category: str = Field(..., description="Benchmark category")
-    metrics: list[str] = Field(..., description="List of metrics")
-    num_few_shot: int = Field(..., description="Number of few-shot examples")
-    dataset_size: int = Field(..., description="Size of the evaluation dataset")
+    metrics: list[str] = Field(default_factory=list, description="List of metrics")
+    num_few_shot: int | None = Field(None, description="Number of few-shot examples")
+    dataset_size: int | None = Field(None, description="Size of the evaluation dataset")
     tags: list[str] = Field(default_factory=list, description="Tags for categorization")
 
 

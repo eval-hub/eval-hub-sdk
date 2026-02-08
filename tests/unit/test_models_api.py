@@ -127,61 +127,103 @@ class TestEvaluationJob:
 
     def test_basic_evaluation_job(self) -> None:
         """Test basic EvaluationJob creation."""
+        from evalhub.models.api import (
+            BenchmarkConfig,
+            EvaluationJobResource,
+            EvaluationJobStatus,
+        )
+
         model = ModelConfig(url="http://localhost:8000/v1", name="test-model")
-        request = EvaluationRequest(benchmark_id="test", model=model)
         now = datetime.now(UTC)
 
         job = EvaluationJob(
-            id="job_123",
-            status=JobStatus.PENDING,
-            request=request,
-            submitted_at=now,
+            resource=EvaluationJobResource(
+                id="job_123",
+                tenant="default",
+                created_at=now,
+                updated_at=now,
+            ),
+            status=EvaluationJobStatus(state=JobStatus.PENDING),
+            model=model,
+            benchmarks=[
+                BenchmarkConfig(id="test", provider_id="test_provider", parameters={})
+            ],
         )
         assert job.id == "job_123"
-        assert job.status == JobStatus.PENDING
-        assert job.request.benchmark_id == "test"
-        assert job.submitted_at == now
-        assert job.started_at is None
-        assert job.completed_at is None
-        assert job.progress is None
-        assert job.error is None
+        assert job.state == JobStatus.PENDING
+        assert job.benchmarks[0].id == "test"
+        assert job.resource.created_at == now
 
     def test_completed_evaluation_job(self) -> None:
         """Test completed EvaluationJob."""
+        from evalhub.models.api import (
+            BenchmarkConfig,
+            EvaluationJobResource,
+            EvaluationJobResults,
+            EvaluationJobStatus,
+        )
+
         model = ModelConfig(url="http://localhost:8000/v1", name="test-model")
-        request = EvaluationRequest(benchmark_id="test", model=model)
         now = datetime.now(UTC)
 
         job = EvaluationJob(
-            id="job_456",
-            status=JobStatus.COMPLETED,
-            request=request,
-            submitted_at=now,
-            started_at=now,
-            completed_at=now,
-            progress=1.0,
+            resource=EvaluationJobResource(
+                id="job_456",
+                tenant="default",
+                created_at=now,
+                updated_at=now,
+            ),
+            status=EvaluationJobStatus(state=JobStatus.COMPLETED),
+            model=model,
+            benchmarks=[
+                BenchmarkConfig(id="test", provider_id="test_provider", parameters={})
+            ],
+            results=EvaluationJobResults(
+                total_evaluations=1,
+                completed_evaluations=1,
+                failed_evaluations=0,
+                benchmarks=[],
+            ),
         )
-        assert job.status == JobStatus.COMPLETED
-        assert job.progress == 1.0
-        assert job.completed_at == now
+        assert job.state == JobStatus.COMPLETED
+        assert job.results is not None
+        assert job.results.completed_evaluations == 1
 
     def test_failed_evaluation_job(self) -> None:
         """Test failed EvaluationJob."""
+        from evalhub.models.api import (
+            BenchmarkConfig,
+            EvaluationJobResource,
+            EvaluationJobStatus,
+            MessageInfo,
+        )
+
         model = ModelConfig(url="http://localhost:8000/v1", name="test-model")
-        request = EvaluationRequest(benchmark_id="test", model=model)
         now = datetime.now(UTC)
 
         job = EvaluationJob(
-            id="job_error",
-            status=JobStatus.FAILED,
-            request=request,
-            submitted_at=now,
-            error=ErrorInfo(message="Model not found", message_code="model_not_found"),
+            resource=EvaluationJobResource(
+                id="job_error",
+                tenant="default",
+                created_at=now,
+                updated_at=now,
+            ),
+            status=EvaluationJobStatus(
+                state=JobStatus.FAILED,
+                message=MessageInfo(
+                    message="Model not found", message_code="model_not_found"
+                ),
+            ),
+            model=model,
+            benchmarks=[
+                BenchmarkConfig(id="test", provider_id="test_provider", parameters={})
+            ],
         )
-        assert job.status == JobStatus.FAILED
-        assert job.error is not None
-        assert job.error.message == "Model not found"
-        assert job.error.message_code == "model_not_found"
+        assert job.state == JobStatus.FAILED
+        assert job.status is not None
+        assert job.status.message is not None
+        assert job.status.message.message == "Model not found"
+        assert job.status.message.message_code == "model_not_found"
 
 
 class TestEvaluationResult:
@@ -403,10 +445,10 @@ class TestListModelsServerCompatibility:
         server_response = {
             "items": [
                 {
-                    "provider_id": "lm_eval",
-                    "provider_name": "LM Evaluation Harness",
+                    "id": "lm_eval",
+                    "name": "LM Evaluation Harness",
                     "description": "Evaluation harness for language models",
-                    "provider_type": "lm_evaluation_harness",
+                    "type": "lm_evaluation_harness",
                     "benchmarks": [],
                 }
             ],
@@ -416,8 +458,8 @@ class TestListModelsServerCompatibility:
         provider_list = ProviderList.model_validate(server_response)
         assert provider_list.total_count == 1
         assert len(provider_list.items) == 1
-        assert provider_list.items[0].provider_id == "lm_eval"
-        assert provider_list.items[0].provider_name == "LM Evaluation Harness"
+        assert provider_list.items[0].id == "lm_eval"
+        assert provider_list.items[0].name == "LM Evaluation Harness"
 
     def test_benchmarks_list_with_server_fields(self) -> None:
         """Test BenchmarksList parses server response format."""
@@ -425,7 +467,7 @@ class TestListModelsServerCompatibility:
         server_response = {
             "items": [
                 {
-                    "benchmark_id": "mmlu",
+                    "id": "mmlu",
                     "provider_id": "lm_eval",
                     "name": "MMLU",
                     "description": "Massive Multitask Language Understanding",
@@ -442,7 +484,7 @@ class TestListModelsServerCompatibility:
         benchmarks_list = BenchmarksList.model_validate(server_response)
         assert benchmarks_list.total_count == 1
         assert len(benchmarks_list.items) == 1
-        assert benchmarks_list.items[0].benchmark_id == "mmlu"
+        assert benchmarks_list.items[0].id == "mmlu"
 
     def test_collection_list_with_server_fields(self) -> None:
         """Test CollectionList parses server response format."""
@@ -474,19 +516,25 @@ class TestListModelsServerCompatibility:
 
     def test_jobs_list_with_server_fields(self) -> None:
         """Test JobsList parses server response format."""
-        # Go API returns 'items' and 'total_count'
+        # Go API returns 'items' and 'total_count' with nested structure
         server_response = {
             "items": [
                 {
-                    "id": "job-123",
-                    "status": "completed",
-                    "request": {
-                        "benchmark_id": "mmlu",
-                        "model": {"name": "test-model", "url": "http://localhost:8000"},
+                    "resource": {
+                        "id": "job-123",
+                        "tenant": "default",
+                        "created_at": "2026-01-27T12:00:00Z",
+                        "updated_at": "2026-01-27T12:30:00Z",
                     },
-                    "submitted_at": "2026-01-27T12:00:00Z",
-                    "started_at": "2026-01-27T12:01:00Z",
-                    "completed_at": "2026-01-27T12:30:00Z",
+                    "status": {"state": JobStatus.COMPLETED.value},
+                    "model": {"name": "test-model", "url": "http://localhost:8000"},
+                    "benchmarks": [
+                        {
+                            "id": "mmlu",
+                            "provider_id": "lm_eval",
+                            "parameters": {},
+                        }
+                    ],
                 }
             ],
             "total_count": 1,
@@ -496,6 +544,7 @@ class TestListModelsServerCompatibility:
         assert jobs_list.total_count == 1
         assert len(jobs_list.items) == 1
         assert jobs_list.items[0].id == "job-123"
+        assert jobs_list.items[0].state == JobStatus.COMPLETED
 
     def test_empty_provider_list(self) -> None:
         """Test ProviderList handles empty server response."""

@@ -10,9 +10,9 @@ import httpx
 
 from ...models import (
     EvaluationJob,
-    EvaluationRequest,
     JobsList,
     JobStatus,
+    JobSubmissionRequest,
 )
 from ..base import BaseAsyncClient, BaseSyncClient
 
@@ -25,11 +25,11 @@ class AsyncJobsResource:
     def __init__(self, client: BaseAsyncClient):
         self._client = client
 
-    async def submit(self, request: EvaluationRequest) -> EvaluationJob:
+    async def submit(self, request: JobSubmissionRequest) -> EvaluationJob:
         """Submit an evaluation job.
 
         Args:
-            request: The evaluation request
+            request: The job submission request
 
         Returns:
             EvaluationJob: The submitted job
@@ -126,7 +126,8 @@ class AsyncJobsResource:
         while True:
             job = await self.get(job_id)
 
-            if job.status in [
+            # Check if job is in a terminal state
+            if job.state in [
                 JobStatus.COMPLETED,
                 JobStatus.FAILED,
                 JobStatus.CANCELLED,
@@ -147,11 +148,11 @@ class SyncJobsResource:
     def __init__(self, client: BaseSyncClient):
         self._client = client
 
-    def submit(self, request: EvaluationRequest) -> EvaluationJob:
+    def submit(self, request: JobSubmissionRequest) -> EvaluationJob:
         """Submit an evaluation job.
 
         Args:
-            request: The evaluation request
+            request: The job submission request
 
         Returns:
             EvaluationJob: The submitted job
@@ -248,7 +249,8 @@ class SyncJobsResource:
         while True:
             job = self.get(job_id)
 
-            if job.status in [
+            # Check if job is in a terminal state
+            if job.state in [
                 JobStatus.COMPLETED,
                 JobStatus.FAILED,
                 JobStatus.CANCELLED,

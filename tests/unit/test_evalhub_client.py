@@ -190,17 +190,17 @@ class TestProvidersClient:
             "total_count": 2,
             "items": [
                 {
-                    "provider_id": "lm_evaluation_harness",
-                    "provider_name": "LM Evaluation Harness",
+                    "id": "lm_evaluation_harness",
+                    "name": "LM Evaluation Harness",
                     "description": "Evaluation harness for language models",
-                    "provider_type": "lm_evaluation_harness",
+                    "type": "lm_evaluation_harness",
                     "benchmarks": [],
                 },
                 {
-                    "provider_id": "ragas",
-                    "provider_name": "RAGAS",
+                    "id": "ragas",
+                    "name": "RAGAS",
                     "description": "RAG Assessment framework",
-                    "provider_type": "ragas",
+                    "type": "ragas",
                     "benchmarks": [],
                 },
             ],
@@ -260,7 +260,7 @@ class TestProvidersClient:
                 providers = client.list()
 
                 assert len(providers) >= 2
-                assert any(p.provider_id == "lm_evaluation_harness" for p in providers)
+                assert any(p.id == "lm_evaluation_harness" for p in providers)
 
                 if mock_request:
                     mock_request.assert_called_once()
@@ -359,13 +359,21 @@ class TestEvaluationsClient:
     def mock_job_data(self) -> dict[str, Any]:
         """Mock evaluation job data for tests."""
         return {
-            "id": "job_123",
-            "status": "pending",
-            "request": {
-                "benchmark_id": "gsm8k",
-                "model": {"url": "http://localhost:8000/v1", "name": "gpt-3.5-turbo"},
+            "resource": {
+                "id": "job_123",
+                "tenant": "default",
+                "created_at": "2024-01-01T12:00:00Z",
+                "updated_at": "2024-01-01T12:00:00Z",
             },
-            "submitted_at": "2024-01-01T12:00:00Z",
+            "status": {"state": JobStatus.PENDING.value},
+            "model": {"url": "http://localhost:8000/v1", "name": "gpt-3.5-turbo"},
+            "benchmarks": [
+                {
+                    "id": "gsm8k",
+                    "provider_id": "lm_evaluation_harness",
+                    "parameters": {},
+                }
+            ],
         }
 
     @pytest.mark.skipif(
@@ -388,7 +396,7 @@ class TestEvaluationsClient:
 
             assert isinstance(job, EvaluationJob)
             assert job.id == "job_123"
-            assert job.status == JobStatus.PENDING
+            assert job.state == JobStatus.PENDING
 
         client.close()
 
@@ -411,7 +419,7 @@ class TestEvaluationsClient:
 
                 assert isinstance(job, EvaluationJob)
                 assert job.id == "job_123"
-                assert job.status == JobStatus.PENDING
+                assert job.state == JobStatus.PENDING
         else:
             # In real server mode, we need a valid job_id
             # This test would require creating a job first or having a known test job
@@ -528,15 +536,25 @@ class TestEvalHubClient:
 
         Note: Skipped in real server mode to avoid creating actual evaluation jobs.
         """
+        from evalhub.models.api import BenchmarkConfig, JobSubmissionRequest
+
         client = SyncEvalHubClient()
         mock_job_data = {
-            "id": "job_123",
-            "status": "pending",
-            "request": {
-                "benchmark_id": "gsm8k",
-                "model": {"url": "http://localhost:8000/v1", "name": "gpt-3.5-turbo"},
+            "resource": {
+                "id": "job_123",
+                "tenant": "default",
+                "created_at": "2024-01-01T12:00:00Z",
+                "updated_at": "2024-01-01T12:00:00Z",
             },
-            "submitted_at": "2024-01-01T12:00:00Z",
+            "status": {"state": JobStatus.PENDING.value},
+            "model": {"url": "http://localhost:8000/v1", "name": "gpt-3.5-turbo"},
+            "benchmarks": [
+                {
+                    "id": "gsm8k",
+                    "provider_id": "lm_evaluation_harness",
+                    "parameters": {},
+                }
+            ],
         }
         mock_response = Mock()
         mock_response.json.return_value = mock_job_data
@@ -544,7 +562,10 @@ class TestEvalHubClient:
         with patch.object(client, "_request", return_value=mock_response):
             # Should be able to call job methods via jobs resource
             model = ModelConfig(url="http://localhost:8000/v1", name="gpt-3.5-turbo")
-            request = EvaluationRequest(benchmark_id="gsm8k", model=model)
+            benchmark = BenchmarkConfig(
+                id="gsm8k", provider_id="lm_evaluation_harness", parameters={}
+            )
+            request = JobSubmissionRequest(model=model, benchmarks=[benchmark])
             job = client.jobs.submit(request)
             assert isinstance(job, EvaluationJob)
 

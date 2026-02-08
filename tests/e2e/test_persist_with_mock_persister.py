@@ -190,9 +190,11 @@ class TestOCIArtifactPersistenceE2E:
             OCIArtifactPersister as OriginalPersister,
         )
         from evalhub.models.api import (
+            BenchmarkConfig,
             EvaluationJob,
             EvaluationJobFilesLocation,
-            EvaluationRequest,
+            EvaluationJobResource,
+            EvaluationJobStatus,
             JobStatus,
             ModelConfig,
             OCICoordinate,
@@ -212,14 +214,23 @@ class TestOCIArtifactPersistenceE2E:
 
         coordinate = OCICoordinate(oci_ref="ghcr.io/test/integration:latest")
 
+        now = datetime.now(UTC)
         job = EvaluationJob(
-            id="integration-test",
-            status=JobStatus.COMPLETED,
-            request=EvaluationRequest(
-                benchmark_id="test",
-                model=ModelConfig(url="http://localhost:8000", name="model"),
+            resource=EvaluationJobResource(
+                id="integration-test",
+                tenant="default",
+                created_at=now,
+                updated_at=now,
             ),
-            submitted_at=datetime.now(UTC),
+            status=EvaluationJobStatus(state=JobStatus.COMPLETED),
+            model=ModelConfig(url="http://localhost:8000", name="model"),
+            benchmarks=[
+                BenchmarkConfig(
+                    id="test",
+                    provider_id="test_provider",
+                    parameters={},
+                )
+            ],
         )
 
         # Persist
