@@ -40,6 +40,7 @@ core = [
 # Adapter development - for building custom evaluation framework adapters
 adapter = [
     "eval-hub-sdk[core]",
+    "mlflow-skinny>=3.9.0",
 ]
 
 # Client API - for end users in Jupyter notebooks and scripts
@@ -127,6 +128,8 @@ module = [
     "github.*",
     "evalhub_server.*",
     "evalhub_server",
+    "mlflow.*",
+    "mlflow",
 ]
 ignore_missing_imports = true
 
