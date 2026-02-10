@@ -74,7 +74,7 @@ examples = [
 ]
 
 # All core functionality (excludes examples which are optional)
-all = ["eval-hub-sdk[core,adapter,client,dev]"]
+all = ["eval-hub-sdk[core,adapter,client,mcp,dev]"]
 
 [project.urls]
 Homepage = "https://github.com/eval-hub"

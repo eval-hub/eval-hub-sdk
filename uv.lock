@@ -672,12 +672,15 @@ adapter = [
 all = [
     { name = "httpx" },
     { name = "inline-snapshot" },
+    { name = "mcp" },
     { name = "mypy" },
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "starlette" },
+    { name = "uvicorn" },
 ]
 client = [
     { name = "httpx" },
@@ -728,7 +731,7 @@ requires-dist = [
     { name = "eval-hub-sdk", extras = ["client"], marker = "extra == 'mcp'" },
     { name = "eval-hub-sdk", extras = ["core"], marker = "extra == 'adapter'" },
     { name = "eval-hub-sdk", extras = ["core"], marker = "extra == 'client'" },
-    { name = "eval-hub-sdk", extras = ["core", "adapter", "client", "dev"], marker = "extra == 'all'" },
+    { name = "eval-hub-sdk", extras = ["core", "adapter", "client", "mcp", "dev"], marker = "extra == 'all'" },
     { name = "httpx", marker = "extra == 'core'", specifier = ">=0.25.0" },
     { name = "importlib-metadata", specifier = ">=6.0.0" },
     { name = "inline-snapshot", marker = "extra == 'dev'", specifier = ">=0.31.1" },
