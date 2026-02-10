@@ -1,28 +1,99 @@
 from collections.abc import AsyncGenerator
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+import pytest_asyncio
 from inline_snapshot import snapshot
 from mcp.client.session import ClientSession
-from mcp.shared.memory import create_connected_server_and_client_session
-from mcp.types import CallToolResult, TextContent, ListResourcesResult
 
-from evalhub.mcp.server import app
+from evalhub.mcp.server import app, set_client
+from evalhub.models import Provider, Benchmark
+
+from mcp.shared.memory import create_connected_server_and_client_session
 
 
 @pytest.fixture
-def anyio_backend():  
+def anyio_backend():
     return "asyncio"
 
 
-@pytest.fixture
-async def client_session() -> AsyncGenerator[ClientSession]:
-    async with create_connected_server_and_client_session(app, raise_exceptions=True) as _session:
-        yield _session
+@pytest_asyncio.fixture(loop_scope="function")
+async def client_session() -> AsyncGenerator[ClientSession, None]:
+    """Create a client session connected to the MCP server with mocked data."""
+    mock_client = MagicMock()
+    mock_provider = Provider(
+        id="test-provider",
+        name="Test Provider",
+        description="A test provider",
+        type="test",
+        benchmarks=[],
+    )
+    mock_benchmark = Benchmark(
+        id="test-benchmark",
+        provider_id="test-provider",
+        name="Test Benchmark",
+        description="A test benchmark",
+        category="test-category",
+        metrics=["accuracy"],
+        num_few_shot=5,
+        dataset_size=100,
+        tags=["test"],
+    )
+    mock_providers_resource = MagicMock()
+    mock_providers_resource.list = AsyncMock(return_value=[mock_provider])
+    mock_client.providers = mock_providers_resource
+    mock_benchmarks_resource = MagicMock()
+    mock_benchmarks_resource.list = AsyncMock(return_value=[mock_benchmark])
+    mock_client.benchmarks = mock_benchmarks_resource
+
+    # Inject the mock client into the MCP server
+    set_client(mock_client)
+
+    # Use the helper function with error suppression for teardown
+    try:
+        async with create_connected_server_and_client_session(
+            app, raise_exceptions=True
+        ) as session:
+            yield session
+    except RuntimeError as e:
+        # Suppress anyio cancel scope errors during teardown
+        if "cancel scope" not in str(e):
+            raise
+    finally:
+        # Clean up the mock client
+        set_client(None)
 
 
 @pytest.mark.anyio
-async def test_call_add_tool(client_session: ClientSession):
+async def test_list_resourcesl(client_session: ClientSession):
     result = await client_session.list_resources()
-    assert result == snapshot(
-        ListResourcesResult(resources =[])
+    assert result.model_dump(mode="json") == snapshot(
+        {
+            "meta": None,
+            "nextCursor": None,
+            "resources": [
+                {
+                    "name": "List Providers",
+                    "title": None,
+                    "uri": "evalhub://providers",
+                    "description": "List all registered EvalHub providers",
+                    "mimeType": "application/json",
+                    "size": None,
+                    "icons": None,
+                    "annotations": None,
+                    "meta": None,
+                },
+                {
+                    "name": "List Benchmarks",
+                    "title": None,
+                    "uri": "evalhub://benchmarks",
+                    "description": "List all available EvalHub benchmarks",
+                    "mimeType": "application/json",
+                    "size": None,
+                    "icons": None,
+                    "annotations": None,
+                    "meta": None,
+                },
+            ],
+        }
     )

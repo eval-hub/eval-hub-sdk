@@ -249,7 +249,10 @@ async def handle_completion(
         uri_template = str(ref.uri)
 
         # Provide provider ID completions, here can be optimized later
-        if uri_template == "evalhub://providers/{provider_id}" and argument.name == "provider_id":
+        if (
+            uri_template == "evalhub://providers/{provider_id}"
+            and argument.name == "provider_id"
+        ):
             providers = await _client.providers.list()
             provider_ids = sorted([provider.id for provider in providers])
             return types.Completion(
@@ -336,7 +339,9 @@ def run_server(
         stateless=True,
     )
 
-    async def handle_streamable_http(scope: Scope, receive: Receive, send: Send) -> None:
+    async def handle_streamable_http(
+        scope: Scope, receive: Receive, send: Send
+    ) -> None:
         method = scope.get("method", "")
         path = scope.get("path", "")
         logger.debug(f"Handling {method} request to {path}")
@@ -362,8 +367,15 @@ def run_server(
 
     starlette_app = CORSMiddleware(
         starlette_app,
-        allow_origins=["*"],  # Allow all origins - TODO: adjust as needed for production
-        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],  # MCP streamable HTTP methods
+        allow_origins=[
+            "*"
+        ],  # Allow all origins - TODO: adjust as needed for production
+        allow_methods=[
+            "GET",
+            "POST",
+            "DELETE",
+            "OPTIONS",
+        ],  # MCP streamable HTTP methods
         allow_headers=["*"],  # Allow all headers
         expose_headers=["Mcp-Session-Id"],
     )
