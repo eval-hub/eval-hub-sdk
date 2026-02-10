@@ -64,6 +64,7 @@ dev = [
     "ruff==0.1.6",  # Match ruff-pre-commit v0.1.6
     "mypy==1.7.1",  # Match mirrors-mypy v1.7.1
     "pre-commit>=3.4.0",
+    "inline-snapshot>=0.31.1",
 ]
 
 # Example framework integrations
@@ -167,6 +168,7 @@ dev = [
     "eval-hub-server @ git+https://github.com/eval-hub/eval-hub#subdirectory=python-server",  # TODO: this should be moved to a pypi release
     "fastapi>=0.124.4",
     "httpx>=0.28.1",
+    "inline-snapshot>=0.31.1",
     "mypy>=1.7.1",
     "oras>=0.2.38",
     "pygithub>=2.1.1",

@@ -62,7 +62,7 @@ async def list_resources() -> list[types.Resource]:
         types.Resource(
             uri="evalhub://benchmarks",
             name="List Benchmarks",
-            description="List all available benchmarks",
+            description="List all available EvalHub benchmarks",
             mimeType="application/json",
         ),
     ]
@@ -248,10 +248,9 @@ async def handle_completion(
     if isinstance(ref, types.ResourceTemplateReference):
         uri_template = str(ref.uri)
 
-        # Provide provider ID completions
+        # Provide provider ID completions, here can be optimized later
         if uri_template == "evalhub://providers/{provider_id}" and argument.name == "provider_id":
             providers = await _client.providers.list()
-            # Sort alphabetically for consistent, predictable ordering
             provider_ids = sorted([provider.id for provider in providers])
             return types.Completion(
                 values=provider_ids,
@@ -317,13 +316,12 @@ def run_server(
         json_response: Enable JSON responses instead of SSE streams (default: True)
         log_level: Logging level (default: INFO)
     """
-    # Configure logging
     logging.basicConfig(
         level=getattr(logging, log_level.upper()),
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
-    # Create client instance
+    # Create -sdk[client] instance
     if base_url is None:
         base_url = os.getenv("EVALHUB_BASE_URL", "http://localhost:8080")
 
@@ -354,7 +352,6 @@ def run_server(
             finally:
                 logger.info("EvalHub MCP server shutting down...")
 
-    # Create an ASGI application using the transport
     starlette_app = Starlette(
         debug=True,
         routes=[
@@ -363,11 +360,9 @@ def run_server(
         lifespan=lifespan,
     )
 
-    # Wrap ASGI application with CORS middleware to expose Mcp-Session-Id header
-    # for browser-based clients (ensures 500 errors get proper CORS headers)
     starlette_app = CORSMiddleware(
         starlette_app,
-        allow_origins=["*"],  # Allow all origins - adjust as needed for production
+        allow_origins=["*"],  # Allow all origins - TODO: adjust as needed for production
         allow_methods=["GET", "POST", "DELETE", "OPTIONS"],  # MCP streamable HTTP methods
         allow_headers=["*"],  # Allow all headers
         expose_headers=["Mcp-Session-Id"],
