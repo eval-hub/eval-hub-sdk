@@ -48,6 +48,9 @@ async def list_resources() -> list[types.Resource]:
     Returns:
         List of resource definitions
     """
+    if _client is None:
+        return []
+
     return [
         types.Resource(
             uri="evalhub://providers",
@@ -62,6 +65,63 @@ async def list_resources() -> list[types.Resource]:
             mimeType="application/json",
         ),
     ]
+
+
+@app.list_resource_templates()
+async def list_resource_templates() -> list[types.ResourceTemplate]:
+    """List all available MCP resource templates.
+
+    Returns:
+        List of resource template definitions
+    """
+    if _client is None:
+        return []
+
+    return [
+        types.ResourceTemplate(
+            uriTemplate="evalhub://providers/{provider_id}",
+            name="Get Provider",
+            description="Get information about a specific EvalHub provider by ID",
+            mimeType="application/json",
+        ),
+    ]
+
+
+@app.completion()
+async def handle_completion(
+    ref: types.PromptReference | types.ResourceTemplateReference,
+    argument: types.CompletionArgument,
+    context: types.CompletionContext | None,
+) -> types.Completion | None:
+    """Provide completion suggestions for resource template parameters.
+
+    Args:
+        ref: The prompt or resource template being completed
+        argument: The argument that needs completion
+        context: Optional context with previously resolved values
+
+    Returns:
+        Completion suggestions or None if no suggestions available
+    """
+    if _client is None:
+        return None
+
+    # Handle resource template completions
+    if isinstance(ref, types.ResourceTemplateReference):
+        uri_template = str(ref.uri)
+
+        # Provide provider ID completions
+        if uri_template == "evalhub://providers/{provider_id}" and argument.name == "provider_id":
+            providers = await _client.providers.list()
+            # Sort alphabetically for consistent, predictable ordering
+            provider_ids = sorted([provider.id for provider in providers])
+            return types.Completion(
+                values=provider_ids,
+                total=len(provider_ids),
+                hasMore=False,
+            )
+
+    return None
 
 
 @app.read_resource()
@@ -92,7 +152,11 @@ async def read_resource(uri: str) -> str:
         return json.dumps([b.model_dump() for b in benchmarks])
     elif uri_str.startswith("evalhub://providers/"):
         provider_id = uri_str.replace("evalhub://providers/", "")
-        provider = await _client.providers.get(provider_id)
+        # TODO: API seems doesn't support individual provider fetch, so filter from list
+        providers = await _client.providers.list()
+        provider = next((p for p in providers if p.id == provider_id), None)
+        if provider is None:
+            raise ValueError(f"Provider not found: {provider_id}")
         return provider.model_dump_json()
     else:
         raise ValueError(f"Unknown resource URI: {uri_str}")
