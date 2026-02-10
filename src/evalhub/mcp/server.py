@@ -21,6 +21,7 @@ from starlette.routing import Mount
 from starlette.types import Receive, Scope, Send
 
 from ..client import AsyncEvalHubClient
+from ..models import BenchmarkConfig, JobSubmissionRequest, ModelConfig
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,143 @@ async def list_resource_templates() -> list[types.ResourceTemplate]:
             mimeType="application/json",
         ),
     ]
+
+
+@app.list_tools()
+async def list_tools() -> list[types.Tool]:
+    """List all available MCP tools.
+
+    Returns:
+        List of tool definitions
+    """
+    if _client is None:
+        return []
+
+    return [
+        types.Tool(
+            name="create_evaluation_job",
+            description="Create a new evaluation job to evaluate a model on specified benchmarks",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "model_url": {
+                        "type": "string",
+                        "description": "Model endpoint URL (e.g., vLLM or OpenAI-compatible endpoint)",
+                    },
+                    "model_name": {
+                        "type": "string",
+                        "description": "Model name or identifier",
+                    },
+                    "benchmarks": {
+                        "type": "array",
+                        "description": "List of benchmarks to evaluate",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "benchmark_id": {
+                                    "type": "string",
+                                    "description": "Benchmark identifier",
+                                },
+                                "provider_id": {
+                                    "type": "string",
+                                    "description": "Provider identifier",
+                                },
+                                "parameters": {
+                                    "type": "object",
+                                    "description": "Benchmark-specific parameters",
+                                    "additionalProperties": True,
+                                },
+                            },
+                            "required": ["benchmark_id", "provider_id"],
+                        },
+                        "minItems": 1,
+                    },
+                    "timeout_minutes": {
+                        "type": "integer",
+                        "description": "Job timeout in minutes (optional)",
+                    },
+                    "retry_attempts": {
+                        "type": "integer",
+                        "description": "Number of retry attempts on failure (optional)",
+                    },
+                },
+                "required": ["model_url", "model_name", "benchmarks"],
+            },
+        ),
+    ]
+
+
+@app.call_tool()
+async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
+    """Handle tool calls.
+
+    Args:
+        name: The tool name
+        arguments: Tool arguments
+
+    Returns:
+        List of text content with tool results
+
+    Raises:
+        ValueError: If client is not initialized or tool is unknown
+        httpx.HTTPError: If API request fails
+    """
+    if _client is None:
+        raise ValueError("Client not initialized. Call set_client() first.")
+
+    if name == "create_evaluation_job":
+        # Extract parameters
+        model_url = arguments["model_url"]
+        model_name = arguments["model_name"]
+        benchmarks_data = arguments["benchmarks"]
+        timeout_minutes = arguments.get("timeout_minutes")
+        retry_attempts = arguments.get("retry_attempts")
+
+        # Build the job submission request
+        model = ModelConfig(url=model_url, name=model_name)
+        benchmarks = [
+            BenchmarkConfig(
+                id=b["benchmark_id"],
+                provider_id=b["provider_id"],
+                parameters=b.get("parameters", {}),
+            )
+            for b in benchmarks_data
+        ]
+
+        request = JobSubmissionRequest(
+            model=model,
+            benchmarks=benchmarks,
+            timeout_minutes=timeout_minutes,
+            retry_attempts=retry_attempts,
+        )
+
+        # Submit the job
+        job = await _client.jobs.submit(request)
+
+        # Return the job information
+        result = {
+            "job_id": job.id,
+            "state": job.state.value,
+            "model": {"url": job.model.url, "name": job.model.name},
+            "benchmarks": [
+                {
+                    "id": b.id,
+                    "provider_id": b.provider_id,
+                    "parameters": b.parameters,
+                }
+                for b in job.benchmarks
+            ],
+            "created_at": job.resource.created_at.isoformat(),
+        }
+
+        return [
+            types.TextContent(
+                type="text",
+                text=f"Successfully created evaluation job!\n\n{json.dumps(result, indent=2)}",
+            )
+        ]
+    else:
+        raise ValueError(f"Unknown tool: {name}")
 
 
 @app.completion()
