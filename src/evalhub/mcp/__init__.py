@@ -8,9 +8,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .server import mcp, run_server, set_client
+    from .server import app, run_server, set_client
 
-__all__ = ["mcp", "run_server", "set_client"]
+__all__ = ["app", "run_server", "set_client"]
 
 
 def __getattr__(name: str) -> Any:

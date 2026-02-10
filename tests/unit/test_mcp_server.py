@@ -1,29 +1,27 @@
 from collections.abc import AsyncGenerator
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
-from datetime import datetime, timezone
 
 import pytest
 import pytest_asyncio
-from inline_snapshot import snapshot
-from mcp.client.session import ClientSession
-
 from evalhub.mcp.server import app, set_client
 from evalhub.models import (
-    Provider,
     Benchmark,
+    BenchmarkConfig,
     EvaluationJob,
     EvaluationJobResource,
     EvaluationJobStatus,
     JobStatus,
-    BenchmarkConfig,
     ModelConfig,
+    Provider,
 )
-
+from inline_snapshot import snapshot
+from mcp.client.session import ClientSession
 from mcp.shared.memory import create_connected_server_and_client_session
 
 
 @pytest.fixture
-def anyio_backend():
+def anyio_backend() -> str:
     return "asyncio"
 
 
@@ -59,8 +57,8 @@ async def client_session() -> AsyncGenerator[ClientSession, None]:
         resource=EvaluationJobResource(
             id="test-job-123",
             tenant="test-tenant",
-            created_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
-            updated_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+            created_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
+            updated_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
         ),
         status=EvaluationJobStatus(
             state=JobStatus.PENDING,
@@ -97,7 +95,7 @@ async def client_session() -> AsyncGenerator[ClientSession, None]:
 
 
 @pytest.mark.anyio
-async def test_list_resources(client_session: ClientSession):
+async def test_list_resources(client_session: ClientSession) -> None:
     result = await client_session.list_resources()
     assert result.model_dump(mode="json") == snapshot(
         {
@@ -132,7 +130,7 @@ async def test_list_resources(client_session: ClientSession):
 
 
 @pytest.mark.anyio
-async def test_create_evaluation_job_tool(client_session: ClientSession):
+async def test_create_evaluation_job_tool(client_session: ClientSession) -> None:
     """Test the create_evaluation_job MCP tool."""
     result = await client_session.call_tool(
         "create_evaluation_job",

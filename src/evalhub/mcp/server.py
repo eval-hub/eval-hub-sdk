@@ -15,6 +15,7 @@ from collections.abc import AsyncIterator
 import mcp.types as types
 from mcp.server.lowlevel import Server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+from pydantic import AnyUrl
 from starlette.applications import Starlette
 from starlette.middleware.cors import CORSMiddleware
 from starlette.routing import Mount
@@ -32,11 +33,11 @@ app = Server("EvalHub SDK client based MCP Server")
 _client: AsyncEvalHubClient | None = None
 
 
-def set_client(client: AsyncEvalHubClient) -> None:
+def set_client(client: AsyncEvalHubClient | None) -> None:
     """Set the AsyncEvalHubClient instance to use for MCP resources.
 
     Args:
-        client: The AsyncEvalHubClient instance
+        client: The AsyncEvalHubClient instance or None to clear
     """
     global _client
     _client = client
@@ -54,13 +55,13 @@ async def list_resources() -> list[types.Resource]:
 
     return [
         types.Resource(
-            uri="evalhub://providers",
+            uri=AnyUrl("evalhub://providers"),
             name="List Providers",
             description="List all registered EvalHub providers",
             mimeType="application/json",
         ),
         types.Resource(
-            uri="evalhub://benchmarks",
+            uri=AnyUrl("evalhub://benchmarks"),
             name="List Benchmarks",
             description="List all available EvalHub benchmarks",
             mimeType="application/json",
@@ -357,7 +358,7 @@ def run_server(
             finally:
                 logger.info("EvalHub MCP server shutting down...")
 
-    starlette_app = Starlette(
+    base_app = Starlette(
         debug=True,
         routes=[
             Mount("/", app=handle_streamable_http),
@@ -366,7 +367,7 @@ def run_server(
     )
 
     starlette_app = CORSMiddleware(
-        starlette_app,
+        base_app,
         allow_origins=[
             "*"
         ],  # Allow all origins - TODO: adjust as needed for production
