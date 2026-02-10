@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock
+from datetime import datetime, timezone
 
 import pytest
 import pytest_asyncio
@@ -7,7 +8,16 @@ from inline_snapshot import snapshot
 from mcp.client.session import ClientSession
 
 from evalhub.mcp.server import app, set_client
-from evalhub.models import Provider, Benchmark
+from evalhub.models import (
+    Provider,
+    Benchmark,
+    EvaluationJob,
+    EvaluationJobResource,
+    EvaluationJobStatus,
+    JobStatus,
+    BenchmarkConfig,
+    ModelConfig,
+)
 
 from mcp.shared.memory import create_connected_server_and_client_session
 
@@ -45,6 +55,28 @@ async def client_session() -> AsyncGenerator[ClientSession, None]:
     mock_benchmarks_resource = MagicMock()
     mock_benchmarks_resource.list = AsyncMock(return_value=[mock_benchmark])
     mock_client.benchmarks = mock_benchmarks_resource
+    mock_job = EvaluationJob(
+        resource=EvaluationJobResource(
+            id="test-job-123",
+            tenant="test-tenant",
+            created_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+        ),
+        status=EvaluationJobStatus(
+            state=JobStatus.PENDING,
+        ),
+        model=ModelConfig(url="http://test-model.com", name="test-model"),
+        benchmarks=[
+            BenchmarkConfig(
+                id="test-benchmark",
+                provider_id="test-provider",
+                parameters={},
+            )
+        ],
+    )
+    mock_jobs_resource = MagicMock()
+    mock_jobs_resource.submit = AsyncMock(return_value=mock_job)
+    mock_client.jobs = mock_jobs_resource
 
     # Inject the mock client into the MCP server
     set_client(mock_client)
@@ -65,7 +97,7 @@ async def client_session() -> AsyncGenerator[ClientSession, None]:
 
 
 @pytest.mark.anyio
-async def test_list_resourcesl(client_session: ClientSession):
+async def test_list_resources(client_session: ClientSession):
     result = await client_session.list_resources()
     assert result.model_dump(mode="json") == snapshot(
         {
@@ -95,5 +127,61 @@ async def test_list_resourcesl(client_session: ClientSession):
                     "meta": None,
                 },
             ],
+        }
+    )
+
+
+@pytest.mark.anyio
+async def test_create_evaluation_job_tool(client_session: ClientSession):
+    """Test the create_evaluation_job MCP tool."""
+    result = await client_session.call_tool(
+        "create_evaluation_job",
+        {
+            "model_url": "http://test-model.com",
+            "model_name": "test-model",
+            "benchmarks": [
+                {
+                    "benchmark_id": "test-benchmark",
+                    "provider_id": "test-provider",
+                    "parameters": {},
+                }
+            ],
+        },
+    )
+
+    assert result.model_dump(mode="json") == snapshot(
+        {
+            "meta": None,
+            "content": [
+                {
+                    "type": "text",
+                    "text": snapshot(
+                        """\
+Successfully created evaluation job!
+
+{
+  "job_id": "test-job-123",
+  "state": "pending",
+  "model": {
+    "url": "http://test-model.com",
+    "name": "test-model"
+  },
+  "benchmarks": [
+    {
+      "id": "test-benchmark",
+      "provider_id": "test-provider",
+      "parameters": {}
+    }
+  ],
+  "created_at": "2024-01-01T12:00:00+00:00"
+}\
+"""
+                    ),
+                    "annotations": None,
+                    "meta": None,
+                }
+            ],
+            "structuredContent": None,
+            "isError": False,
         }
     )
