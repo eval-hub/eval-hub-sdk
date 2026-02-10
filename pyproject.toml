@@ -47,6 +47,14 @@ client = [
     "eval-hub-sdk[core]",
 ]
 
+# MCP server support
+mcp = [
+    "eval-hub-sdk[client]",
+    "mcp>=1.0.0",
+    "starlette>=0.20.0",
+    "uvicorn>=0.20.0",
+]
+
 # Development dependencies
 # NOTE: Versions should match .pre-commit-config.yaml and .github/workflows/pre-commit.yml
 dev = [
@@ -127,6 +135,8 @@ module = [
     "github.*",
     "evalhub_server.*",
     "evalhub_server",
+    "mcp.*",
+    "starlette.*",
 ]
 ignore_missing_imports = true
 
