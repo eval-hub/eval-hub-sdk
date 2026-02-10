@@ -10,7 +10,7 @@ import contextlib
 import json
 import logging
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 
 import mcp.types as types
 from mcp.server.lowlevel import Server
@@ -309,6 +309,7 @@ def run_server(
     port: int = 3001,
     json_response: bool = True,
     log_level: str = "INFO",
+    cors_allow_origins: Sequence[str] | None = None,
 ) -> None:
     """Run the MCP server.
 
@@ -319,6 +320,8 @@ def run_server(
         port: Port to listen on (default: 3001)
         json_response: Enable JSON responses instead of SSE streams (default: True)
         log_level: Logging level (default: INFO)
+        cors_allow_origins: List of allowed CORS origins. If None, CORS middleware
+                           is not applied. Use ["*"] to allow all origins.
     """
     logging.basicConfig(
         level=getattr(logging, log_level.upper()),
@@ -366,25 +369,28 @@ def run_server(
         lifespan=lifespan,
     )
 
-    starlette_app = CORSMiddleware(
-        base_app,
-        allow_origins=[
-            "*"
-        ],  # Allow all origins - TODO: adjust as needed for production
-        allow_methods=[
-            "GET",
-            "POST",
-            "DELETE",
-            "OPTIONS",
-        ],  # MCP streamable HTTP methods
-        allow_headers=["*"],  # Allow all headers
-        expose_headers=["Mcp-Session-Id"],
-    )
+    # Conditionally apply CORS middleware
+    final_app: Starlette | CORSMiddleware
+    if cors_allow_origins is not None:
+        final_app = CORSMiddleware(
+            base_app,
+            allow_origins=cors_allow_origins,
+            allow_methods=[
+                "GET",
+                "POST",
+                "DELETE",
+                "OPTIONS",
+            ],  # MCP streamable HTTP methods
+            allow_headers=["*"],  # Allow all headers
+            expose_headers=["Mcp-Session-Id"],
+        )
+    else:
+        final_app = base_app
 
     import uvicorn
 
-    uvicorn.run(starlette_app, host=host, port=port)
+    uvicorn.run(final_app, host=host, port=port)
 
 
 if __name__ == "__main__":
-    run_server()
+    run_server(cors_allow_origins=["*"])  # local mode = all CORS Origins
