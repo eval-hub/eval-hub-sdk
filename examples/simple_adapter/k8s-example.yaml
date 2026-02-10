@@ -22,11 +22,11 @@ data:
         "subject": "all"
       },
       "experiment_name": "llama-2-evaluation",
-      "tags": {
-        "model_family": "llama-2",
-        "model_size": "7b",
-        "env": "production"
-      },
+      "tags": [
+        {"key": "model_family", "value": "llama-2"},
+        {"key": "model_size", "value": "7b"},
+        {"key": "env", "value": "production"}
+      ],
       "timeout_seconds": 3600
     }
 

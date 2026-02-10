@@ -94,17 +94,59 @@ class TestJobSpec:
         assert spec.benchmark_config == {"subject": "physics", "difficulty": "hard"}
 
     def test_jobspec_with_custom_tags(self) -> None:
-        """Test JobSpec with custom tags."""
+        """Test JobSpec with custom tags in list-of-dicts format (eval-hub/eval-hub#166)."""
         spec = JobSpec(
             id="test-job-004",
             benchmark_id="arc",
             model=ModelConfig(url="http://localhost:8000", name="model"),
             benchmark_config={},
             callback_url="http://localhost:8080",
-            tags={"env": "test", "developer": "alice"},
+            tags=[
+                {"key": "env", "value": "test"},
+                {"key": "developer", "value": "alice"},
+            ],
         )
 
-        assert spec.tags == {"env": "test", "developer": "alice"}
+        assert spec.tags == [
+            {"key": "env", "value": "test"},
+            {"key": "developer", "value": "alice"},
+        ]
+
+    def test_jobspec_default_tags_is_empty_list(self) -> None:
+        """Test that tags default to an empty list."""
+        spec = JobSpec(
+            id="test-job-004b",
+            benchmark_id="arc",
+            model=ModelConfig(url="http://localhost:8000", name="model"),
+            benchmark_config={},
+            callback_url="http://localhost:8080",
+        )
+
+        assert spec.tags == []
+
+    def test_jobspec_from_file_with_list_tags(self, tmp_path: Path) -> None:
+        """Test loading JobSpec from JSON file with new list-of-dicts tags format."""
+        job_spec = {
+            "id": "test-job-005",
+            "benchmark_id": "mmlu",
+            "model": {"url": "http://localhost:8000", "name": "test-model"},
+            "benchmark_config": {},
+            "callback_url": "http://localhost:8080",
+            "tags": [
+                {"key": "team", "value": "ml-platform"},
+                {"key": "env", "value": "production"},
+            ],
+        }
+
+        spec_file = tmp_path / "job.json"
+        spec_file.write_text(json.dumps(job_spec))
+
+        spec = JobSpec.from_file(spec_file)
+
+        assert spec.tags == [
+            {"key": "team", "value": "ml-platform"},
+            {"key": "env", "value": "production"},
+        ]
 
     def test_jobspec_can_be_serialized_to_json(self) -> None:
         """Test JobSpec can be serialized to JSON."""

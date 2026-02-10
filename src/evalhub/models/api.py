@@ -116,8 +116,8 @@ class EvaluationRequest(BaseModel):
     experiment_name: str | None = Field(
         default=None, description="Name for this evaluation experiment"
     )
-    tags: dict[str, str] = Field(
-        default_factory=dict, description="Custom tags for the job"
+    tags: list[dict[str, str]] = Field(
+        default_factory=list, description="Custom tags for the job"
     )
     priority: int = Field(
         default=0, description="Job priority (higher = more priority)"
