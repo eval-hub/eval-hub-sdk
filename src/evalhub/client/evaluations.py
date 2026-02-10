@@ -14,7 +14,12 @@ from ..models import (
     JobsList,
     JobStatus,
 )
-from .base import BaseAsyncClient, BaseSyncClient
+from .base import (
+    BaseAsyncClient,
+    BaseSyncClient,
+    JobCanNotBeCancelledError,
+    JobNotFoundError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -65,18 +70,28 @@ class AsyncEvaluationsClient(BaseAsyncClient):
             job_id: The job identifier
 
         Returns:
-            bool: True if job was cancelled, False otherwise
+            bool: True if job was successfully cancelled
 
         Raises:
-            httpx.HTTPError: If request fails
+            JobNotFoundError: If the job does not exist or was already deleted (HTTP 404)
+            JobCanNotBeCancelledError: If the job cannot be cancelled, e.g. already
+                completed, failed, or cancelled (HTTP 400)
+            httpx.HTTPError: If request fails for other reasons
         """
         try:
             await self._request_delete(f"/evaluations/jobs/{job_id}")
             return True
-        except Exception as e:
-            if isinstance(e, httpx.HTTPStatusError):
-                if e.response.status_code in [404, 409]:
-                    return False  # Job not found or cannot be cancelled
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise JobNotFoundError(job_id, cause=e) from e
+            if e.response.status_code in [400, 409]:
+                reason = None
+                try:
+                    body = e.response.json()
+                    reason = body.get("message")
+                except Exception:
+                    pass
+                raise JobCanNotBeCancelledError(job_id, reason=reason, cause=e) from e
             raise
 
     async def list(
@@ -186,18 +201,28 @@ class SyncEvaluationsClient(BaseSyncClient):
             job_id: The job identifier
 
         Returns:
-            bool: True if job was cancelled, False otherwise
+            bool: True if job was successfully cancelled
 
         Raises:
-            httpx.HTTPError: If request fails
+            JobNotFoundError: If the job does not exist or was already deleted (HTTP 404)
+            JobCanNotBeCancelledError: If the job cannot be cancelled, e.g. already
+                completed, failed, or cancelled (HTTP 400)
+            httpx.HTTPError: If request fails for other reasons
         """
         try:
             self._request_delete(f"/evaluations/jobs/{job_id}")
             return True
-        except Exception as e:
-            if isinstance(e, httpx.HTTPStatusError):
-                if e.response.status_code in [404, 409]:
-                    return False  # Job not found or cannot be cancelled
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise JobNotFoundError(job_id, cause=e) from e
+            if e.response.status_code in [400, 409]:
+                reason = None
+                try:
+                    body = e.response.json()
+                    reason = body.get("message")
+                except Exception:
+                    pass
+                raise JobCanNotBeCancelledError(job_id, reason=reason, cause=e) from e
             raise
 
     def list(

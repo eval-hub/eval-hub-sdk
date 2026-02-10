@@ -28,7 +28,12 @@ from evalhub import (
     SyncEvaluationsClient,
     SyncProvidersClient,
 )
-from evalhub.client.base import BaseAsyncClient, BaseSyncClient
+from evalhub.client.base import (
+    BaseAsyncClient,
+    BaseSyncClient,
+    JobCanNotBeCancelledError,
+    JobNotFoundError,
+)
 from evalhub.models.api import (
     BenchmarkInfo,
     EvaluationJob,
@@ -450,10 +455,7 @@ class TestEvaluationsClient:
         reason="Skipping in real server mode - tests specific error condition",
     )
     def test_cancel_job_not_found(self) -> None:
-        """Test job cancellation when job is not found (synchronous).
-
-        Note: Skipped in real server mode - tests specific error condition.
-        """
+        """Test job cancellation raises JobNotFoundError on 404."""
         client = SyncEvaluationsClient()
 
         mock_response = Mock()
@@ -463,8 +465,60 @@ class TestEvaluationsClient:
         )
 
         with patch.object(client, "_request", side_effect=http_error):
-            result = client.cancel("non_existent")
-            assert result is False
+            with pytest.raises(JobNotFoundError) as exc_info:
+                client.cancel("non_existent")
+            assert exc_info.value.job_id == "non_existent"
+            assert exc_info.value.cause is http_error
+
+        client.close()
+
+    @pytest.mark.skipif(
+        EVALHUB_TEST_BASE_URL is not None,
+        reason="Skipping in real server mode - tests specific error condition",
+    )
+    def test_cancel_job_cannot_be_cancelled(self) -> None:
+        """Test job cancellation raises JobCanNotBeCancelledError on 400."""
+        client = SyncEvaluationsClient()
+
+        mock_response = Mock()
+        mock_response.status_code = 400
+        mock_response.json.return_value = {
+            "error": "JobCanNotBeCancelled",
+            "message": "The job job_456 can not be cancelled because it is 'completed'.",
+        }
+        http_error = httpx.HTTPStatusError(
+            "Bad request", request=Mock(), response=mock_response
+        )
+
+        with patch.object(client, "_request", side_effect=http_error):
+            with pytest.raises(JobCanNotBeCancelledError) as exc_info:
+                client.cancel("job_456")
+            assert exc_info.value.job_id == "job_456"
+            assert "completed" in str(exc_info.value.reason)
+            assert exc_info.value.cause is http_error
+
+        client.close()
+
+    @pytest.mark.skipif(
+        EVALHUB_TEST_BASE_URL is not None,
+        reason="Skipping in real server mode - tests specific error condition",
+    )
+    def test_cancel_job_cannot_be_cancelled_without_body(self) -> None:
+        """Test JobCanNotBeCancelledError when response body is not JSON."""
+        client = SyncEvaluationsClient()
+
+        mock_response = Mock()
+        mock_response.status_code = 400
+        mock_response.json.side_effect = ValueError("No JSON")
+        http_error = httpx.HTTPStatusError(
+            "Bad request", request=Mock(), response=mock_response
+        )
+
+        with patch.object(client, "_request", side_effect=http_error):
+            with pytest.raises(JobCanNotBeCancelledError) as exc_info:
+                client.cancel("job_789")
+            assert exc_info.value.job_id == "job_789"
+            assert exc_info.value.reason is None
 
         client.close()
 

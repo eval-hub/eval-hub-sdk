@@ -130,6 +130,28 @@ class ClientError(Exception):
         self.cause = cause
 
 
+class JobNotFoundError(ClientError):
+    """Raised when a job does not exist or has already been deleted."""
+
+    def __init__(self, job_id: str, cause: Exception | None = None) -> None:
+        super().__init__(f"Job '{job_id}' not found", cause=cause)
+        self.job_id = job_id
+
+
+class JobCanNotBeCancelledError(ClientError):
+    """Raised when a job cannot be cancelled (e.g. already completed, failed, or cancelled)."""
+
+    def __init__(
+        self, job_id: str, reason: str | None = None, cause: Exception | None = None
+    ) -> None:
+        msg = f"Job '{job_id}' cannot be cancelled"
+        if reason:
+            msg += f": {reason}"
+        super().__init__(msg, cause=cause)
+        self.job_id = job_id
+        self.reason = reason
+
+
 class BaseAsyncClient:
     """Base async client for EvalHub API communication.
 
