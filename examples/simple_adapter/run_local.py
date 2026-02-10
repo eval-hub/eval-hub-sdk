@@ -84,12 +84,13 @@ def main() -> None:
     # Create job specification
     # In production, this would be loaded from /meta/job.json
     spec_data = {
-        "job_id": "local-test-001",
+        "id": "local-test-001",
         "benchmark_id": "mmlu",
         "model": {
             "url": "http://localhost:8000/v1",  # Your local model server
             "name": "test-model",
         },
+        "callback_url": "unused",  # Mock URL for local testing
         "num_examples": 10,  # Small number for quick testing
         "benchmark_config": {
             "subject": "mathematics",
