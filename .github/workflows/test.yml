@@ -57,7 +57,7 @@ jobs:
     - name: Set up Python
       run: uv python install 3.12
     - name: Install dependencies
-      run: uv sync
+      run: uv sync --all-extras
     - name: Create kind cluster
       uses: helm/kind-action@v1
     - name: Deploy distribution registry

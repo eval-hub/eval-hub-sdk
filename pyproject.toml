@@ -177,6 +177,7 @@ dev = [
     "fastapi>=0.124.4",
     "httpx>=0.28.1",
     "inline-snapshot>=0.31.1",
+    "mcp>=1.0.0",
     "mypy>=1.7.1",
     "oras>=0.2.38",
     "pygithub>=2.1.1",
@@ -185,6 +186,7 @@ dev = [
     "pytest-cov>=4.1.0",
     "pyyaml>=6.0",
     "ruff==0.1.6",
+    "starlette>=0.20.0",
     "types-pyyaml>=6.0.12.20250915",
     "uvicorn>=0.38.0",
 ]

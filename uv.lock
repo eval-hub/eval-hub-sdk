@@ -714,6 +714,7 @@ dev = [
     { name = "fastapi" },
     { name = "httpx" },
     { name = "inline-snapshot" },
+    { name = "mcp" },
     { name = "mypy" },
     { name = "oras" },
     { name = "pygithub" },
@@ -722,6 +723,7 @@ dev = [
     { name = "pytest-cov" },
     { name = "pyyaml" },
     { name = "ruff" },
+    { name = "starlette" },
     { name = "types-pyyaml" },
     { name = "uvicorn" },
 ]
@@ -757,6 +759,7 @@ dev = [
     { name = "fastapi", specifier = ">=0.124.4" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "inline-snapshot", specifier = ">=0.31.1" },
+    { name = "mcp", specifier = ">=1.0.0" },
     { name = "mypy", specifier = ">=1.7.1" },
     { name = "oras", specifier = ">=0.2.38" },
     { name = "pygithub", specifier = ">=2.1.1" },
@@ -765,6 +768,7 @@ dev = [
     { name = "pytest-cov", specifier = ">=4.1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", specifier = "==0.1.6" },
+    { name = "starlette", specifier = ">=0.20.0" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20250915" },
     { name = "uvicorn", specifier = ">=0.38.0" },
 ]
