@@ -249,12 +249,6 @@ class JobSubmissionRequest(BaseModel):
     benchmarks: list[BenchmarkConfig] = Field(
         ..., description="List of benchmarks to evaluate", min_length=1
     )
-    timeout_minutes: int | None = Field(
-        default=None, description="Job timeout in minutes"
-    )
-    retry_attempts: int | None = Field(
-        default=None, description="Number of retry attempts on failure"
-    )
 
 
 class EvaluationJob(BaseModel):
@@ -275,12 +269,6 @@ class EvaluationJob(BaseModel):
     model: ModelConfig = Field(..., description="Model configuration")
     benchmarks: list[BenchmarkConfig] = Field(
         ..., description="Benchmark configurations"
-    )
-    timeout_minutes: int | None = Field(
-        default=None, description="Job timeout in minutes"
-    )
-    retry_attempts: int | None = Field(
-        default=None, description="Number of retry attempts"
     )
 
     # Convenience properties to access nested fields

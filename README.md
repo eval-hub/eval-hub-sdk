@@ -467,8 +467,6 @@ class JobSpec(BaseModel):
     num_examples: Optional[int]       # Number of examples to evaluate
     experiment_name: Optional[str]    # Experiment name
     tags: Dict[str, str]              # Custom tags (default: {})
-    timeout_seconds: Optional[int]    # Max execution time (default: 3600)
-    retry_attempts: Optional[int]     # Number of retry attempts on failure
 
     @classmethod
     def from_file(cls, path: Path | str) -> Self:

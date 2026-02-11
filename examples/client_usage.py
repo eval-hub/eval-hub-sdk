@@ -78,7 +78,6 @@ with SyncEvalHubClient() as eval_client:  # type: SyncEvalHubClient
     request = JobSubmissionRequest(
         model=model,
         benchmarks=[benchmark_config],
-        timeout_minutes=30,
     )
 
     try:

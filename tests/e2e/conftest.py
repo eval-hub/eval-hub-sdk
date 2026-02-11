@@ -181,7 +181,7 @@ def evalhub_server_with_real_config() -> Generator[str, None, None]:
 
         with open(log_file, "w") as log_f:
             server_process = subprocess.Popen(
-                [binary_path],
+                [binary_path, "--local"],
                 cwd=str(config_dir.parent),
                 stdout=log_f,
                 stderr=subprocess.STDOUT,

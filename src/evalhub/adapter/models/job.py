@@ -64,8 +64,6 @@ class JobSpec(BaseModel):
         - num_examples: Number of examples to evaluate (None = all)
         - experiment_name: Name for this evaluation experiment
         - tags: Custom tags for the job
-        - timeout_seconds: Maximum job execution time (default: 3600)
-        - retry_attempts: Number of retry attempts on failure
     """
 
     # ============================================================================
@@ -106,14 +104,6 @@ class JobSpec(BaseModel):
     )
     tags: list[dict[str, str]] = Field(
         default_factory=list, description="Custom tags for the job"
-    )
-
-    # Resource hints (optional)
-    timeout_seconds: int | None = Field(
-        default=3600, description="Maximum job execution time"
-    )
-    retry_attempts: int | None = Field(
-        default=None, description="Number of retry attempts on failure"
     )
 
     @classmethod
