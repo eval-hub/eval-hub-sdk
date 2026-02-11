@@ -4,11 +4,13 @@ pre-commit:
 
 .PHONY: test
 test:
-	uv run pytest
+	uv run pytest --color=yes -ra
 
 .PHONY: test-e2e
 test-e2e:
-	uv run pytest --e2e -s -x -q
+	@echo "*** WARN: Running E2E with uv run --no-sync so not to override any replacement for eval-hub-server ***"
+	uv run --no-sync uv pip show eval-hub-server
+	uv run --no-sync pytest --e2e -s -x --color=yes -ra
 
 .PHONY: ruff
 ruff:

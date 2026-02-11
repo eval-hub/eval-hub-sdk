@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+env:
+  MIN_PY_VER: "3.12"  # using same as in pyproject.toml
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -35,7 +38,7 @@ jobs:
         enable-cache: true
         cache-dependency-glob: "uv.lock"
     - name: Set up Python
-      run: uv python install 3.12  # using same as in pyproject.toml
+      run: uv python install ${{ env.MIN_PY_VER }}
     - name: Install dependencies
       run: uv sync --all-extras
     - name: Run ruff linting
@@ -46,7 +49,12 @@ jobs:
       run: uv run mypy src/evalhub
 
   e2e:
+    name: "Optional: E2E Tests (latest_eval_hub_server=${{ matrix.latest_eval_hub_server }})"
     runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      matrix:
+        latest_eval_hub_server: [true, false]
     steps:
     - uses: actions/checkout@v4
     - name: Set up uv
@@ -55,13 +63,20 @@ jobs:
         enable-cache: true
         cache-dependency-glob: "uv.lock"
     - name: Set up Python
-      run: uv python install 3.12
+      run: uv python install ${{ env.MIN_PY_VER }}
     - name: Install dependencies
-      run: uv sync
+      run: uv sync --all-extras
+    - name: Fetch latest eval-hub server from eval-hub repo workflow
+      if: matrix.latest_eval_hub_server == true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        uv run ./scripts/fetch_latest_eval_hub_server.py
+        tree .venv/lib/python${{ env.MIN_PY_VER }}/site-packages/evalhub_server
     - name: Create kind cluster
       uses: helm/kind-action@v1
     - name: Deploy distribution registry
       run: ./scripts/deploy_distribution_registry.sh
     - name: Run E2E tests
       run: |
-        uv run pytest --e2e --cov=src/evalhub --cov-report=term-missing --cov-report=xml
+        make test-e2e
