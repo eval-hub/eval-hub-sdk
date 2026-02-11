@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "eval-hub-sdk"
-version = "0.1.0a5"
+version = "0.1.0a6"
 description = "Python SDK for EvalHub: common models, REST API client, and framework adapter SDK"
 authors = [
     {name = "Rui Vieira", email = "rui@redhat.com"},
