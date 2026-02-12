@@ -41,6 +41,8 @@ core = [
 adapter = [
     "eval-hub-sdk[core]",
     "mlflow-skinny>=3.10.0rc0",
+    "olot>=0.1.0",
+    "oras>=0.2.0",
 ]
 
 # Client API - for end users in Jupyter notebooks and scripts

@@ -692,11 +692,15 @@ dependencies = [
 adapter = [
     { name = "httpx" },
     { name = "mlflow-skinny" },
+    { name = "olot" },
+    { name = "oras" },
 ]
 all = [
     { name = "httpx" },
     { name = "mlflow-skinny" },
     { name = "mypy" },
+    { name = "olot" },
+    { name = "oras" },
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -749,6 +753,8 @@ requires-dist = [
     { name = "lm-eval", marker = "extra == 'examples'", specifier = ">=0.4.0" },
     { name = "mlflow-skinny", marker = "extra == 'adapter'", specifier = ">=3.10.0rc0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = "==1.7.1" },
+    { name = "olot", marker = "extra == 'adapter'", specifier = ">=0.1.0" },
+    { name = "oras", marker = "extra == 'adapter'", specifier = ">=0.2.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.4.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },
@@ -2316,6 +2322,19 @@ wheels = [
 ]
 
 [[package]]
+name = "olot"
+version = "0.1.13"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/9e/cc/e18944e3c6af81d690e5c3bc24068459cd3b84f38f196e11941a0235f701/olot-0.1.13.tar.gz", hash = "sha256:a553c0e1798156ec13257689d483993363303de8573cc91465c48edb1c66b70f", size = 25432, upload-time = "2025-11-26T15:30:50.252Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/46/dc/799d7027883a6cf70802f380f5715aa41870ea07b5017bd2916799909751/olot-0.1.13-py3-none-any.whl", hash = "sha256:fa5dff7f5766c62e49fc49983546b6e8050268b4733f9dd2fb305a402f6e939a", size = 32481, upload-time = "2025-11-26T15:30:48.832Z" },
+]
+
+[[package]]
 name = "openai"
 version = "2.11.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2388,15 +2407,15 @@ wheels = [
 
 [[package]]
 name = "oras"
-version = "0.2.38"
+version = "0.2.39"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonschema" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c3/78/16f3847ef31a3b1410c401712336a9c5d90fa97c3cc1f4bacd9dcfced9b7/oras-0.2.38.tar.gz", hash = "sha256:58482f78275cb5cc9fdf135248ca878a19204428a51bd3a1ca24c32714d35341", size = 44755, upload-time = "2025-09-08T13:45:29.372Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d0/79/804ad8eb314929aa37a4d88f1dcfb683fc0d93f6e270739d07da4d8f5dee/oras-0.2.39.tar.gz", hash = "sha256:cf6103f35ae59227e6a5185479b5eda319aae57c6b8bacc35218ee551db647c3", size = 55504, upload-time = "2026-02-11T17:44:17.013Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/92/a4/f98db9c8498b11d8e82fccb343f189880a8fc33d496e7f8f9c0bbcbfbf64/oras-0.2.38-py3-none-any.whl", hash = "sha256:a97658086cea1e1ebb412a5b504005480c70de5d2e81a160d33e60fc187d42f4", size = 50249, upload-time = "2025-09-08T13:45:27.785Z" },
+    { url = "https://files.pythonhosted.org/packages/06/88/de8b9a57cad9fc33e8b0ae8816126b7b02d2d52a9fa9cf2094a0b04a22f0/oras-0.2.39-py3-none-any.whl", hash = "sha256:5764a57af95b4fe1bfac82f5d20065f9bace3a0b1fc5f8db0410da61212cab6d", size = 68663, upload-time = "2026-02-11T17:44:15.882Z" },
 ]
 
 [[package]]

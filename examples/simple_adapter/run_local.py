@@ -22,6 +22,7 @@ from evalhub.adapter import (
 )
 
 # Import the example adapter from the local file
+from evalhub.adapter.oci.adapter import OCIArtifactPersister
 from simple_adapter import ExampleAdapter
 
 # Configure logging
@@ -51,6 +52,8 @@ class LocalCallbacks(JobCallbacks):
             f"Would create OCI artifact with {len(spec.files)} files "
             f"for job {spec.id}"
         )
+        logger.info(f"Creating OCI artifact for job {spec.id}")
+        OCIArtifactPersister("some.registry").persist(spec)
 
         # In local mode, we just return a mock result
         # In production, this would push to an actual registry
