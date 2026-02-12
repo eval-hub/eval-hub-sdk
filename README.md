@@ -466,7 +466,7 @@ class JobSpec(BaseModel):
     # Optional fields
     num_examples: Optional[int]       # Number of examples to evaluate
     experiment_name: Optional[str]    # Experiment name
-    tags: Dict[str, str]              # Custom tags (default: {})
+    tags: list[dict[str, str]]        # Custom tags (default: [])
 
     @classmethod
     def from_file(cls, path: Path | str) -> Self:

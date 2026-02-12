@@ -98,10 +98,10 @@ def main() -> None:
             "random_seed": 42,
         },
         "experiment_name": "local-test",
-        "tags": {
-            "env": "local",
-            "test": "true",
-        },
+        "tags": [
+            {"key": "env", "value": "local"},
+            {"key": "test", "value": "true"},
+        ],
     }
 
     # For local testing, create a temporary job spec file
