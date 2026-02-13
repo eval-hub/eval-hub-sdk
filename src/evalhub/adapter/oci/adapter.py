@@ -39,7 +39,7 @@ class OCIArtifactPersister:
             insecure: Allow insecure connections
         """
         self.registry_url = registry_url or "localhost:5000"
-        self._persister = OriginalPersister()
+        self._persister = OriginalPersister(self.registry_url)
 
     def persist(self, spec: OCIArtifactSpec) -> OCIArtifactResult:
         """Persist artifact specification.

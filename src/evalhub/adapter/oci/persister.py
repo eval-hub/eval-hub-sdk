@@ -44,6 +44,10 @@ class Persister(Protocol):
 class OCIArtifactPersister:
     """Placeholder OCI artifact persister."""
 
+    def __init__(self, registry: str):
+        self.registry = registry
+
+
     async def persist(
         self,
         files_location: EvaluationJobFilesLocation,
@@ -101,8 +105,8 @@ class OCIArtifactPersister:
         requests_log.setLevel(logging.DEBUG)
         requests_log.propagate = True
         provider = oras.provider.Registry()
-        provider.auth.hostname = "quay.io"
-        provider.auth.load_configs("quay.io")
+        provider.auth.hostname = self.registry
+        provider.auth.load_configs(self.registry)
         response = Layout(str(temp_path)).push_to_registry(
             provider=provider,
             target="quay.io/mmortari/demo20260212:latest",

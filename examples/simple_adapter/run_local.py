@@ -53,7 +53,7 @@ class LocalCallbacks(JobCallbacks):
             f"for job {spec.id}"
         )
         logger.info(f"Creating OCI artifact for job {spec.id}")
-        OCIArtifactPersister("some.registry").persist(spec)
+        OCIArtifactPersister("quay.io").persist(spec)
 
         # In local mode, we just return a mock result
         # In production, this would push to an actual registry
