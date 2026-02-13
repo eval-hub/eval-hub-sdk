@@ -40,7 +40,7 @@ core = [
 # Adapter development - for building custom evaluation framework adapters
 adapter = [
     "eval-hub-sdk[core]",
-    "mlflow-skinny>=3.9.0",
+    "mlflow-skinny @ git+https://github.com/red-hat-data-services/mlflow@main#subdirectory=libs/skinny",
 ]
 
 # Client API - for end users in Jupyter notebooks and scripts

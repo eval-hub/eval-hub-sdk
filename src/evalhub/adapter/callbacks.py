@@ -1,6 +1,7 @@
 """Default callback implementation for adapters."""
 
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -424,6 +425,19 @@ class DefaultCallbacks(JobCallbacks):
             return
 
         try:
+            # Load auth token from projected volume if configured.
+            # On ROSA/STS clusters the auto-mounted SA token has the wrong audience,
+            # so the operator mounts a projected token with the default K8s API audience.
+            token_path = os.environ.get("MLFLOW_TRACKING_TOKEN_PATH")
+            if token_path:
+                try:
+                    with open(token_path) as f:
+                        token = f.read().strip()
+                    if token:
+                        os.environ["MLFLOW_TRACKING_TOKEN"] = token
+                except OSError as e:
+                    logger.warning(f"Could not read MLFlow token from {token_path}: {e}")
+
             # Set or create experiment
             mlflow.set_experiment(job_spec.experiment_name)  # type: ignore[attr-defined]
 
@@ -435,10 +449,10 @@ class DefaultCallbacks(JobCallbacks):
                 mlflow.log_param("num_examples_evaluated", results.num_examples_evaluated)  # type: ignore[attr-defined]
                 mlflow.log_param("duration_seconds", results.duration_seconds)  # type: ignore[attr-defined]
 
-                # Log tags from job spec
+                # Log tags from job spec (tags is list[dict] with "key"/"value" entries)
                 if job_spec.tags:
-                    for key, value in job_spec.tags.items():
-                        mlflow.set_tag(key, value)  # type: ignore[attr-defined]
+                    for tag in job_spec.tags:
+                        mlflow.set_tag(tag["key"], tag["value"])  # type: ignore[attr-defined]
 
                 # Log evaluation metrics
                 for result in results.results:
