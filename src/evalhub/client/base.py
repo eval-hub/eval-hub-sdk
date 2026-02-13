@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json as json_module
 import logging
 import random
 import time
@@ -12,6 +13,43 @@ from typing import Any, Self, cast
 import httpx
 
 logger = logging.getLogger(__name__)
+
+
+def _log_http_error(
+    error: httpx.HTTPStatusError,
+    method: str,
+    url: str,
+    kwargs: dict[str, Any],
+) -> None:
+    """Log detailed request/response information when an HTTP error occurs.
+
+    Args:
+        error: The HTTP status error
+        method: HTTP method used
+        url: Request URL
+        kwargs: Additional arguments passed to httpx (may contain json, data, etc.)
+    """
+    request_body = kwargs.get("json") or kwargs.get("data")
+    if request_body is not None:
+        try:
+            body_str = json_module.dumps(request_body, indent=2, default=str)
+        except (TypeError, ValueError):
+            body_str = str(request_body)
+        logger.error(f"HTTP {method} {url} request payload:\n{body_str}")
+
+    try:
+        response_text = error.response.text
+        try:
+            response_text = json_module.dumps(
+                json_module.loads(response_text), indent=2
+            )
+        except (json_module.JSONDecodeError, ValueError):
+            pass
+    except Exception:
+        response_text = "<unable to read response body>"
+    logger.error(
+        f"HTTP {error.response.status_code} response from {method} {url}:\n{response_text}"
+    )
 
 
 def _calculate_retry_delay(
@@ -300,6 +338,8 @@ class BaseAsyncClient:
 
             except httpx.HTTPStatusError as e:
                 last_exception = e
+                # Log detailed request/response info for debugging
+                _log_http_error(e, method, url, kwargs)
                 # Provide helpful error messages for authentication/authorization failures
                 if e.response.status_code == 401:
                     logger.error(
@@ -575,6 +615,8 @@ class BaseSyncClient:
 
             except httpx.HTTPStatusError as e:
                 last_exception = e
+                # Log detailed request/response info for debugging
+                _log_http_error(e, method, url, kwargs)
                 # Provide helpful error messages for authentication/authorization failures
                 if e.response.status_code == 401:
                     logger.error(

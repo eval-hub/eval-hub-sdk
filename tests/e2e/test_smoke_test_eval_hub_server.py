@@ -37,7 +37,7 @@ def test_jobs_endpoint(evalhub_server_with_real_config: str) -> None:
         model = ModelConfig(url="http://test-model-server:8000", name="test-model")
 
         benchmark = BenchmarkConfig(
-            id="test_benchmark", provider_id="test_provider", parameters={"myparam": 5}
+            id="toxicity", provider_id="garak", parameters={"myparam": 5}
         )
 
         job_request = JobSubmissionRequest(model=model, benchmarks=[benchmark])
