@@ -43,9 +43,14 @@ class AsyncProvidersResource:
             httpx.HTTPError: If provider not found or request fails
         """
         response = await self._client._request_get(
-            f"/evaluations/providers/{provider_id}"
+            f"/evaluations/providers?id={provider_id}"
         )
-        return Provider(**response.json())
+        provider_list = ProviderList(**response.json())
+        if provider_list.total_count != 1:
+            raise ValueError(
+                f"Expected exactly 1 provider for id '{provider_id}', got {provider_list.total_count}"
+            )
+        return provider_list.items[0]
 
 
 class SyncProvidersResource:
@@ -80,5 +85,10 @@ class SyncProvidersResource:
         Raises:
             httpx.HTTPError: If provider not found or request fails
         """
-        response = self._client._request_get(f"/evaluations/providers/{provider_id}")
-        return Provider(**response.json())
+        response = self._client._request_get(f"/evaluations/providers?id={provider_id}")
+        provider_list = ProviderList(**response.json())
+        if provider_list.total_count != 1:
+            raise ValueError(
+                f"Expected exactly 1 provider for id '{provider_id}', got {provider_list.total_count}"
+            )
+        return provider_list.items[0]

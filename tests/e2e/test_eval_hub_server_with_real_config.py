@@ -131,6 +131,38 @@ def test_providers_endpoint_with_real_config(
 
 
 @pytest.mark.e2e
+def test_provider_single_endpoint_with_real_config(
+    evalhub_server_with_real_config: str,
+) -> None:
+    """Verify that providers and benchmarks match the YAML configuration files."""
+    # Gather test data from provider YAML files
+    config_dir = Path(__file__).parent / "config" / "providers"
+    provider_yamls = {}
+    for yaml_file in config_dir.glob("*.yaml"):
+        with open(yaml_file) as f:
+            data = yaml.safe_load(f)
+            provider_id = data["id"]
+            assert (
+                provider_id not in provider_yamls
+            ), f"Duplicate provider.id '{provider_id}' in {yaml_file}"
+            provider_yamls[provider_id] = data
+
+    # Get each provider individually from server and verify against YAML
+    with SyncEvalHubClient(base_url=evalhub_server_with_real_config) as client:
+        for provider_id, yaml_data in provider_yamls.items():
+            provider = client.providers.get(provider_id=provider_id)
+
+            assert provider.id == provider_id
+            assert provider.name == yaml_data["name"]
+            assert provider.description == yaml_data["description"]
+            assert provider.type == yaml_data["type"]
+
+            yaml_benchmark_ids = {b["id"] for b in yaml_data.get("benchmarks", [])}
+            provider_benchmark_ids = {b.id for b in provider.benchmarks}
+            assert provider_benchmark_ids == yaml_benchmark_ids
+
+
+@pytest.mark.e2e
 def test_health_endpoint_with_real_config(evalhub_server_with_real_config: str) -> None:
     """Verify health endpoint works with real config."""
     with SyncEvalHubClient(base_url=evalhub_server_with_real_config) as client:
