@@ -43,7 +43,7 @@ class AsyncProvidersResource:
             httpx.HTTPError: If provider not found or request fails
         """
         response = await self._client._request_get(
-            f"/evaluations/providers?id={provider_id}"
+            "/evaluations/providers", params={"id": provider_id}
         )
         provider_list = ProviderList(**response.json())
         if provider_list.total_count != 1:
@@ -85,7 +85,9 @@ class SyncProvidersResource:
         Raises:
             httpx.HTTPError: If provider not found or request fails
         """
-        response = self._client._request_get(f"/evaluations/providers?id={provider_id}")
+        response = self._client._request_get(
+            "/evaluations/providers", params={"id": provider_id}
+        )
         provider_list = ProviderList(**response.json())
         if provider_list.total_count != 1:
             raise ValueError(
