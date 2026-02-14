@@ -258,50 +258,40 @@ class TestOCIArtifactSpec:
 
     def test_creating_an_oci_artifact_specification(self) -> None:
         """Test creating an OCI artifact specification."""
-        files = [Path("/tmp/results.json"), Path("/tmp/summary.txt")]
+        from evalhub.models.api import OCICoordinates
 
         spec = OCIArtifactSpec(
-            files=files,
-            id="test-job-001",
-            benchmark_id="mmlu",
-            model_name="test-model",
-            title="Test Results",
-            description="Results from test job",
+            files_path=Path("/tmp/results"),
+            coordinates=OCICoordinates(
+                oci_host="ghcr.io",
+                oci_repository="org/repo",
+                oci_tag="eval-123",
+            ),
         )
 
-        assert spec.files == files
-        assert spec.id == "test-job-001"
-        assert spec.benchmark_id == "mmlu"
-        assert spec.model_name == "test-model"
-        assert spec.title == "Test Results"
+        assert spec.files_path == Path("/tmp/results")
+        assert spec.coordinates.oci_host == "ghcr.io"
+        assert spec.coordinates.oci_repository == "org/repo"
+        assert spec.coordinates.oci_tag == "eval-123"
 
-    def test_artifact_spec_with_base_path(self) -> None:
-        """Test artifact spec with base path."""
+    def test_artifact_spec_with_annotations(self) -> None:
+        """Test artifact spec with custom annotations on coordinates."""
+        from evalhub.models.api import OCICoordinates
+
         spec = OCIArtifactSpec(
-            files=[Path("results.json")],
-            base_path=Path("/tmp/job-001"),
-            id="test-job-001",
-            benchmark_id="mmlu",
-            model_name="model",
+            files_path=Path("/tmp/job-001"),
+            coordinates=OCICoordinates(
+                oci_host="ghcr.io",
+                oci_repository="org/repo",
+                annotations={
+                    "score": "0.85",
+                    "framework": "lm-eval",
+                },
+            ),
         )
 
-        assert spec.base_path == Path("/tmp/job-001")
-
-    def test_artifact_spec_with_custom_annotations(self) -> None:
-        """Test artifact spec with custom annotations."""
-        spec = OCIArtifactSpec(
-            files=[Path("results.json")],
-            id="test-job-001",
-            benchmark_id="mmlu",
-            model_name="model",
-            annotations={
-                "score": "0.85",
-                "framework": "lm-eval",
-            },
-        )
-
-        assert spec.annotations["score"] == "0.85"
-        assert spec.annotations["framework"] == "lm-eval"
+        assert spec.coordinates.annotations["score"] == "0.85"
+        assert spec.coordinates.annotations["framework"] == "lm-eval"
 
 
 class TestOCIArtifactResult:
@@ -312,13 +302,10 @@ class TestOCIArtifactResult:
         result = OCIArtifactResult(
             digest="sha256:abc123...",
             reference="ghcr.io/eval-hub/results:test@sha256:abc123...",
-            size_bytes=1048576,
         )
 
         assert result.digest == "sha256:abc123..."
         assert result.reference == "ghcr.io/eval-hub/results:test@sha256:abc123..."
-        assert result.size_bytes == 1048576
-        assert isinstance(result.created_at, datetime)
 
 
 class TestJobResults:
@@ -385,7 +372,6 @@ class TestJobResults:
         artifact = OCIArtifactResult(
             digest="sha256:abc123",
             reference="ghcr.io/eval-hub/results:test",
-            size_bytes=1024,
         )
 
         results = JobResults(
@@ -426,6 +412,7 @@ class TestJobCallbacks:
 
     def test_implementing_jobcallbacks_with_a_mock(self) -> None:
         """Test implementing JobCallbacks with a mock."""
+        from evalhub.models.api import OCICoordinates
 
         class MockCallbacks(JobCallbacks):
             def __init__(self) -> None:
@@ -441,7 +428,6 @@ class TestJobCallbacks:
                 return OCIArtifactResult(
                     digest="sha256:test",
                     reference="test://artifact",
-                    size_bytes=1024,
                 )
 
             def report_results(self, results: JobResults) -> None:
@@ -464,10 +450,11 @@ class TestJobCallbacks:
 
         # Test create_oci_artifact
         spec = OCIArtifactSpec(
-            files=[Path("/tmp/test.json")],
-            id="test",
-            benchmark_id="mmlu",
-            model_name="model",
+            files_path=Path("/tmp/test"),
+            coordinates=OCICoordinates(
+                oci_host="ghcr.io",
+                oci_repository="org/repo",
+            ),
         )
         result = callbacks.create_oci_artifact(spec)
 
@@ -562,7 +549,7 @@ class TestFrameworkAdapter:
                 # Unused but required by interface
                 _ = spec
                 return OCIArtifactResult(
-                    digest="sha256:test", reference="test", size_bytes=1024
+                    digest="sha256:test", reference="test"
                 )
 
             def report_results(self, results: JobResults) -> None:

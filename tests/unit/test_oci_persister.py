@@ -1,269 +1,173 @@
 """Unit tests for OCI persister."""
 
-from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 from evalhub.adapter.models import OCIArtifactResult, OCIArtifactSpec
 from evalhub.adapter.oci import OCIArtifactPersister
-from evalhub.models.api import (
-    BenchmarkConfig,
-    EvaluationJob,
-    EvaluationJobFilesLocation,
-    EvaluationJobResource,
-    EvaluationJobStatus,
-    JobStatus,
-    ModelConfig,
-    OCICoordinate,
-)
+from evalhub.models.api import OCICoordinates
 
 
-class TestOCIArtifactPersisterBridge:
-    """Tests for OCIArtifactPersister bridge adapter."""
+class TestOCIArtifactPersisterInit:
+    """Tests for OCIArtifactPersister initialization."""
 
     def test_persister_initialization(self) -> None:
-        """Test persister can be initialized."""
+        """Test persister can be initialized with required args."""
+        persister = OCIArtifactPersister(job_id="job-123")
+        assert persister.job_id == "job-123"
+        assert persister.oci_auth_config_path is None
+        assert persister.oci_insecure is False
+
+    def test_persister_with_all_options(self, tmp_path: Path) -> None:
+        """Test persister with all optional args."""
+        auth_path = tmp_path / "auth.json"
+        auth_path.write_text("{}")
         persister = OCIArtifactPersister(
-            registry_url="ghcr.io",
-            username="user",
-            password="token",
-            insecure=False,
+            job_id="job-456",
+            oci_auth_config_path=auth_path,
+            oci_insecure=True,
         )
-        assert persister.registry_url == "ghcr.io"
+        assert persister.job_id == "job-456"
+        assert persister.oci_auth_config_path == auth_path
+        assert persister.oci_insecure is True
 
-    def test_persister_default_registry(self) -> None:
-        """Test persister uses default registry if not provided."""
-        persister = OCIArtifactPersister()
-        assert persister.registry_url == "localhost:5000"
 
-    def test_persist_converts_spec_and_returns_result(self, tmp_path: Path) -> None:
-        """Test persist converts new adapter spec to legacy format and returns result."""
-        # Create test files
-        test_dir = tmp_path / "test_job"
-        test_dir.mkdir()
-        (test_dir / "file1.txt").write_text("test content 1")
-        (test_dir / "file2.txt").write_text("test content 2")
+class TestOCIArtifactPersisterPersist:
+    """Tests for OCIArtifactPersister.persist method."""
 
-        persister = OCIArtifactPersister(registry_url="ghcr.io")
+    def test_persist_raises_on_none_path(self) -> None:
+        """Test that OCIArtifactSpec rejects None as files_path."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            OCIArtifactSpec(
+                files_path=None,  # type: ignore[arg-type]
+                coordinates=OCICoordinates(
+                    oci_host="ghcr.io", oci_repository="org/repo"
+                ),
+            )
+
+    def test_persist_raises_on_nonexistent_path(self) -> None:
+        """Test persist raises ValueError when path doesn't exist."""
+        persister = OCIArtifactPersister(job_id="job-123")
 
         spec = OCIArtifactSpec(
-            files=[test_dir / "file1.txt", test_dir / "file2.txt"],
-            base_path=test_dir,
-            id="test_job",
-            benchmark_id="mmlu",
-            model_name="test_model",
-            title="Test Results",
+            files_path=Path("/nonexistent/path"),
+            coordinates=OCICoordinates(
+                oci_host="ghcr.io", oci_repository="org/repo"
+            ),
         )
 
-        result = persister.persist(spec)
+        with pytest.raises(ValueError, match="does not exists"):
+            persister.persist(spec)
 
-        # Verify result format
-        assert isinstance(result, OCIArtifactResult)
-        assert result.digest.startswith("sha256:")
-        assert "ghcr.io/eval-results/mmlu:test_job" in result.reference
-        assert result.size_bytes > 0
-
-    def test_persist_with_empty_directory(self, tmp_path: Path) -> None:
-        """Test persist with empty directory."""
-        test_dir = tmp_path / "empty"
+    @patch("evalhub.adapter.oci.persister.oras.provider.Registry")
+    @patch("evalhub.adapter.oci.persister.Layout")
+    @patch("evalhub.adapter.oci.persister.create_simple_oci_artifact")
+    def test_persist_success(
+        self,
+        mock_create_artifact: MagicMock,
+        mock_layout_cls: MagicMock,
+        mock_registry_cls: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Test persist creates artifact and pushes to registry."""
+        test_dir = tmp_path / "output"
         test_dir.mkdir()
-
-        persister = OCIArtifactPersister()
-
-        spec = OCIArtifactSpec(
-            files=[],
-            base_path=test_dir,
-            id="test_job",
-            benchmark_id="test",
-            model_name="model",
-        )
-
-        result = persister.persist(spec)
-
-        assert result.digest.startswith("sha256:")
-        assert result.size_bytes == 0  # No files
-
-    def test_persist_with_nested_directory(self, tmp_path: Path) -> None:
-        """Test persist counts files in nested directories."""
-        test_dir = tmp_path / "nested"
-        test_dir.mkdir()
-
-        # Create nested structure
         (test_dir / "result.json").write_text('{"score": 0.95}')
-        subdir = test_dir / "subdir"
-        subdir.mkdir()
-        (subdir / "file2.txt").write_text("content")
-        (subdir / "file3.json").write_text("{}")
 
-        persister = OCIArtifactPersister()
+        mock_response = MagicMock()
+        mock_response.status_code = 201
+        mock_response.headers = {
+            "Docker-Content-Digest": "sha256:abc123"
+        }
+        mock_layout_cls.return_value.push_to_registry.return_value = mock_response
+
+        persister = OCIArtifactPersister(job_id="job-123")
 
         spec = OCIArtifactSpec(
-            files=[test_dir / "result.json"],
-            base_path=test_dir,
-            id="test_job",
-            benchmark_id="test",
-            model_name="model",
+            files_path=test_dir,
+            coordinates=OCICoordinates(
+                oci_host="ghcr.io",
+                oci_repository="org/repo",
+                oci_tag="eval-123",
+            ),
         )
 
         result = persister.persist(spec)
 
-        # Size should reflect file count (1024 bytes per file placeholder)
-        assert result.size_bytes == 3 * 1024  # 3 files total in directory
+        assert isinstance(result, OCIArtifactResult)
+        assert result.digest == "sha256:abc123"
+        assert result.reference == "ghcr.io/org/repo:eval-123@sha256:abc123"
+        mock_create_artifact.assert_called_once()
 
-    def test_persist_with_custom_registry(self, tmp_path: Path) -> None:
-        """Test persist with custom registry URL."""
-        test_dir = tmp_path / "test"
+    @patch("evalhub.adapter.oci.persister.oras.provider.Registry")
+    @patch("evalhub.adapter.oci.persister.Layout")
+    @patch("evalhub.adapter.oci.persister.create_simple_oci_artifact")
+    def test_persist_uses_default_tag_from_job_id(
+        self,
+        mock_create_artifact: MagicMock,
+        mock_layout_cls: MagicMock,
+        mock_registry_cls: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Test persist uses job_id-based tag when oci_tag is not set."""
+        test_dir = tmp_path / "output"
         test_dir.mkdir()
         (test_dir / "file.txt").write_text("content")
 
-        persister = OCIArtifactPersister(registry_url="custom.registry.io")
+        mock_response = MagicMock()
+        mock_response.status_code = 201
+        mock_response.headers = {
+            "Docker-Content-Digest": "sha256:def456"
+        }
+        mock_layout_cls.return_value.push_to_registry.return_value = mock_response
+
+        persister = OCIArtifactPersister(job_id="my-job")
 
         spec = OCIArtifactSpec(
-            files=[test_dir / "file.txt"],
-            base_path=test_dir,
-            id="job-123",
-            benchmark_id="gsm8k",
-            model_name="model",
+            files_path=test_dir,
+            coordinates=OCICoordinates(
+                oci_host="ghcr.io",
+                oci_repository="org/repo",
+                # oci_tag not set
+            ),
         )
 
         result = persister.persist(spec)
 
-        assert "custom.registry.io/eval-results/gsm8k:job-123" in result.reference
+        assert result.reference == "ghcr.io/org/repo:evalhub-job-my-job@sha256:def456"
 
-
-@pytest.mark.asyncio
-class TestOriginalOCIPersister:
-    """Tests for the original OCI persister (placeholder implementation)."""
-
-    async def test_persister_no_op_returns_response(self, tmp_path: Path) -> None:
-        """Test no-op persister returns valid response."""
-        from evalhub.adapter.oci.persister import (
-            OCIArtifactPersister as OriginalPersister,
-        )
-
-        # Create test directory with files
-        test_dir = tmp_path / "test_job"
+    @patch("evalhub.adapter.oci.persister.oras.provider.Registry")
+    @patch("evalhub.adapter.oci.persister.Layout")
+    @patch("evalhub.adapter.oci.persister.create_simple_oci_artifact")
+    def test_persist_raises_on_push_failure(
+        self,
+        mock_create_artifact: MagicMock,
+        mock_layout_cls: MagicMock,
+        mock_registry_cls: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Test persist raises RuntimeError when push fails."""
+        test_dir = tmp_path / "output"
         test_dir.mkdir()
-        (test_dir / "file1.txt").write_text("test content 1")
-        (test_dir / "file2.txt").write_text("test content 2")
+        (test_dir / "file.txt").write_text("content")
 
-        persister = OriginalPersister()
-        files_location = EvaluationJobFilesLocation(id="test_job", path=str(test_dir))
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.text = "Internal Server Error"
+        mock_layout_cls.return_value.push_to_registry.return_value = mock_response
 
-        now = datetime.now(UTC)
-        job = EvaluationJob(
-            resource=EvaluationJobResource(
-                id="test_job",
-                tenant="default",
-                created_at=now,
-                updated_at=now,
+        persister = OCIArtifactPersister(job_id="job-123")
+
+        spec = OCIArtifactSpec(
+            files_path=test_dir,
+            coordinates=OCICoordinates(
+                oci_host="ghcr.io",
+                oci_repository="org/repo",
             ),
-            status=EvaluationJobStatus(state=JobStatus.COMPLETED),
-            model=ModelConfig(url="http://localhost:8000/v1", name="test_model"),
-            benchmarks=[
-                BenchmarkConfig(
-                    id="test_benchmark",
-                    provider_id="test_provider",
-                    parameters={},
-                )
-            ],
         )
 
-        coordinate = OCICoordinate(oci_ref="ghcr.io/test/repo:latest")
-
-        response = await persister.persist(
-            files_location=files_location,
-            coordinate=coordinate,
-            job=job,
-        )
-
-        assert response.id == "test_job"
-        assert response.files_count == 2
-        assert response.digest.startswith("sha256:")
-        assert response.oci_ref.startswith("ghcr.io/test/repo:latest@sha256:")
-        assert response.metadata["placeholder"] is True
-        assert "not yet implemented" in response.metadata["message"]
-
-    async def test_persister_empty_directory(self, tmp_path: Path) -> None:
-        """Test persister with empty directory."""
-        from evalhub.adapter.oci.persister import (
-            OCIArtifactPersister as OriginalPersister,
-        )
-
-        test_dir = tmp_path / "empty"
-        test_dir.mkdir()
-
-        persister = OriginalPersister()
-        files_location = EvaluationJobFilesLocation(id="test_job", path=str(test_dir))
-
-        now = datetime.now(UTC)
-        job = EvaluationJob(
-            resource=EvaluationJobResource(
-                id="test_job",
-                tenant="default",
-                created_at=now,
-                updated_at=now,
-            ),
-            status=EvaluationJobStatus(state=JobStatus.COMPLETED),
-            model=ModelConfig(url="http://localhost:8000/v1", name="test_model"),
-            benchmarks=[
-                BenchmarkConfig(id="test", provider_id="test_provider", parameters={})
-            ],
-        )
-
-        coordinate = OCICoordinate(oci_ref="ghcr.io/test/repo:latest")
-
-        response = await persister.persist(
-            files_location=files_location,
-            coordinate=coordinate,
-            job=job,
-        )
-
-        assert response.files_count == 0
-        assert response.digest.startswith("sha256:")
-
-    async def test_persister_nested_directory_structure(self, tmp_path: Path) -> None:
-        """Test persister counts files in nested directories."""
-        from evalhub.adapter.oci.persister import (
-            OCIArtifactPersister as OriginalPersister,
-        )
-
-        test_dir = tmp_path / "nested"
-        test_dir.mkdir()
-
-        # Create nested structure
-        test_file = test_dir / "result.json"
-        test_file.write_text('{"score": 0.95}')
-        subdir = test_dir / "subdir"
-        subdir.mkdir()
-        (subdir / "file2.txt").write_text("content")
-        (subdir / "file3.json").write_text("{}")
-
-        persister = OriginalPersister()
-        files_location = EvaluationJobFilesLocation(id="test_job", path=str(test_dir))
-
-        now = datetime.now(UTC)
-        job = EvaluationJob(
-            resource=EvaluationJobResource(
-                id="test_job",
-                tenant="default",
-                created_at=now,
-                updated_at=now,
-            ),
-            status=EvaluationJobStatus(state=JobStatus.COMPLETED),
-            model=ModelConfig(url="http://localhost:8000/v1", name="test_model"),
-            benchmarks=[
-                BenchmarkConfig(id="test", provider_id="test_provider", parameters={})
-            ],
-        )
-
-        coordinate = OCICoordinate(oci_ref="ghcr.io/test/repo:latest")
-
-        response = await persister.persist(
-            files_location=files_location,
-            coordinate=coordinate,
-            job=job,
-        )
-
-        assert response.files_count == 3
-        assert response.digest == "sha256:" + "0" * 64  # Placeholder digest
+        with pytest.raises(RuntimeError, match="Failed to push OCI artifact"):
+            persister.persist(spec)
