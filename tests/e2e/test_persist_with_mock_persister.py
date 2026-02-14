@@ -3,6 +3,7 @@
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 from evalhub.adapter import (
@@ -15,6 +16,7 @@ from evalhub.adapter import (
 )
 from evalhub.adapter.callbacks import DefaultCallbacks
 from evalhub.adapter.models import JobStatusUpdate, OCIArtifactResult, OCIArtifactSpec
+from evalhub.models.api import OCICoordinates
 
 
 @pytest.fixture
@@ -64,8 +66,7 @@ class TestOCIArtifactPersistenceE2E:
                 created_artifacts.append(spec)
                 return OCIArtifactResult(
                     digest="sha256:test123",
-                    reference=f"ghcr.io/test/{spec.id}@sha256:test123",
-                    size_bytes=1024,
+                    reference="ghcr.io/test/repo:e2e-test-001@sha256:test123",
                 )
 
             def report_results(self, results: JobResults) -> None:
@@ -95,11 +96,12 @@ class TestOCIArtifactPersistenceE2E:
                 # Create OCI artifact
                 artifact = callbacks.create_oci_artifact(
                     OCIArtifactSpec(
-                        files=[results_file],
-                        base_path=output_dir,
-                        id=config.id,
-                        benchmark_id=config.benchmark_id,
-                        model_name=config.model.name,
+                        files_path=output_dir,
+                        coordinates=OCICoordinates(
+                            oci_host="ghcr.io",
+                            oci_repository="test/repo",
+                            oci_tag=config.id,
+                        ),
                     )
                 )
 
@@ -140,9 +142,9 @@ class TestOCIArtifactPersistenceE2E:
         # Verify artifact was created
         assert len(created_artifacts) == 1
         artifact_spec = created_artifacts[0]
-        assert artifact_spec.id == "e2e-test-001"
-        assert artifact_spec.benchmark_id == "mmlu"
-        assert artifact_spec.model_name == "test-model"
+        assert artifact_spec.coordinates.oci_host == "ghcr.io"
+        assert artifact_spec.coordinates.oci_repository == "test/repo"
+        assert artifact_spec.coordinates.oci_tag == "e2e-test-001"
 
         # Verify results contain artifact info
         assert results.oci_artifact is not None
@@ -150,8 +152,16 @@ class TestOCIArtifactPersistenceE2E:
         assert "e2e-test-001" in results.oci_artifact.reference
         assert mock_job_spec_file.exists()  # Use fixture
 
+    @patch("evalhub.adapter.oci.persister.oras.provider.Registry")
+    @patch("evalhub.adapter.oci.persister.Layout")
+    @patch("evalhub.adapter.oci.persister.create_simple_oci_artifact")
     def test_default_callbacks_oci_persistence(
-        self, tmp_path: Path, mock_job_spec_file: Path
+        self,
+        mock_create_artifact: MagicMock,
+        mock_layout_cls: MagicMock,
+        mock_registry_cls: MagicMock,
+        tmp_path: Path,
+        mock_job_spec_file: Path,
     ) -> None:
         """Test DefaultCallbacks can persist OCI artifacts."""
         # Create test files
@@ -160,53 +170,51 @@ class TestOCIArtifactPersistenceE2E:
         (test_dir / "results.json").write_text('{"score": 0.85}')
         (test_dir / "summary.txt").write_text("Test summary")
 
-        # Use DefaultCallbacks with mock registry
+        # Mock the OCI push response
+        mock_response = MagicMock()
+        mock_response.status_code = 201
+        mock_response.headers = {
+            "Docker-Content-Digest": "sha256:abc123def456"
+        }
+        mock_layout_cls.return_value.push_to_registry.return_value = mock_response
+
+        # Use DefaultCallbacks
         callbacks = DefaultCallbacks(
             job_id="test-job",
             benchmark_id="mmlu",
-            registry_url="localhost:5000",
-            insecure=True,
         )
 
         # Create artifact spec
         spec = OCIArtifactSpec(
-            files=[test_dir / "results.json", test_dir / "summary.txt"],
-            base_path=test_dir,
-            id="test-job",
-            benchmark_id="mmlu",
-            model_name="test-model",
-            title="Test Results",
+            files_path=test_dir,
+            coordinates=OCICoordinates(
+                oci_host="localhost:5000",
+                oci_repository="eval-results/mmlu",
+                oci_tag="test-job",
+            ),
         )
 
-        # Persist artifact (uses placeholder implementation)
+        # Persist artifact
         result = callbacks.create_oci_artifact(spec)
 
         # Verify result
-        assert result.digest.startswith("sha256:")
-        assert "localhost:5000/eval-results/mmlu:test-job" in result.reference
-        assert result.size_bytes > 0
+        assert result.digest == "sha256:abc123def456"
+        assert result.reference == "localhost:5000/eval-results/mmlu:test-job@sha256:abc123def456"
         assert mock_job_spec_file.exists()  # Use fixture
 
-    @pytest.mark.asyncio
-    async def test_oci_persister_integration(
-        self, tmp_path: Path, mock_job_spec_file: Path
+    @patch("evalhub.adapter.oci.persister.oras.provider.Registry")
+    @patch("evalhub.adapter.oci.persister.Layout")
+    @patch("evalhub.adapter.oci.persister.create_simple_oci_artifact")
+    def test_oci_persister_integration(
+        self,
+        mock_create_artifact: MagicMock,
+        mock_layout_cls: MagicMock,
+        mock_registry_cls: MagicMock,
+        tmp_path: Path,
+        mock_job_spec_file: Path,
     ) -> None:
         """Test OCI persister directly with test files."""
-        from datetime import UTC, datetime
-
-        from evalhub.adapter.oci.persister import (
-            OCIArtifactPersister as OriginalPersister,
-        )
-        from evalhub.models.api import (
-            BenchmarkConfig,
-            EvaluationJob,
-            EvaluationJobFilesLocation,
-            EvaluationJobResource,
-            EvaluationJobStatus,
-            JobStatus,
-            ModelConfig,
-            OCICoordinate,
-        )
+        from evalhub.adapter.oci.persister import OCIArtifactPersister
 
         # Create test files
         test_dir = tmp_path / "integration_test"
@@ -214,40 +222,31 @@ class TestOCIArtifactPersistenceE2E:
         (test_dir / "file1.txt").write_text("content 1")
         (test_dir / "file2.json").write_text('{"key": "value"}')
 
+        # Mock the OCI push response
+        mock_response = MagicMock()
+        mock_response.status_code = 201
+        mock_response.headers = {
+            "Docker-Content-Digest": "sha256:" + "a1b2c3d4" * 8
+        }
+        mock_layout_cls.return_value.push_to_registry.return_value = mock_response
+
         # Setup persister
-        persister = OriginalPersister()
-        files_location = EvaluationJobFilesLocation(
-            id="integration-test", path=str(test_dir)
-        )
+        persister = OCIArtifactPersister(job_id="integration-test")
 
-        coordinate = OCICoordinate(oci_ref="ghcr.io/test/integration:latest")
-
-        now = datetime.now(UTC)
-        job = EvaluationJob(
-            resource=EvaluationJobResource(
-                id="integration-test",
-                tenant="default",
-                created_at=now,
-                updated_at=now,
+        spec = OCIArtifactSpec(
+            files_path=test_dir,
+            coordinates=OCICoordinates(
+                oci_host="ghcr.io",
+                oci_repository="test/integration",
+                oci_tag="latest",
             ),
-            status=EvaluationJobStatus(state=JobStatus.COMPLETED),
-            model=ModelConfig(url="http://localhost:8000", name="model"),
-            benchmarks=[
-                BenchmarkConfig(
-                    id="test",
-                    provider_id="test_provider",
-                    parameters={},
-                )
-            ],
         )
 
         # Persist
-        response = await persister.persist(files_location, coordinate, job)
+        result = persister.persist(spec)
 
-        # Verify response
-        assert response.id == "integration-test"
-        assert response.files_count == 2
-        assert response.digest.startswith("sha256:")
-        assert response.oci_ref == "ghcr.io/test/integration:latest@sha256:" + "0" * 64
-        assert response.metadata["placeholder"] is True
+        # Verify result
+        assert result.digest == "sha256:" + "a1b2c3d4" * 8
+        assert result.reference == "ghcr.io/test/integration:latest@sha256:" + "a1b2c3d4" * 8
+        mock_create_artifact.assert_called_once()
         assert mock_job_spec_file.exists()  # Use fixture
