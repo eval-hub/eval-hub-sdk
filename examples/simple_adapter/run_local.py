@@ -14,8 +14,11 @@ import tempfile
 from pathlib import Path
 
 from evalhub.adapter import (
+    JobCallbacks,
     JobResults,
     JobStatusUpdate,
+    OCIArtifactResult,
+    OCIArtifactSpec,
 )
 
 # Import the example adapter from the local file
@@ -89,14 +92,14 @@ def main() -> None:
             {"key": "env", "value": "local"},
             {"key": "test", "value": "true"},
         ],
-        "outputs": {
-            "oci": {
-                "coordinates": {
-                    "oci_host": "quay.io",
-                    "oci_repository": "mmortari/demo20260212"
-                }
-            }
-        }
+        # "outputs": {
+        #     "oci": {
+        #         "coordinates": {
+        #             "oci_host": "quay.io",
+        #             "oci_repository": "mmortari/demo20260212"
+        #         }
+        #     }
+        # }
     }
 
     # For local testing, create a temporary job spec file
