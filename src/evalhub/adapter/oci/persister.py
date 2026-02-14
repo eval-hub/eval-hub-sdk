@@ -52,35 +52,37 @@ class OCIArtifactPersister:
             + tag
         )
 
-        temp_dir = tempfile.mkdtemp(prefix="oci_layout_")
-        temp_path = Path(temp_dir)
-        create_simple_oci_artifact(
-            source_path=Path(spec.files_path),
-            oci_layout_path=temp_path,
-            artifact_type=OCI_ARTIFACT_TYPE,
-        )
+        with tempfile.TemporaryDirectory(prefix="oci_layout_") as temp_dir:
+            temp_path = Path(temp_dir)
+            create_simple_oci_artifact(
+                source_path=Path(spec.files_path),
+                oci_layout_path=temp_path,
+                artifact_type=OCI_ARTIFACT_TYPE,
+            )
 
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug("Contents of temp_path (%s):", temp_path)
-            for item in temp_path.rglob("*"):
-                if item.is_file():
-                    logger.debug("  File: %s", item.relative_to(temp_path))
-                elif item.is_dir():
-                    logger.debug("  Dir:  %s", item.relative_to(temp_path))
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Contents of temp_path (%s):", temp_path)
+                for item in temp_path.rglob("*"):
+                    if item.is_file():
+                        logger.debug("  File: %s", item.relative_to(temp_path))
+                    elif item.is_dir():
+                        logger.debug("  Dir:  %s", item.relative_to(temp_path))
 
-        provider = oras.provider.Registry(insecure=self.oci_insecure)
-        provider.auth.hostname = spec.coordinates.oci_host
-        if self.oci_auth_config_path:
-            custom_auth_path = str(self.oci_auth_config_path.absolute())
-            logger.debug("custom_auth_path: %s", custom_auth_path)
-            provider.auth.load_configs(spec.coordinates.oci_host, [custom_auth_path])
-        else:
-            provider.auth.load_configs(spec.coordinates.oci_host)
-        response = Layout(str(temp_path)).push_to_registry(
-            provider=provider,
-            target=oci_ref,
-            tag="latest",  # note this is oci-layout tag on disk, not destination tag
-        )
+            provider = oras.provider.Registry(insecure=self.oci_insecure)
+            provider.auth.hostname = spec.coordinates.oci_host
+            if self.oci_auth_config_path:
+                custom_auth_path = str(self.oci_auth_config_path.absolute())
+                logger.debug("custom_auth_path: %s", custom_auth_path)
+                provider.auth.load_configs(
+                    spec.coordinates.oci_host, [custom_auth_path]
+                )
+            else:
+                provider.auth.load_configs(spec.coordinates.oci_host)
+            response = Layout(str(temp_path)).push_to_registry(
+                provider=provider,
+                target=oci_ref,
+                tag="latest",  # note this is oci-layout tag on disk, not destination tag
+            )
         if response.status_code not in (200, 201):
             raise RuntimeError(
                 f"Failed to push OCI artifact to {oci_ref}: "
