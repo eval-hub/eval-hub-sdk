@@ -23,3 +23,12 @@ mypy:
 
 .PHONY: tidy
 tidy: ruff mypy
+
+.PHONY: start-oci-registry
+start-oci-registry:
+	docker run -d -p 5001:5000 --name eval-hub-oci-registry docker.io/library/registry:2
+
+.PHONY: stop-oci-registry
+stop-oci-registry:
+	docker stop eval-hub-oci-registry
+	docker rm eval-hub-oci-registry
