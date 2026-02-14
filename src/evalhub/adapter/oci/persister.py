@@ -87,6 +87,11 @@ class OCIArtifactPersister:
                 f"status {response.status_code}, response: {response.text}"
             )
         artifact_digest = response.headers.get("Docker-Content-Digest")
+        if not artifact_digest:
+            raise RuntimeError(
+                f"Registry response for {oci_ref} did not include a "
+                "Docker-Content-Digest header."
+            )
         artifact_reference = oci_ref + "@" + artifact_digest
 
         return OCIArtifactResult(digest=artifact_digest, reference=artifact_reference)
