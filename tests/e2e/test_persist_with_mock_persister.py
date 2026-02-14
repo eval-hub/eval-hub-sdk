@@ -23,6 +23,7 @@ def mock_job_spec_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     # Create test job spec
     job_spec = {
         "id": "test-job-001",
+        "provider_id": "lm_evaluation_harness",
         "benchmark_id": "mmlu",
         "model": {"url": "http://localhost:8000", "name": "test-model"},
         "num_examples": 10,
