@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+OCI_ARTIFACT_TYPE = "application/vnd.eval-hub.github.io"
+
 
 class JobStatus(str, Enum):
     """Standard job status values."""
@@ -317,23 +319,34 @@ class EvaluationResponse(BaseModel):
     duration_seconds: float = Field(..., description="Total evaluation time")
 
 
-class OCICoordinate(BaseModel):
+class OCICoordinates(BaseModel):
     """OCI artifact coordinates for persistence."""
 
-    oci_ref: str = Field(
-        ..., description="OCI reference (e.g., 'ghcr.io/org/repo:tag')"
+    oci_host: str = Field(
+        ..., description="OCI registry host (e.g., 'quay.io')", examples=["quay.io"]
+    )
+    oci_repository: str = Field(
+        ...,
+        description="OCI repository (e.g., 'my-org/my-repo')",
+        examples=["my-org/my-repo"],
+    )
+    oci_tag: str | None = Field(
+        default=None, description="OCI tag (e.g., 'eval-123')", examples=["eval-123"]
     )
     oci_subject: str | None = Field(
-        default=None, description="Optional OCI subject identifier"
+        default=None,
+        description="Optional OCI subject identifier (in same registry and repo)",
+        examples=["quay.io/my-org/my-repo:model"],
     )
-
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "oci_ref": "ghcr.io/my-org/eval-results:latest",
-                "oci_subject": "not used atm",
+    annotations: dict[str, str] = Field(
+        default_factory=dict,
+        description="Custom annotations",
+        examples=[
+            {
+                "model": "quay.io/my-org/my-repo:model",
+                "some": "value",
             }
-        }
+        ],
     )
 
 

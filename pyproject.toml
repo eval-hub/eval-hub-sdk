@@ -42,7 +42,7 @@ adapter = [
     "eval-hub-sdk[core]",
     "mlflow-skinny>=3.10.0rc0",
     "olot>=0.1.0",
-    "oras>=0.2.0",
+    "oras>=0.2.39",
 ]
 
 # Client API - for end users in Jupyter notebooks and scripts
@@ -132,6 +132,10 @@ module = [
     "evalhub_server",
     "mlflow.*",
     "mlflow",
+    "oras.*",
+    "oras",
+    "olot.*",
+    "olot",
 ]
 ignore_missing_imports = true
 
@@ -163,7 +167,7 @@ dev = [
     "fastapi>=0.124.4",
     "httpx>=0.28.1",
     "mypy>=1.7.1",
-    "oras>=0.2.38",
+    "oras>=0.2.39",
     "pygithub>=2.1.1",
     "pytest>=7.4.0",
     "pytest-asyncio>=0.23.0",

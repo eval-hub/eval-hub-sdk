@@ -37,14 +37,10 @@ class AdapterSettings(BaseSettings):
     )
 
     # OCI registry configuration
-    registry_url: str | None = Field(default=None, validation_alias="REGISTRY_URL")
-    registry_username: str | None = Field(
-        default=None, validation_alias="REGISTRY_USERNAME"
+    oci_auth_config_path: str | None = Field(
+        default=None, validation_alias="OCI_AUTH_CONFIG_PATH"
     )
-    registry_password: str | None = Field(
-        default=None, validation_alias="REGISTRY_PASSWORD"
-    )
-    registry_insecure: bool = Field(default=False, validation_alias="REGISTRY_INSECURE")
+    oci_insecure: bool = Field(default=False, validation_alias="OCI_INSECURE")
 
     # Authentication configuration (for Kubernetes ServiceAccount tokens)
     auth_token_path: Path | None = Field(
@@ -53,6 +49,10 @@ class AdapterSettings(BaseSettings):
     ca_bundle_path: Path | None = Field(
         default=None, validation_alias="EVALHUB_CA_BUNDLE_PATH"
     )
+
+    # Connection to evalhub
+    # (separate of OCI, as local EH might be localhost but OCI registry a real one)
+    evalhub_insecure: bool = Field(default=False, validation_alias="EVALHUB_INSECURE")
 
     @classmethod
     def from_env(cls) -> Self:
@@ -119,7 +119,3 @@ class AdapterSettings(BaseSettings):
                 f"Job spec file not found at {self.resolved_job_spec_path}. "
                 "Set EVALHUB_JOB_SPEC_PATH (or EVALHUB_MODE=k8s for /meta/job.json)."
             )
-
-        # For the current adapter callbacks implementation, registry is required.
-        if not self.registry_url:
-            raise ValueError("REGISTRY_URL environment variable is required")

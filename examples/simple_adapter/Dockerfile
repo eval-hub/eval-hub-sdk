@@ -5,7 +5,13 @@ WORKDIR /app
 
 # Install adapter SDK and dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -v --pre -r requirements.txt
+
+ENV EVALHUB_MODE=K8s
+
+# local DEV
+# COPY dist/*.whl .
+# RUN pip install "$(ls *.whl)[adapter]" --force-reinstall
 
 # Copy adapter implementation
 COPY simple_adapter.py .

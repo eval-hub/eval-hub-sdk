@@ -30,9 +30,9 @@ from evalhub.adapter import (
     JobStatusUpdate,
     MessageInfo,
     ModelConfig,
-    OCIArtifactResult,
     OCIArtifactSpec,
 )
+from evalhub.adapter.callbacks import DefaultCallbacks
 
 logger = logging.getLogger(__name__)
 
@@ -137,37 +137,24 @@ class ExampleAdapter(FrameworkAdapter):
             logger.info(f"Results saved to {len(output_files)} files")
 
             # Phase 5: Persist artifacts
-            callbacks.report_status(
-                JobStatusUpdate(
-                    status=JobStatus.RUNNING,
-                    phase=JobPhase.PERSISTING_ARTIFACTS,
-                    progress=0.9,
-                    message=_status_message("Persisting artifacts to OCI registry"),
-                    current_step="Creating OCI artifact",
-                    total_steps=4,
-                    completed_steps=4,
-                )
-            )
-
             oci_artifact = None
-            if output_files:
+            if config.outputs and config.outputs.oci:
+                callbacks.report_status(
+                    JobStatusUpdate(
+                        status=JobStatus.RUNNING,
+                        phase=JobPhase.PERSISTING_ARTIFACTS,
+                        progress=0.9,
+                        message=_status_message("Persisting artifacts to OCI registry"),
+                        current_step="Creating OCI artifact",
+                        total_steps=4,
+                        completed_steps=4,
+                    )
+                )
+
                 oci_artifact = callbacks.create_oci_artifact(
                     OCIArtifactSpec(
-                        files=output_files,
-                        base_path=Path("/tmp/job_results"),
-                        title=f"Evaluation results for {config.benchmark_id}",
-                        description=f"Results from job {config.id}",
-                        annotations={
-                            "job_id": config.id,
-                            "benchmark_id": config.benchmark_id,
-                            "model_name": config.model.name,
-                            "overall_score": str(overall_score)
-                            if overall_score
-                            else "N/A",
-                        },
-                        id=config.id,
-                        benchmark_id=config.benchmark_id,
-                        model_name=config.model.name,
+                        files_path=Path("/tmp/job_results"),
+                        coordinates=config.outputs.oci.coordinates,
                     )
                 )
                 logger.info(f"Artifact persisted: {oci_artifact.digest}")
@@ -399,20 +386,13 @@ def main() -> None:
 
     # Define callbacks that communicate with sidecar
     # In production, these would make HTTP requests to localhost sidecar
-    class SidecarCallbacks(JobCallbacks):
+    class SidecarCallbacks(DefaultCallbacks):
         def report_status(self, update: JobStatusUpdate) -> None:
             # In production: POST to http://localhost:8080/status
             logger.info(f"Status update: {update.status} - {update.message}")
 
-        def create_oci_artifact(self, spec: OCIArtifactSpec) -> OCIArtifactResult:
-            # In production: POST to http://localhost:8080/artifacts
-            logger.info(f"Creating OCI artifact with {len(spec.files)} files")
-            # Return mock result for example
-            return OCIArtifactResult(
-                digest="sha256:abc123...",
-                reference="ghcr.io/org/repo:job-123@sha256:abc123...",
-                size_bytes=sum(f.stat().st_size for f in spec.files),
-            )
+        # def create_oci_artifact(self, spec: OCIArtifactSpec) -> OCIArtifactResult:
+        # Use default callbacks
 
         def report_results(self, results: JobResults) -> None:
             # In production: POST to http://localhost:8080/results
@@ -427,7 +407,13 @@ def main() -> None:
         logger.info(f"Benchmark: {adapter.job_spec.benchmark_id}")
 
         # Create callbacks
-        callbacks = SidecarCallbacks()
+        callbacks = SidecarCallbacks(
+            adapter.job_spec.id,
+            adapter.job_spec.benchmark_id,
+            sidecar_url=adapter.job_spec.callback_url,
+            oci_auth_config_path=Path(adapter.settings.oci_auth_config_path) if adapter.settings.oci_auth_config_path else None,
+            oci_insecure=adapter.settings.oci_insecure,
+        )
 
         # Run benchmark job (pass self.job_spec or override with custom spec for testing)
         results = adapter.run_benchmark_job(adapter.job_spec, callbacks)

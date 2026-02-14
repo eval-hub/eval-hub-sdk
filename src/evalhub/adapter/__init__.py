@@ -87,7 +87,7 @@ from .models import (
     OCIArtifactResult,
     OCIArtifactSpec,
 )
-from .oci import OCIArtifactPersister, Persister
+from .oci import OCIArtifactPersister
 from .settings import AdapterSettings
 
 # Legacy API is available but deprecated

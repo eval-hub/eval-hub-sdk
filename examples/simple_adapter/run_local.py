@@ -22,7 +22,7 @@ from evalhub.adapter import (
 )
 
 # Import the example adapter from the local file
-from evalhub.adapter.oci.adapter import OCIArtifactPersister
+from evalhub.adapter.callbacks import DefaultCallbacks
 from simple_adapter import ExampleAdapter
 
 # Configure logging
@@ -34,7 +34,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class LocalCallbacks(JobCallbacks):
+class LocalCallbacks(DefaultCallbacks):
     """Local callbacks for testing without sidecar."""
 
     def report_status(self, update: JobStatusUpdate) -> None:
@@ -46,22 +46,8 @@ class LocalCallbacks(JobCallbacks):
             f"Message: {update.message or ''}"
         )
 
-    def create_oci_artifact(self, spec: OCIArtifactSpec) -> OCIArtifactResult:
-        """Mock OCI artifact creation for local testing."""
-        logger.info(
-            f"Would create OCI artifact with {len(spec.files)} files "
-            f"for job {spec.id}"
-        )
-        logger.info(f"Creating OCI artifact for job {spec.id}")
-        OCIArtifactPersister("quay.io").persist(spec)
-
-        # In local mode, we just return a mock result
-        # In production, this would push to an actual registry
-        return OCIArtifactResult(
-            digest="sha256:local-test",
-            reference=f"localhost/eval-results/{spec.benchmark_id}:{spec.id}",
-            size_bytes=sum(f.stat().st_size for f in spec.files if f.exists()),
-        )
+    # def create_oci_artifact(self, spec: OCIArtifactSpec) -> OCIArtifactResult:
+    #     """Use default."""
 
     def report_results(self, results: JobResults) -> None:
         """Print final results to console."""
@@ -106,6 +92,14 @@ def main() -> None:
             {"key": "env", "value": "local"},
             {"key": "test", "value": "true"},
         ],
+        "outputs": {
+            "oci": {
+                "coordinates": {
+                    "oci_host": "quay.io",
+                    "oci_repository": "mmortari/demo20260212"
+                }
+            }
+        }
     }
 
     # For local testing, create a temporary job spec file
@@ -120,11 +114,14 @@ def main() -> None:
         os.environ["EVALHUB_JOB_SPEC_PATH"] = temp_file_path
         logger.info(f"Using temp job spec: {temp_file_path}")
 
-        # Create callbacks
-        callbacks = LocalCallbacks()
-
         # Create adapter (will automatically load from temp file)
         adapter = ExampleAdapter()
+
+        # Create callbacks
+        callbacks = LocalCallbacks(
+            job_id=adapter.job_spec.id,
+            benchmark_id=adapter.job_spec.benchmark_id,
+        )
 
         logger.info(f"Running benchmark: {adapter.job_spec.benchmark_id}")
         logger.info(

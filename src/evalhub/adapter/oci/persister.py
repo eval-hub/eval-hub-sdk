@@ -1,128 +1,92 @@
 """OCI artifact persistence for evaluation job files."""
 
 import logging
-from pathlib import Path
 import tempfile
-from typing import Protocol
+from pathlib import Path
 
-from olot.oci_artifact import create_simple_oci_artifact
 import oras.provider
-from oras.layout import Layout, NewLayout
+from olot.oci_artifact import create_simple_oci_artifact
+from oras.layout import Layout
 
-from evalhub.models.api import (
-    EvaluationJob,
-    EvaluationJobFilesLocation,
-    OCICoordinate,
-    PersistResponse,
-)
+from evalhub.adapter.models.job import OCIArtifactResult, OCIArtifactSpec
+from evalhub.models.api import OCI_ARTIFACT_TYPE
 
 logger = logging.getLogger(__name__)
 
 
-class Persister(Protocol):
-    """Protocol for OCI artifact persisters."""
-
-    async def persist(
-        self,
-        files_location: EvaluationJobFilesLocation,
-        coordinate: OCICoordinate,
-        job: EvaluationJob,
-    ) -> PersistResponse:
-        """Persist evaluation job files as OCI artifact.
-
-        Args:
-            files_location: Files to persist
-            coordinate: OCI coordinates
-            job: The evaluation job
-
-        Returns:
-            PersistResponse: Persistence result
-        """
-        ...
-
-
 class OCIArtifactPersister:
-    """Placeholder OCI artifact persister."""
-
-    def __init__(self, registry: str):
-        self.registry = registry
-
-
-    async def persist(
+    def __init__(
         self,
-        files_location: EvaluationJobFilesLocation,
-        coordinate: OCICoordinate,
-        job: EvaluationJob,
-    ) -> PersistResponse:
-        """Persist evaluation job files as OCI artifact.
+        job_id: str,
+        oci_auth_config_path: Path | None = None,
+        oci_insecure: bool = False,
+    ):
+        self.job_id = job_id
+        self.oci_auth_config_path = oci_auth_config_path
+        self.oci_insecure = oci_insecure
+
+    def persist(self, spec: OCIArtifactSpec) -> OCIArtifactResult:
+        """Persist artifact asynchronously.
 
         Args:
-            files_location: Files to persist
-            coordinate: OCI coordinates
-            job: Evaluation job
+            spec: Artifact specification
 
         Returns:
-            PersistResponse: Persistence result
+            OCIArtifactResult: Persistence result
         """
-        subject_info = (
-            f" with subject '{coordinate.oci_subject}'"
-            if coordinate.oci_subject
-            else ""
-        )
-        logger.warning(
-            f"OCI persister is a placeholder. "
-            f"Would persist files from {files_location.path} to {coordinate.oci_ref}{subject_info}"
-        )
+        if spec.files_path is None:
+            raise ValueError("Invoked OCI persistence but files_path is empty.")
+        if not spec.files_path.exists():
+            raise ValueError(f"the specified path {spec.files_path} does not exists.")
 
-        files_count = 0
-        if files_location.path is not None:
-            source = Path(files_location.path)
-            if source.exists():
-                if source.is_file():
-                    files_count = 1
-                elif source.is_dir():
-                    files_count = sum(1 for f in source.rglob("*") if f.is_file())
+        tag = (
+            spec.coordinates.oci_tag
+            if spec.coordinates.oci_tag
+            else "evalhub-job-" + self.job_id
+        )
+        oci_ref = (
+            spec.coordinates.oci_host
+            + "/"
+            + spec.coordinates.oci_repository
+            + ":"
+            + tag
+        )
 
         temp_dir = tempfile.mkdtemp(prefix="oci_layout_")
         temp_path = Path(temp_dir)
-        if files_location.path is not None:
-            create_simple_oci_artifact(
-                source_path=Path(files_location.path),
-                oci_layout_path=temp_path,
-            )
+        create_simple_oci_artifact(
+            source_path=Path(spec.files_path),
+            oci_layout_path=temp_path,
+            artifact_type=OCI_ARTIFACT_TYPE,
+        )
 
-        # Display the content of temp_path
-        logger.info(f"Contents of temp_path ({temp_path}):")
-        for item in temp_path.rglob("*"):
-            if item.is_file():
-                logger.info(f"  File: {item.relative_to(temp_path)}")
-            elif item.is_dir():
-                logger.info(f"  Dir:  {item.relative_to(temp_path)}")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("Contents of temp_path (%s):", temp_path)
+            for item in temp_path.rglob("*"):
+                if item.is_file():
+                    logger.debug("  File: %s", item.relative_to(temp_path))
+                elif item.is_dir():
+                    logger.debug("  Dir:  %s", item.relative_to(temp_path))
 
-        logging.basicConfig()
-        logging.getLogger().setLevel(logging.DEBUG)
-        requests_log = logging.getLogger("requests.packages.urllib3")
-        requests_log.setLevel(logging.DEBUG)
-        requests_log.propagate = True
-        provider = oras.provider.Registry()
-        provider.auth.hostname = self.registry
-        provider.auth.load_configs(self.registry)
+        provider = oras.provider.Registry(insecure=self.oci_insecure)
+        provider.auth.hostname = spec.coordinates.oci_host
+        if self.oci_auth_config_path:
+            custom_auth_path = str(self.oci_auth_config_path.absolute())
+            logger.debug("custom_auth_path: %s", custom_auth_path)
+            provider.auth.load_configs(spec.coordinates.oci_host, [custom_auth_path])
+        else:
+            provider.auth.load_configs(spec.coordinates.oci_host)
         response = Layout(str(temp_path)).push_to_registry(
             provider=provider,
-            target="quay.io/mmortari/demo20260212:latest",
-            tag="latest",
+            target=oci_ref,
+            tag="latest",  # note this is oci-layout tag on disk, not destination tag
         )
+        if response.status_code not in (200, 201):
+            raise RuntimeError(
+                f"Failed to push OCI artifact to {oci_ref}: "
+                f"status {response.status_code}, response: {response.text}"
+            )
+        artifact_digest = response.headers.get("Docker-Content-Digest")
+        artifact_reference = oci_ref + "@" + artifact_digest
 
-        print(response.status_code)
-        print(response.headers)
-
-        return PersistResponse(
-            id=job.id,
-            oci_ref=f"{coordinate.oci_ref}@sha256:{'0' * 64}",
-            digest=f"sha256:{'0' * 64}",
-            files_count=files_count,
-            metadata={
-                "placeholder": True,
-                "message": "OCI persistence not yet implemented",
-            },
-        )
+        return OCIArtifactResult(digest=artifact_digest, reference=artifact_reference)

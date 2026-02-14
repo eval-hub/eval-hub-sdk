@@ -11,7 +11,7 @@ from typing import Any, Self
 
 from pydantic import BaseModel, Field
 
-from ...models.api import EvaluationResult, JobStatus, ModelConfig
+from ...models.api import EvaluationResult, JobStatus, ModelConfig, OCICoordinates
 
 
 class MessageInfo(BaseModel):
@@ -65,6 +65,7 @@ class JobSpec(BaseModel):
         - num_examples: Number of examples to evaluate (None = all)
         - experiment_name: Name for this evaluation experiment
         - tags: Custom tags for the job
+        - outputs: Mechanism to provide outputs callbacks
     """
 
     # ============================================================================
@@ -108,6 +109,11 @@ class JobSpec(BaseModel):
         default_factory=list, description="Custom tags for the job"
     )
 
+    # Job outputs
+    outputs: JobSpecOutputs | None = Field(
+        default=None, description="Specify JobSpec.outputs"
+    )
+
     @classmethod
     def from_file(cls, path: Path | str) -> Self:
         """Load a JobSpec from a JSON file.
@@ -142,6 +148,23 @@ class JobSpec(BaseModel):
             return cls(**data)
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid JSON in job spec file: {e}") from e
+
+
+class JobSpecOutputs(BaseModel):
+    """Specify Job outputs"""
+
+    oci: JobSpecOutputsOCI | None = Field(
+        default=None, description="EvalHub-provided coordinates (user)"
+    )
+
+
+class JobSpecOutputsOCI(BaseModel):
+    """OCI output JobSpec specification"""
+
+    # Where should be stored (registry, repo, any optional metadata)
+    coordinates: OCICoordinates = Field(
+        ..., description="Coordinates where to store the OCI Artifact"
+    )
 
 
 class JobStatusUpdate(BaseModel):
@@ -180,23 +203,15 @@ class JobStatusUpdate(BaseModel):
 class OCIArtifactSpec(BaseModel):
     """Specification for OCI artifact creation."""
 
-    # Source files
-    files: list[Path] = Field(..., description="Paths to files to include in artifact")
-    base_path: Path | None = Field(
-        default=None, description="Base path for relative file paths"
+    # What should be stored in OCI Artifact
+    files_path: Path = Field(
+        ..., description="Paths to files to include in OCI Artifact"
     )
 
-    # Artifact metadata
-    title: str | None = Field(default=None, description="Artifact title")
-    description: str | None = Field(default=None, description="Artifact description")
-    annotations: dict[str, str] = Field(
-        default_factory=dict, description="Custom annotations"
+    # Where should be stored (registry, repo, any optional metadata)
+    coordinates: OCICoordinates = Field(
+        ..., description="Coordinates where to store the OCI Artifact"
     )
-
-    # Job context
-    id: str = Field(..., description="Job ID for tracking")
-    benchmark_id: str = Field(..., description="Benchmark ID")
-    model_name: str = Field(..., description="Model name")
 
 
 class OCIArtifactResult(BaseModel):
@@ -204,10 +219,6 @@ class OCIArtifactResult(BaseModel):
 
     digest: str = Field(..., description="Artifact digest (SHA256)")
     reference: str = Field(..., description="Full OCI reference with digest")
-    size_bytes: int = Field(..., description="Artifact size in bytes")
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC), description="Creation timestamp"
-    )
 
 
 class JobResults(BaseModel):
@@ -269,9 +280,10 @@ class JobCallbacks(ABC):
 
     @abstractmethod
     def create_oci_artifact(self, spec: OCIArtifactSpec) -> OCIArtifactResult:
-        """Create and push OCI artifact via sidecar.
+        """Create and push OCI artifact.
 
-        This requests the localhost sidecar to create an OCI artifact from
+        Implementors are responsible to invoke if they choose to support this capability.
+        This requests to create an OCI artifact from
         the specified files and push it to the configured registry.
 
         Args:
