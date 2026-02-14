@@ -57,7 +57,7 @@ class TestOCIArtifactPersisterPersist:
             coordinates=OCICoordinates(oci_host="ghcr.io", oci_repository="org/repo"),
         )
 
-        with pytest.raises(ValueError, match="does not exists"):
+        with pytest.raises(ValueError, match="does not exist"):
             persister.persist(spec)
 
     @patch("evalhub.adapter.oci.persister.oras.provider.Registry")

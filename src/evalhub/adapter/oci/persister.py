@@ -26,10 +26,10 @@ class OCIArtifactPersister:
         self.oci_insecure = oci_insecure
 
     def persist(self, spec: OCIArtifactSpec) -> OCIArtifactResult:
-        """Persist artifact asynchronously.
+        """Persist OCI artifact.
 
         Args:
-            spec: Artifact specification
+            spec: OCI Artifact specification
 
         Returns:
             OCIArtifactResult: Persistence result
@@ -37,7 +37,7 @@ class OCIArtifactPersister:
         if spec.files_path is None:
             raise ValueError("Invoked OCI persistence but files_path is empty.")
         if not spec.files_path.exists():
-            raise ValueError(f"the specified path {spec.files_path} does not exists.")
+            raise ValueError(f"the specified path {spec.files_path} does not exist.")
 
         tag = (
             spec.coordinates.oci_tag
