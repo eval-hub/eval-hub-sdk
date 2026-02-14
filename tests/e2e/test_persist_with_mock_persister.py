@@ -71,6 +71,12 @@ class TestOCIArtifactPersistenceE2E:
                 """No-op for this test."""
                 pass
 
+            def report_metrics_to_mlflow(
+                self, results: JobResults, job_spec: JobSpec
+            ) -> None:
+                """No-op for this test."""
+                pass
+
         # Simple test adapter
         class TestAdapter(FrameworkAdapter):
             """Minimal adapter for testing OCI workflow."""
@@ -120,6 +126,7 @@ class TestOCIArtifactPersistenceE2E:
 
         spec = JobSpec(
             id="e2e-test-001",
+            provider_id="lm_evaluation_harness",
             benchmark_id="mmlu",
             model=ModelConfig(url="http://localhost:8000", name="test-model"),
             benchmark_config={},

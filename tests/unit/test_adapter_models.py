@@ -28,6 +28,7 @@ def mock_job_spec_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     # Create test job spec
     job_spec = {
         "id": "test-job-001",
+        "provider_id": "lm_evaluation_harness",
         "benchmark_id": "mmlu",
         "model": {"url": "http://localhost:8000", "name": "test-model"},
         "num_examples": 10,
@@ -52,6 +53,7 @@ class TestJobSpec:
         """Test creating a valid JobSpec."""
         spec = JobSpec(
             id="test-job-001",
+            provider_id="lm_evaluation_harness",
             benchmark_id="mmlu",
             model=ModelConfig(url="http://localhost:8000", name="test-model"),
             num_examples=10,
@@ -60,6 +62,7 @@ class TestJobSpec:
         )
 
         assert spec.id == "test-job-001"
+        assert spec.provider_id == "lm_evaluation_harness"
         assert spec.benchmark_id == "mmlu"
         assert spec.model.name == "test-model"
         assert spec.num_examples == 10
@@ -70,6 +73,7 @@ class TestJobSpec:
         """Test creating JobSpec with minimal mandatory fields."""
         spec = JobSpec(
             id="test-job-002",
+            provider_id="lm_evaluation_harness",
             benchmark_id="hellaswag",
             model=ModelConfig(url="http://localhost:8000", name="model"),
             benchmark_config={},
@@ -85,6 +89,7 @@ class TestJobSpec:
         """Test JobSpec with benchmark-specific configuration."""
         spec = JobSpec(
             id="test-job-003",
+            provider_id="lm_evaluation_harness",
             benchmark_id="mmlu",
             model=ModelConfig(url="http://localhost:8000", name="model"),
             benchmark_config={"subject": "physics", "difficulty": "hard"},
@@ -97,6 +102,7 @@ class TestJobSpec:
         """Test JobSpec with custom tags in list-of-dicts format (eval-hub/eval-hub#166)."""
         spec = JobSpec(
             id="test-job-004",
+            provider_id="lm_evaluation_harness",
             benchmark_id="arc",
             model=ModelConfig(url="http://localhost:8000", name="model"),
             benchmark_config={},
@@ -116,6 +122,7 @@ class TestJobSpec:
         """Test that tags default to an empty list."""
         spec = JobSpec(
             id="test-job-004b",
+            provider_id="lm_evaluation_harness",
             benchmark_id="arc",
             model=ModelConfig(url="http://localhost:8000", name="model"),
             benchmark_config={},
@@ -128,6 +135,7 @@ class TestJobSpec:
         """Test loading JobSpec from JSON file with new list-of-dicts tags format."""
         job_spec = {
             "id": "test-job-005",
+            "provider_id": "lm_evaluation_harness",
             "benchmark_id": "mmlu",
             "model": {"url": "http://localhost:8000", "name": "test-model"},
             "benchmark_config": {},
@@ -152,6 +160,7 @@ class TestJobSpec:
         """Test JobSpec can be serialized to JSON."""
         spec = JobSpec(
             id="test-job-005",
+            provider_id="lm_evaluation_harness",
             benchmark_id="gsm8k",
             model=ModelConfig(url="http://localhost:8000", name="model"),
             benchmark_config={},
@@ -438,6 +447,11 @@ class TestJobCallbacks:
             def report_results(self, results: JobResults) -> None:
                 self.results.append(results)
 
+            def report_metrics_to_mlflow(
+                self, results: JobResults, job_spec: JobSpec
+            ) -> None:
+                pass
+
         # Should be able to instantiate the implementation
         callbacks = MockCallbacks()
 
@@ -554,11 +568,17 @@ class TestFrameworkAdapter:
             def report_results(self, results: JobResults) -> None:
                 self.results.append(results)
 
+            def report_metrics_to_mlflow(
+                self, results: JobResults, job_spec: JobSpec
+            ) -> None:
+                pass
+
         # Run the adapter
         adapter = TestAdapter()
         callbacks = MockCallbacks()
         spec = JobSpec(
             id="test-job-001",
+            provider_id="lm_evaluation_harness",
             benchmark_id="mmlu",
             model=ModelConfig(url="http://localhost:8000", name="test-model"),
             benchmark_config={},

@@ -54,7 +54,8 @@ class JobSpec(BaseModel):
     Matches the Go service's EvaluationJobConfig structure.
 
     Mandatory fields:
-        - job_id: Unique job identifier
+        - id: Unique job identifier
+        - provider_id: Provider identifier from service
         - benchmark_id: Benchmark to evaluate
         - model: Model configuration (url and name)
         - benchmark_config: Benchmark-specific parameters
