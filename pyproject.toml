@@ -167,6 +167,7 @@ dev = [
     "fastapi>=0.124.4",
     "httpx>=0.28.1",
     "mypy>=1.7.1",
+    "olot>=0.1.0",
     "oras>=0.2.39",
     "pygithub>=2.1.1",
     "pytest>=7.4.0",

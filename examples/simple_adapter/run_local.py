@@ -14,11 +14,8 @@ import tempfile
 from pathlib import Path
 
 from evalhub.adapter import (
-    JobCallbacks,
     JobResults,
     JobStatusUpdate,
-    OCIArtifactResult,
-    OCIArtifactSpec,
 )
 
 # Import the example adapter from the local file
