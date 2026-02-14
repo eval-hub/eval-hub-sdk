@@ -131,7 +131,7 @@ class ExampleAdapter(FrameworkAdapter):
             )
 
             overall_score = self._compute_overall_score(results)
-            output_files = self._save_detailed_results(
+            output_dir, output_files = self._save_detailed_results(
                 config.id, config.benchmark_id, results
             )
             logger.info(f"Results saved to {len(output_files)} files")
@@ -153,7 +153,7 @@ class ExampleAdapter(FrameworkAdapter):
 
                 oci_artifact = callbacks.create_oci_artifact(
                     OCIArtifactSpec(
-                        files_path=Path("/tmp/job_results"),
+                        files_path=output_dir,
                         coordinates=config.outputs.oci.coordinates,
                     )
                 )
@@ -315,7 +315,7 @@ class ExampleAdapter(FrameworkAdapter):
 
     def _save_detailed_results(
         self, job_id: str, benchmark_id: str, results: list[EvaluationResult]
-    ) -> list[Path]:
+    ) -> tuple[Path, list[Path]]:
         """Save detailed results to files.
 
         Args:
@@ -324,7 +324,7 @@ class ExampleAdapter(FrameworkAdapter):
             results: Evaluation results
 
         Returns:
-            List of paths to saved files
+            Tuple of (output directory, list of paths to saved files)
         """
         output_dir = Path("/tmp/job_results") / job_id
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -367,7 +367,7 @@ class ExampleAdapter(FrameworkAdapter):
         files.append(summary_file)
 
         logger.info(f"Saved {len(files)} result files to {output_dir}")
-        return files
+        return output_dir, files
 
 
 def main() -> None:
