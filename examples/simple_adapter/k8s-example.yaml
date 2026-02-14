@@ -28,7 +28,15 @@ data:
         {"key": "model_family", "value": "llama-2"},
         {"key": "model_size", "value": "7b"},
         {"key": "env", "value": "production"}
-      ]
+      ],
+      "outputs": {
+          "oci": {
+              "coordinates": {
+                  "oci_host": "quay.io",
+                  "oci_repository": "mmortari/demo20260212"
+              }
+          }
+      }
     }
 
 # might want to append:
@@ -62,22 +70,22 @@ spec:
     # Main adapter container
     - name: adapter
       image: quay.io/mmortari/simple-adapter:latest
-      # imagePullPolicy: Always
+      imagePullPolicy: Always
 
       # ConfigMap mounted at /meta/job.json
       volumeMounts:
         - name: job-spec
           mountPath: /meta
           readOnly: true
-        # - name: oci-credentials
-        #   mountPath: /etc/evalhub/.docker/config.json
-        #   subPath: .dockerconfigjson
-        #   readOnly: true
+        - name: oci-credentials
+          mountPath: /etc/evalhub/.docker/config.json
+          subPath: .dockerconfigjson
+          readOnly: true
 
       # Environment variables for registry access
       env:
-        # - name: OCI_AUTH_CONFIG_PATH
-        #   value: "/etc/evalhub/.docker/config.json"
+        - name: OCI_AUTH_CONFIG_PATH
+          value: "/etc/evalhub/.docker/config.json"
         - name: EVALHUB_MODE  # necessary for the defaults
           value: "k8s"
 
@@ -128,9 +136,9 @@ spec:
     - name: job-spec
       configMap:
         name: eval-job-001-spec
-    # - name: oci-credentials
-    #   secret:
-    #     secretName: my-oci-credentials
+    - name: oci-credentials
+      secret:
+        secretName: my-oci-credentials
 
 ---
 # Secret containing registry credentials
