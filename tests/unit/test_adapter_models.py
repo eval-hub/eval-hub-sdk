@@ -548,9 +548,7 @@ class TestFrameworkAdapter:
             def create_oci_artifact(self, spec: OCIArtifactSpec) -> OCIArtifactResult:
                 # Unused but required by interface
                 _ = spec
-                return OCIArtifactResult(
-                    digest="sha256:test", reference="test"
-                )
+                return OCIArtifactResult(digest="sha256:test", reference="test")
 
             def report_results(self, results: JobResults) -> None:
                 self.results.append(results)

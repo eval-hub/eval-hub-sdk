@@ -173,9 +173,7 @@ class TestOCIArtifactPersistenceE2E:
         # Mock the OCI push response
         mock_response = MagicMock()
         mock_response.status_code = 201
-        mock_response.headers = {
-            "Docker-Content-Digest": "sha256:abc123def456"
-        }
+        mock_response.headers = {"Docker-Content-Digest": "sha256:abc123def456"}
         mock_layout_cls.return_value.push_to_registry.return_value = mock_response
 
         # Use DefaultCallbacks
@@ -199,7 +197,10 @@ class TestOCIArtifactPersistenceE2E:
 
         # Verify result
         assert result.digest == "sha256:abc123def456"
-        assert result.reference == "localhost:5000/eval-results/mmlu:test-job@sha256:abc123def456"
+        assert (
+            result.reference
+            == "localhost:5000/eval-results/mmlu:test-job@sha256:abc123def456"
+        )
         assert mock_job_spec_file.exists()  # Use fixture
 
     @patch("evalhub.adapter.oci.persister.oras.provider.Registry")
@@ -225,9 +226,7 @@ class TestOCIArtifactPersistenceE2E:
         # Mock the OCI push response
         mock_response = MagicMock()
         mock_response.status_code = 201
-        mock_response.headers = {
-            "Docker-Content-Digest": "sha256:" + "a1b2c3d4" * 8
-        }
+        mock_response.headers = {"Docker-Content-Digest": "sha256:" + "a1b2c3d4" * 8}
         mock_layout_cls.return_value.push_to_registry.return_value = mock_response
 
         # Setup persister
@@ -247,6 +246,9 @@ class TestOCIArtifactPersistenceE2E:
 
         # Verify result
         assert result.digest == "sha256:" + "a1b2c3d4" * 8
-        assert result.reference == "ghcr.io/test/integration:latest@sha256:" + "a1b2c3d4" * 8
+        assert (
+            result.reference
+            == "ghcr.io/test/integration:latest@sha256:" + "a1b2c3d4" * 8
+        )
         mock_create_artifact.assert_called_once()
         assert mock_job_spec_file.exists()  # Use fixture

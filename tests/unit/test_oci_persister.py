@@ -54,9 +54,7 @@ class TestOCIArtifactPersisterPersist:
 
         spec = OCIArtifactSpec(
             files_path=Path("/nonexistent/path"),
-            coordinates=OCICoordinates(
-                oci_host="ghcr.io", oci_repository="org/repo"
-            ),
+            coordinates=OCICoordinates(oci_host="ghcr.io", oci_repository="org/repo"),
         )
 
         with pytest.raises(ValueError, match="does not exists"):
@@ -79,9 +77,7 @@ class TestOCIArtifactPersisterPersist:
 
         mock_response = MagicMock()
         mock_response.status_code = 201
-        mock_response.headers = {
-            "Docker-Content-Digest": "sha256:abc123"
-        }
+        mock_response.headers = {"Docker-Content-Digest": "sha256:abc123"}
         mock_layout_cls.return_value.push_to_registry.return_value = mock_response
 
         persister = OCIArtifactPersister(job_id="job-123")
@@ -119,9 +115,7 @@ class TestOCIArtifactPersisterPersist:
 
         mock_response = MagicMock()
         mock_response.status_code = 201
-        mock_response.headers = {
-            "Docker-Content-Digest": "sha256:def456"
-        }
+        mock_response.headers = {"Docker-Content-Digest": "sha256:def456"}
         mock_layout_cls.return_value.push_to_registry.return_value = mock_response
 
         persister = OCIArtifactPersister(job_id="my-job")
