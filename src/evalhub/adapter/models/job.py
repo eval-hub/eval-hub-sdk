@@ -72,6 +72,7 @@ class JobSpec(BaseModel):
 
     # Job identification (mandatory)
     id: str = Field(..., description="Unique job identifier from service")
+    provider_id: str = Field(..., description="Provider identifier from service")
     benchmark_id: str = Field(..., description="Benchmark to evaluate")
 
     # Model configuration (mandatory)
