@@ -35,12 +35,10 @@ Quick Start:
             )
 
             # Persist artifacts if needed
-            if output_files:
+            if config.outputs and config.outputs.oci:
                 artifact = callbacks.create_oci_artifact(OCIArtifactSpec(
-                    files=output_files,
-                    id=config.id,
-                    benchmark_id=config.benchmark_id,
-                    model_name=config.model.name
+                    files_path=output_dir,
+                    coordinates=config.outputs.oci.coordinates,
                 ))
 
             # Return results
@@ -107,7 +105,6 @@ __all__ = [
     # OCI models
     "OCIArtifactSpec",
     "OCIArtifactResult",
-    "Persister",
     "OCIArtifactPersister",
     # Callback implementation
     "DefaultCallbacks",
