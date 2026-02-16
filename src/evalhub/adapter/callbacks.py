@@ -420,7 +420,7 @@ class DefaultCallbacks(JobCallbacks):
         except ImportError:
             logger.warning(
                 "mlflow-skinny not installed. MLflow logging skipped. "
-                "Install with: pip install mlflow-skinny>=3.9.0"
+                "Install with: pip install mlflow-skinny>=3.10.0rc0"
             )
             return
 
