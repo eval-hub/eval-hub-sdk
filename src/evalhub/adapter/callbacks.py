@@ -397,9 +397,7 @@ class DefaultCallbacks(JobCallbacks):
             f"Duration: {results.duration_seconds:.2f}s"
         )
 
-    def report_metrics_to_mlflow(
-        self, results: JobResults, job_spec: JobSpec
-    ) -> None:
+    def report_metrics_to_mlflow(self, results: JobResults, job_spec: JobSpec) -> None:
         """Report evaluation metrics to MLflow if experiment is configured.
 
         Args:
@@ -436,7 +434,9 @@ class DefaultCallbacks(JobCallbacks):
                     if token:
                         os.environ["MLFLOW_TRACKING_TOKEN"] = token
                 except OSError as e:
-                    logger.warning(f"Could not read MLFlow token from {token_path}: {e}")
+                    logger.warning(
+                        f"Could not read MLFlow token from {token_path}: {e}"
+                    )
 
             # Set or create experiment
             mlflow.set_experiment(job_spec.experiment_name)
@@ -446,7 +446,9 @@ class DefaultCallbacks(JobCallbacks):
                 # Log parameters
                 mlflow.log_param("benchmark_id", results.benchmark_id)
                 mlflow.log_param("model_name", results.model_name)
-                mlflow.log_param("num_examples_evaluated", results.num_examples_evaluated)
+                mlflow.log_param(
+                    "num_examples_evaluated", results.num_examples_evaluated
+                )
                 mlflow.log_param("duration_seconds", results.duration_seconds)
 
                 # Log tags from job spec (tags is list[dict] with "key"/"value" entries)

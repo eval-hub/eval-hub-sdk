@@ -301,9 +301,7 @@ class JobCallbacks(ABC):
         """
         pass
 
-    def report_metrics_to_mlflow(
-        self, results: JobResults, job_spec: JobSpec
-    ) -> None:
+    def report_metrics_to_mlflow(self, results: JobResults, job_spec: JobSpec) -> None:
         """Report evaluation metrics to MLflow if experiment is configured.
 
         This logs metrics to MLflow if the job_spec contains experiment information.
