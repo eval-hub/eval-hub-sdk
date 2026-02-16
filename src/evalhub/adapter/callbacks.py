@@ -40,17 +40,14 @@ class DefaultCallbacks(JobCallbacks):
             benchmark_id="mmlu",
             provider_id="lm_evaluation_harness",
             sidecar_url="http://localhost:8080",
-            registry_url="ghcr.io",
-            registry_username=os.getenv("REGISTRY_USER"),
-            registry_password=os.getenv("REGISTRY_TOKEN")
+            oci_auth_config_path=Path("~/.docker/config.json"),
         )
 
         # Local development (no evalhub, just logging)
         callbacks = DefaultCallbacks(
             job_id="my-job-123",
             benchmark_id="mmlu",
-            registry_url="localhost:5000",
-            insecure=True
+            oci_insecure=True,
         )
 
         adapter = MyAdapter()
