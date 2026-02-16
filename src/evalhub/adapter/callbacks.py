@@ -439,28 +439,28 @@ class DefaultCallbacks(JobCallbacks):
                     logger.warning(f"Could not read MLFlow token from {token_path}: {e}")
 
             # Set or create experiment
-            mlflow.set_experiment(job_spec.experiment_name)  # type: ignore[attr-defined]
+            mlflow.set_experiment(job_spec.experiment_name)
 
             # Start a run with the job ID as run name
-            with mlflow.start_run(run_name=results.id):  # type: ignore[attr-defined]
+            with mlflow.start_run(run_name=results.id):
                 # Log parameters
-                mlflow.log_param("benchmark_id", results.benchmark_id)  # type: ignore[attr-defined]
-                mlflow.log_param("model_name", results.model_name)  # type: ignore[attr-defined]
-                mlflow.log_param("num_examples_evaluated", results.num_examples_evaluated)  # type: ignore[attr-defined]
-                mlflow.log_param("duration_seconds", results.duration_seconds)  # type: ignore[attr-defined]
+                mlflow.log_param("benchmark_id", results.benchmark_id)
+                mlflow.log_param("model_name", results.model_name)
+                mlflow.log_param("num_examples_evaluated", results.num_examples_evaluated)
+                mlflow.log_param("duration_seconds", results.duration_seconds)
 
                 # Log tags from job spec (tags is list[dict] with "key"/"value" entries)
                 if job_spec.tags:
                     for tag in job_spec.tags:
-                        mlflow.set_tag(tag["key"], tag["value"])  # type: ignore[attr-defined]
+                        mlflow.set_tag(tag["key"], tag["value"])
 
                 # Log evaluation metrics
                 for result in results.results:
-                    mlflow.log_metric(result.metric_name, result.metric_value)  # type: ignore[attr-defined]
+                    mlflow.log_metric(result.metric_name, result.metric_value)
 
                 # Log overall score if available
                 if results.overall_score is not None:
-                    mlflow.log_metric("overall_score", results.overall_score)  # type: ignore[attr-defined]
+                    mlflow.log_metric("overall_score", results.overall_score)
 
                 logger.info(
                     f"Metrics logged to MLflow experiment '{job_spec.experiment_name}' "
