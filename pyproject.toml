@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "eval-hub-sdk"
-version = "0.1.0a7"
+version = "0.1.0a8"
 description = "Python SDK for EvalHub: common models, REST API client, and framework adapter SDK"
 authors = [
     {name = "Rui Vieira", email = "rui@redhat.com"},
@@ -40,7 +40,7 @@ core = [
 # Adapter development - for building custom evaluation framework adapters
 adapter = [
     "eval-hub-sdk[core]",
-    "mlflow-skinny @ git+https://github.com/red-hat-data-services/mlflow@main#subdirectory=libs/skinny",
+    "mlflow-skinny>=3.10.0rc0",
 ]
 
 # Client API - for end users in Jupyter notebooks and scripts
