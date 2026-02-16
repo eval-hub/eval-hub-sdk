@@ -301,7 +301,6 @@ class JobCallbacks(ABC):
         """
         pass
 
-    @abstractmethod
     def report_metrics_to_mlflow(
         self, results: JobResults, job_spec: JobSpec
     ) -> None:
@@ -310,6 +309,9 @@ class JobCallbacks(ABC):
         This logs metrics to MLflow if the job_spec contains experiment information.
         If no experiment is configured, this method does nothing.
 
+        The default implementation is a no-op. Subclasses (e.g. DefaultCallbacks)
+        override this to perform actual MLflow logging.
+
         Args:
             results: Final job results containing metrics to log
             job_spec: Job specification that may contain experiment configuration
@@ -317,4 +319,4 @@ class JobCallbacks(ABC):
         Raises:
             RuntimeError: If MLflow logging fails
         """
-        pass
+        return
