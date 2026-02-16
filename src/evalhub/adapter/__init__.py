@@ -35,10 +35,10 @@ Quick Start:
             )
 
             # Persist artifacts if needed
-            if config.outputs and config.outputs.oci:
+            if config.exports and config.exports.oci:
                 artifact = callbacks.create_oci_artifact(OCIArtifactSpec(
                     files_path=output_dir,
-                    coordinates=config.outputs.oci.coordinates,
+                    coordinates=config.exports.oci.coordinates,
                 ))
 
             # Return results

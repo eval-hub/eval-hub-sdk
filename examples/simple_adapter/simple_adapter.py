@@ -138,7 +138,7 @@ class ExampleAdapter(FrameworkAdapter):
 
             # Phase 5: Persist artifacts
             oci_artifact = None
-            if config.outputs and config.outputs.oci:
+            if config.exports and config.exports.oci:
                 callbacks.report_status(
                     JobStatusUpdate(
                         status=JobStatus.RUNNING,
@@ -154,7 +154,7 @@ class ExampleAdapter(FrameworkAdapter):
                 oci_artifact = callbacks.create_oci_artifact(
                     OCIArtifactSpec(
                         files_path=output_dir,
-                        coordinates=config.outputs.oci.coordinates,
+                        coordinates=config.exports.oci.coordinates,
                     )
                 )
                 logger.info(f"Artifact persisted: {oci_artifact.digest}")

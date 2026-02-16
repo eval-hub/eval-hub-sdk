@@ -89,7 +89,7 @@ def main() -> None:
             {"key": "env", "value": "local"},
             {"key": "test", "value": "true"},
         ],
-        # "outputs": {
+        # "exports": {
         #     "oci": {
         #         "coordinates": {
         #             "oci_host": "quay.io",

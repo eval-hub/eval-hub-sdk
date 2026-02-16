@@ -65,7 +65,7 @@ class JobSpec(BaseModel):
         - num_examples: Number of examples to evaluate (None = all)
         - experiment_name: Name for this evaluation experiment
         - tags: Custom tags for the job
-        - outputs: Mechanism to provide outputs callbacks
+        - exports: Mechanism to provide exports callbacks
     """
 
     # ============================================================================
@@ -109,9 +109,9 @@ class JobSpec(BaseModel):
         default_factory=list, description="Custom tags for the job"
     )
 
-    # Job outputs
-    outputs: JobSpecOutputs | None = Field(
-        default=None, description="Specify JobSpec.outputs"
+    # Job exports
+    exports: JobSpecExports | None = Field(
+        default=None, description="Specify JobSpec.exports"
     )
 
     @classmethod
@@ -150,16 +150,16 @@ class JobSpec(BaseModel):
             raise ValueError(f"Invalid JSON in job spec file: {e}") from e
 
 
-class JobSpecOutputs(BaseModel):
-    """Specify Job outputs"""
+class JobSpecExports(BaseModel):
+    """Specify Job exports"""
 
-    oci: JobSpecOutputsOCI | None = Field(
+    oci: JobSpecExportsOCI | None = Field(
         default=None, description="EvalHub-provided coordinates (user)"
     )
 
 
-class JobSpecOutputsOCI(BaseModel):
-    """OCI output JobSpec specification"""
+class JobSpecExportsOCI(BaseModel):
+    """OCI export JobSpec specification"""
 
     # Where should be stored (registry, repo, any optional metadata)
     coordinates: OCICoordinates = Field(

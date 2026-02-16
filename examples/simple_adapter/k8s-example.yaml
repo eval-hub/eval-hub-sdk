@@ -32,7 +32,7 @@ data:
     }
 
 # might want to append:
-# "outputs": {
+# "exports": {
 #   "oci": {
 #     "coordinates": {
 #       "oci_host": "quay.io",
