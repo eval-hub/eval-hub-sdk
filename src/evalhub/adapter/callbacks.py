@@ -456,9 +456,10 @@ class DefaultCallbacks(JobCallbacks):
                     for tag in job_spec.tags:
                         mlflow.set_tag(tag["key"], tag["value"])
 
-                # Log evaluation metrics
+                # Log evaluation metrics (only numeric values)
                 for result in results.results:
-                    mlflow.log_metric(result.metric_name, result.metric_value)
+                    if isinstance(result.metric_value, (int, float)):
+                        mlflow.log_metric(result.metric_name, float(result.metric_value))
 
                 # Log overall score if available
                 if results.overall_score is not None:
