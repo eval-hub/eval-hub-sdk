@@ -459,7 +459,9 @@ class DefaultCallbacks(JobCallbacks):
                 # Log evaluation metrics (only numeric values)
                 for result in results.results:
                     if isinstance(result.metric_value, int | float):
-                        mlflow.log_metric(result.metric_name, float(result.metric_value))
+                        mlflow.log_metric(
+                            result.metric_name, float(result.metric_value)
+                        )
 
                 # Log overall score if available
                 if results.overall_score is not None:
