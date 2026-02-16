@@ -8,6 +8,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 OCI_ARTIFACT_TYPE = "application/vnd.eval-hub.github.io"
 
+OCI_ANNOTATION_JOB_ID = "io.github.eval-hub.job_id"
+OCI_ANNOTATION_BENCHMARK_ID = "io.github.eval-hub.benchmark_id"
+OCI_ANNOTATION_PROVIDER_ID = "io.github.eval-hub.provider_id"
+
 
 class JobStatus(str, Enum):
     """Standard job status values."""

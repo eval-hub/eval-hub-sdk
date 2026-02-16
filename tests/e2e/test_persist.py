@@ -7,11 +7,17 @@ In GitHub/CI, one will be provided by the CI.
 
 from pathlib import Path
 
+import oras.provider
 import pytest
 from evalhub.adapter.callbacks import DefaultCallbacks
 from evalhub.adapter.models import OCIArtifactResult, OCIArtifactSpec
-from evalhub.adapter.oci import OCIArtifactPersister
-from evalhub.models.api import OCICoordinates
+from evalhub.adapter.oci import OCIArtifactContext, OCIArtifactPersister
+from evalhub.models.api import (
+    OCI_ANNOTATION_BENCHMARK_ID,
+    OCI_ANNOTATION_JOB_ID,
+    OCI_ANNOTATION_PROVIDER_ID,
+    OCICoordinates,
+)
 
 OCI_HOST = "localhost:5001"
 
@@ -26,7 +32,12 @@ class TestOCIPersisterAgainstRegistry:
         test_dir.mkdir()
         (test_dir / "results.json").write_text('{"accuracy": 0.95}')
 
-        persister = OCIArtifactPersister(job_id="test-single", oci_insecure=True)
+        persister = OCIArtifactPersister(
+            context=OCIArtifactContext(
+                job_id="test-single", benchmark_id="mmlu", provider_id="test-provider"
+            ),
+            oci_insecure=True,
+        )
 
         spec = OCIArtifactSpec(
             files_path=test_dir,
@@ -43,6 +54,19 @@ class TestOCIPersisterAgainstRegistry:
         assert result.digest.startswith("sha256:")
         assert f"{OCI_HOST}/evalhub-test/single:v1@sha256:" in result.reference
 
+        registry = oras.provider.Registry(
+            insecure=True
+        )  # in E2E test and CI we have localhost:5001
+        manifest = registry.get_manifest(
+            f"{OCI_HOST}/evalhub-test/single:v1",
+            allowed_media_type=["application/vnd.oci.image.manifest.v1+json"],
+        )
+
+        annotations = manifest.get("annotations", {})
+        assert annotations[OCI_ANNOTATION_JOB_ID] == "test-single"
+        assert annotations[OCI_ANNOTATION_PROVIDER_ID] == "test-provider"
+        assert annotations[OCI_ANNOTATION_BENCHMARK_ID] == "mmlu"
+
     def test_persist_multiple_files(self, tmp_path: Path) -> None:
         """Test persisting a directory with multiple files."""
         test_dir = tmp_path / "multi"
@@ -53,7 +77,12 @@ class TestOCIPersisterAgainstRegistry:
         subdir.mkdir()
         (subdir / "eval.log").write_text("evaluation completed")
 
-        persister = OCIArtifactPersister(job_id="test-multi", oci_insecure=True)
+        persister = OCIArtifactPersister(
+            context=OCIArtifactContext(
+                job_id="test-multi", benchmark_id="mmlu", provider_id="test-provider"
+            ),
+            oci_insecure=True,
+        )
 
         spec = OCIArtifactSpec(
             files_path=test_dir,
@@ -75,7 +104,12 @@ class TestOCIPersisterAgainstRegistry:
         test_dir.mkdir()
         (test_dir / "data.txt").write_text("some data")
 
-        persister = OCIArtifactPersister(job_id="job-42", oci_insecure=True)
+        persister = OCIArtifactPersister(
+            context=OCIArtifactContext(
+                job_id="job-42", benchmark_id="mmlu", provider_id="test-provider"
+            ),
+            oci_insecure=True,
+        )
 
         spec = OCIArtifactSpec(
             files_path=test_dir,
@@ -88,11 +122,19 @@ class TestOCIPersisterAgainstRegistry:
         result = persister.persist(spec)
 
         assert result.digest.startswith("sha256:")
-        assert "evalhub-test/notag:evalhub-job-job-42@sha256:" in result.reference
+        assert "evalhub-test/notag:evalhub-" in result.reference
+        assert "@sha256:" in result.reference
 
     def test_persist_overwrites_same_tag(self, tmp_path: Path) -> None:
         """Test that pushing to the same tag twice succeeds (overwrites)."""
-        persister = OCIArtifactPersister(job_id="test-overwrite", oci_insecure=True)
+        persister = OCIArtifactPersister(
+            context=OCIArtifactContext(
+                job_id="test-overwrite",
+                benchmark_id="mmlu",
+                provider_id="test-provider",
+            ),
+            oci_insecure=True,
+        )
 
         coordinates = OCICoordinates(
             oci_host=OCI_HOST,

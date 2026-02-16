@@ -754,7 +754,7 @@ requires-dist = [
     { name = "lm-eval", marker = "extra == 'examples'", specifier = ">=0.4.0" },
     { name = "mlflow-skinny", marker = "extra == 'adapter'", specifier = ">=3.10.0rc0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = "==1.7.1" },
-    { name = "olot", marker = "extra == 'adapter'", specifier = ">=0.1.0" },
+    { name = "olot", marker = "extra == 'adapter'", specifier = ">=0.1.15" },
     { name = "oras", marker = "extra == 'adapter'", specifier = ">=0.2.39" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.4.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
@@ -773,7 +773,7 @@ dev = [
     { name = "fastapi", specifier = ">=0.124.4" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "mypy", specifier = ">=1.7.1" },
-    { name = "olot", specifier = ">=0.1.0" },
+    { name = "olot", specifier = ">=0.1.15" },
     { name = "oras", specifier = ">=0.2.39" },
     { name = "pygithub", specifier = ">=2.1.1" },
     { name = "pytest", specifier = ">=7.4.0" },
@@ -2325,15 +2325,15 @@ wheels = [
 
 [[package]]
 name = "olot"
-version = "0.1.13"
+version = "0.1.15"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9e/cc/e18944e3c6af81d690e5c3bc24068459cd3b84f38f196e11941a0235f701/olot-0.1.13.tar.gz", hash = "sha256:a553c0e1798156ec13257689d483993363303de8573cc91465c48edb1c66b70f", size = 25432, upload-time = "2025-11-26T15:30:50.252Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d7/0d/1ffea86c8f914493defe669bee09c46e51113fd4cfd08f864f047a353924/olot-0.1.15.tar.gz", hash = "sha256:76869d1f50a7e9e3e4d9b1ce668ead25286aa346272154b7e97fa2dd1367a89f", size = 28191, upload-time = "2026-02-16T12:45:48.164Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/46/dc/799d7027883a6cf70802f380f5715aa41870ea07b5017bd2916799909751/olot-0.1.13-py3-none-any.whl", hash = "sha256:fa5dff7f5766c62e49fc49983546b6e8050268b4733f9dd2fb305a402f6e939a", size = 32481, upload-time = "2025-11-26T15:30:48.832Z" },
+    { url = "https://files.pythonhosted.org/packages/9c/55/42109c40ef2dece4ba8ae2d43833cef05bd927d1914eb32698cdf946b7b8/olot-0.1.15-py3-none-any.whl", hash = "sha256:1dbb3c833d247e5a1dff0f6a5e1cb0eea7245b46f8cf449225e421adf6ca87e8", size = 36022, upload-time = "2026-02-16T12:45:47.029Z" },
 ]
 
 [[package]]

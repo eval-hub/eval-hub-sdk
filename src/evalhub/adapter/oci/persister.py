@@ -1,7 +1,10 @@
 """OCI artifact persistence for evaluation job files."""
 
+import hashlib
 import logging
 import tempfile
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 import oras.provider
@@ -9,21 +12,47 @@ from olot.oci_artifact import create_simple_oci_artifact
 from oras.layout import Layout
 
 from evalhub.adapter.models.job import OCIArtifactResult, OCIArtifactSpec
-from evalhub.models.api import OCI_ARTIFACT_TYPE
+from evalhub.models.api import (
+    OCI_ANNOTATION_BENCHMARK_ID,
+    OCI_ANNOTATION_JOB_ID,
+    OCI_ANNOTATION_PROVIDER_ID,
+    OCI_ARTIFACT_TYPE,
+)
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class OCIArtifactContext:
+    """Context identifying the evaluation job for OCI artifact tagging and annotations."""
+
+    job_id: str
+    benchmark_id: str
+    # `provider_id`: while lenient if not existing, the JobSpec shall contain it
+    provider_id: str | None = None
+
+
+def default_tag_hasher(ctx: OCIArtifactContext) -> str:
+    """Default tag hasher using SHA256.
+
+    Produces a deterministic hash from the context fields.
+    """
+    components = f"{ctx.job_id}:{ctx.provider_id or ''}:{ctx.benchmark_id}"
+    return hashlib.sha256(components.encode()).hexdigest()
 
 
 class OCIArtifactPersister:
     def __init__(
         self,
-        job_id: str,
+        context: OCIArtifactContext,
         oci_auth_config_path: Path | None = None,
         oci_insecure: bool = False,
+        tag_hasher: Callable[[OCIArtifactContext], str] | None = None,
     ):
-        self.job_id = job_id
+        self.context = context
         self.oci_auth_config_path = oci_auth_config_path
         self.oci_insecure = oci_insecure
+        self.tag_hasher = tag_hasher or default_tag_hasher
 
     def persist(self, spec: OCIArtifactSpec) -> OCIArtifactResult:
         """Persist OCI artifact.
@@ -42,8 +71,18 @@ class OCIArtifactPersister:
         tag = (
             spec.coordinates.oci_tag
             if spec.coordinates.oci_tag
-            else "evalhub-job-" + self.job_id
+            else "evalhub-" + self.tag_hasher(self.context)
         )
+
+        default_annotations = {
+            OCI_ANNOTATION_JOB_ID: self.context.job_id,
+            OCI_ANNOTATION_BENCHMARK_ID: self.context.benchmark_id,
+        }
+        if self.context.provider_id:
+            default_annotations[OCI_ANNOTATION_PROVIDER_ID] = self.context.provider_id
+        # User-provided annotations take precedence
+        merged_annotations = {**default_annotations, **spec.coordinates.annotations}
+        logger.debug("OCI artifact annotations: %s", merged_annotations)
         oci_ref = (
             spec.coordinates.oci_host
             + "/"
@@ -58,6 +97,7 @@ class OCIArtifactPersister:
                 source_path=Path(spec.files_path),
                 oci_layout_path=temp_path,
                 artifact_type=OCI_ARTIFACT_TYPE,
+                annotations=merged_annotations,
             )
 
             if logger.isEnabledFor(logging.DEBUG):

@@ -18,6 +18,7 @@ from .models import (
     OCIArtifactSpec,
 )
 from .oci import OCIArtifactPersister
+from .oci.persister import OCIArtifactContext
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +100,11 @@ class DefaultCallbacks(JobCallbacks):
 
         # Initialize OCI persister
         self.persister = OCIArtifactPersister(
-            job_id=job_id,
+            context=OCIArtifactContext(
+                job_id=job_id,
+                benchmark_id=benchmark_id,
+                provider_id=provider_id,
+            ),
             oci_auth_config_path=oci_auth_config_path,
             oci_insecure=oci_insecure,
         )

@@ -230,7 +230,15 @@ class TestOCIArtifactPersistenceE2E:
         mock_layout_cls.return_value.push_to_registry.return_value = mock_response
 
         # Setup persister
-        persister = OCIArtifactPersister(job_id="integration-test")
+        from evalhub.adapter.oci.persister import OCIArtifactContext
+
+        persister = OCIArtifactPersister(
+            context=OCIArtifactContext(
+                job_id="integration-test",
+                provider_id="my-provider",
+                benchmark_id="mmlu",
+            )
+        )
 
         spec = OCIArtifactSpec(
             files_path=test_dir,
