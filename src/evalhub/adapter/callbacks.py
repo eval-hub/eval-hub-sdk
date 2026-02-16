@@ -425,7 +425,7 @@ class DefaultCallbacks(JobCallbacks):
             return
 
         try:
-            # Load auth token from projected volume if configured.
+            # Load auth token from projected volume if configured into env variable.
             # On ROSA/STS clusters the auto-mounted SA token has the wrong audience,
             # so the operator mounts a projected token with the default K8s API audience.
             token_path = os.environ.get("MLFLOW_TRACKING_TOKEN_PATH")
