@@ -479,6 +479,7 @@ class DefaultCallbacks(JobCallbacks):
         """convenience method, and do not store adapter instance"""
         return DefaultCallbacks(
             job_id=adapter.job_spec.id,
+            provider_id=adapter.job_spec.provider_id,
             benchmark_id=adapter.job_spec.benchmark_id,
             sidecar_url=adapter.job_spec.callback_url,
             insecure=adapter.settings.evalhub_insecure,
