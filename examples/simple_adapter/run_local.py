@@ -85,6 +85,7 @@ def main() -> None:
     # In production, this would be loaded from /meta/job.json
     spec_data = {
         "id": "local-test-001",
+        "provider_id": "local-provider",  # Required field
         "benchmark_id": "mmlu",
         "model": {
             "url": "http://localhost:8000/v1",  # Your local model server

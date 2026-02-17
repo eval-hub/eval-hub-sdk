@@ -9,17 +9,18 @@ metadata:
 data:
   job.json: |
     {
-      "job_id": "eval-job-001",
+      "id": "eval-job-001",
+      "provider_id": "evalhub-provider",
       "benchmark_id": "mmlu",
       "model": {
         "url": "http://model-server.models.svc.cluster.local:8000/v1",
         "name": "llama-2-7b-chat"
       },
       "num_examples": 1000,
-      "num_few_shot": 5,
-      "random_seed": 42,
       "benchmark_config": {
-        "subject": "all"
+        "subject": "all",
+        "num_few_shot": 5,
+        "random_seed": 42
       },
       "experiment_name": "llama-2-evaluation",
       "tags": [
