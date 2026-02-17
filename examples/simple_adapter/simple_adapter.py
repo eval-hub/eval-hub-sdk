@@ -412,9 +412,7 @@ def main() -> None:
             adapter.job_spec.provider_id,
             adapter.job_spec.benchmark_id,
             sidecar_url=adapter.job_spec.callback_url,
-            oci_auth_config_path=Path(adapter.settings.oci_auth_config_path)
-            if adapter.settings.oci_auth_config_path
-            else None,
+            oci_auth_config_path=adapter.settings.oci_auth_config_path,
             oci_insecure=adapter.settings.oci_insecure,
         )
 

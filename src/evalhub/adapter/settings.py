@@ -37,7 +37,7 @@ class AdapterSettings(BaseSettings):
     )
 
     # OCI registry configuration
-    oci_auth_config_path: str | None = Field(
+    oci_auth_config_path: Path | None = Field(
         default=None, validation_alias="OCI_AUTH_CONFIG_PATH"
     )
     oci_insecure: bool = Field(default=False, validation_alias="OCI_INSECURE")
