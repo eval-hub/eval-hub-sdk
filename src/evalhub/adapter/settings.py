@@ -13,10 +13,19 @@ The job spec is mounted in Kubernetes at `/meta/job.json`.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 
-from pydantic import Field
+from pydantic import BeforeValidator, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Default job spec location.
+# - Kubernetes: /meta/job.json
+# - Local dev: meta/job.json (repo-relative) for convenience
+DEFAULT_JOB_SPEC_PATH_K8S = Path("/meta/job.json")
+DEFAULT_JOB_SPEC_PATH_LOCAL = Path("meta/job.json")
+
+# Environment variable name for job spec location
+JOB_SPEC_PATH_ENV = "EVALHUB_JOB_SPEC_PATH"
 
 
 class AdapterSettings(BaseSettings):
@@ -27,9 +36,10 @@ class AdapterSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="", extra="ignore")
 
     # Execution mode affects defaults only (env vars always win).
-    mode: Literal["k8s", "local"] = Field(
-        default="local", validation_alias="EVALHUB_MODE"
-    )
+    mode: Annotated[
+        Literal["k8s", "local"],
+        BeforeValidator(lambda v: v.strip().lower() if isinstance(v, str) else v),
+    ] = Field(default="local", validation_alias="EVALHUB_MODE")
 
     # Job spec configuration
     job_spec_path: Path | None = Field(
@@ -68,7 +78,7 @@ class AdapterSettings(BaseSettings):
         """Resolve job spec path using mode defaults."""
         if self.job_spec_path is not None:
             return self.job_spec_path
-        return Path("/meta/job.json") if self.mode == "k8s" else Path("meta/job.json")
+        return DEFAULT_JOB_SPEC_PATH_K8S if self.mode == "k8s" else DEFAULT_JOB_SPEC_PATH_LOCAL
 
     @property
     def resolved_auth_token_path(self) -> Path | None:
@@ -117,5 +127,5 @@ class AdapterSettings(BaseSettings):
         if not self.resolved_job_spec_path.exists():
             raise FileNotFoundError(
                 f"Job spec file not found at {self.resolved_job_spec_path}. "
-                "Set EVALHUB_JOB_SPEC_PATH (or EVALHUB_MODE=k8s for /meta/job.json)."
+                f"Set {JOB_SPEC_PATH_ENV} (or EVALHUB_MODE=k8s for {DEFAULT_JOB_SPEC_PATH_K8S})."
             )
