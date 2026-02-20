@@ -16,8 +16,8 @@ def get_job_spec_path() -> Path:
     environment variable. This allows the SDK to work in different
     environments:
 
-    - Kubernetes (production): /meta/job.json (default)
-    - Local testing: ./meta/job.json or any custom path
+    - Kubernetes (EVALHUB_MODE=k8s): /meta/job.json
+    - Local testing (default): meta/job.json or any custom path
     - CI/CD: Custom paths as needed
 
     Returns:
