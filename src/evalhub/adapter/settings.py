@@ -78,7 +78,11 @@ class AdapterSettings(BaseSettings):
         """Resolve job spec path using mode defaults."""
         if self.job_spec_path is not None:
             return self.job_spec_path
-        return DEFAULT_JOB_SPEC_PATH_K8S if self.mode == "k8s" else DEFAULT_JOB_SPEC_PATH_LOCAL
+        return (
+            DEFAULT_JOB_SPEC_PATH_K8S
+            if self.mode == "k8s"
+            else DEFAULT_JOB_SPEC_PATH_LOCAL
+        )
 
     @property
     def resolved_auth_token_path(self) -> Path | None:
