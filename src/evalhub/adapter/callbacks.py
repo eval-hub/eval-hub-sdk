@@ -38,6 +38,7 @@ class DefaultCallbacks(JobCallbacks):
         callbacks = DefaultCallbacks(
             job_id="my-job-123",
             benchmark_id="mmlu",
+            benchmark_index=0,
             provider_id="lm_evaluation_harness",
             sidecar_url="http://localhost:8080",
             oci_auth_config_path=Path("~/.docker/config.json"),
@@ -47,6 +48,7 @@ class DefaultCallbacks(JobCallbacks):
         callbacks = DefaultCallbacks(
             job_id="my-job-123",
             benchmark_id="mmlu",
+            benchmark_index=0,
             oci_insecure=True,
         )
 
@@ -60,6 +62,7 @@ class DefaultCallbacks(JobCallbacks):
         job_id: str,
         benchmark_id: str,
         provider_id: str | None = None,
+        benchmark_index: int = 0,
         sidecar_url: str | None = None,
         insecure: bool = False,
         auth_token: str | None = None,
@@ -76,6 +79,7 @@ class DefaultCallbacks(JobCallbacks):
             benchmark_id: Benchmark identifier for status event validation.
             provider_id: Provider identifier (optional). If not provided, status updates
                         will not include provider_id field.
+            benchmark_index: Index of this benchmark within the job (default 0).
             sidecar_url: URL of evalhub service for status updates (optional).
                         If None, status updates are logged locally.
             insecure: Allow insecure HTTP connections (evalhub)
@@ -88,6 +92,7 @@ class DefaultCallbacks(JobCallbacks):
         self.job_id = job_id
         self.benchmark_id = benchmark_id
         self.provider_id = provider_id
+        self.benchmark_index = benchmark_index
         self.sidecar_url = sidecar_url.rstrip("/") if sidecar_url else None
         self._events_path_template = (
             events_path_template
@@ -101,6 +106,7 @@ class DefaultCallbacks(JobCallbacks):
                 job_id=job_id,
                 benchmark_id=benchmark_id,
                 provider_id=provider_id,
+                benchmark_index=benchmark_index,
             ),
             oci_auth_config_path=oci_auth_config_path,
             oci_insecure=oci_insecure,
@@ -258,6 +264,7 @@ class DefaultCallbacks(JobCallbacks):
                 # Transform to eval-hub API format
                 status_event = {
                     "id": self.benchmark_id,
+                    "benchmark_index": self.benchmark_index,
                     "state": update.status.value,
                     "status": update.status.value,
                     "message": update.message.model_dump(mode="json"),
@@ -272,6 +279,7 @@ class DefaultCallbacks(JobCallbacks):
                     status_event["provider_id"] = self.provider_id
 
                 data = {"benchmark_status_event": status_event}
+                logger.debug("Events report_status body: %s", data)
 
                 response = self._http_client.post(url, json=data, timeout=10.0)
                 response.raise_for_status()
@@ -343,6 +351,7 @@ class DefaultCallbacks(JobCallbacks):
                 # Build status event with results
                 status_event = {
                     "id": self.benchmark_id,
+                    "benchmark_index": self.benchmark_index,
                     "state": JobStatus.COMPLETED.value,
                     "status": JobStatus.COMPLETED.value,
                     "message": {
@@ -366,6 +375,7 @@ class DefaultCallbacks(JobCallbacks):
                     }
 
                 data = {"benchmark_status_event": status_event}
+                logger.debug("Events report_results body: %s", data)
 
                 response = self._http_client.post(url, json=data, timeout=10.0)
                 response.raise_for_status()
@@ -481,6 +491,7 @@ class DefaultCallbacks(JobCallbacks):
             job_id=adapter.job_spec.id,
             provider_id=adapter.job_spec.provider_id,
             benchmark_id=adapter.job_spec.benchmark_id,
+            benchmark_index=adapter.job_spec.benchmark_index,
             sidecar_url=adapter.job_spec.callback_url,
             insecure=adapter.settings.evalhub_insecure,
             oci_auth_config_path=adapter.settings.oci_auth_config_path,

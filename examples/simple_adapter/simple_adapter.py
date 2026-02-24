@@ -166,6 +166,7 @@ class ExampleAdapter(FrameworkAdapter):
             return JobResults(
                 id=config.id,
                 benchmark_id=config.benchmark_id,
+                benchmark_index=config.benchmark_index,
                 model_name=config.model.name,
                 results=results,
                 overall_score=overall_score,
@@ -397,7 +398,7 @@ def main() -> None:
         def report_results(self, results: JobResults) -> None:
             # In production: POST to http://localhost:8080/results
             logger.info(
-                f"Job {results.id} completed with score {results.overall_score}"
+                f"Job {results.id} [{results.benchmark_id}#{results.benchmark_index}] completed with score {results.overall_score}"
             )
 
     try:
@@ -411,6 +412,7 @@ def main() -> None:
             adapter.job_spec.id,
             adapter.job_spec.provider_id,
             adapter.job_spec.benchmark_id,
+            adapter.job_spec.benchmark_index,
             sidecar_url=adapter.job_spec.callback_url,
             oci_auth_config_path=adapter.settings.oci_auth_config_path,
             oci_insecure=adapter.settings.oci_insecure,
@@ -418,7 +420,9 @@ def main() -> None:
 
         # Run benchmark job (pass self.job_spec or override with custom spec for testing)
         results = adapter.run_benchmark_job(adapter.job_spec, callbacks)
-        logger.info(f"Job completed successfully: {results.id}")
+        logger.info(
+            f"Job completed successfully: {results.id} [{results.benchmark_id}#{results.benchmark_index}]"
+        )
         logger.info(f"Overall score: {results.overall_score}")
 
         # Report final results

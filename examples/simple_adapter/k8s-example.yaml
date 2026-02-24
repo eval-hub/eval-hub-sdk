@@ -12,6 +12,7 @@ data:
       "id": "eval-job-001",
       "provider_id": "evalhub-provider",
       "benchmark_id": "mmlu",
+      "benchmark_index": 0,
       "model": {
         "url": "http://model-server.models.svc.cluster.local:8000/v1",
         "name": "llama-2-7b-chat"

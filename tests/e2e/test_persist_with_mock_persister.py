@@ -27,6 +27,7 @@ def mock_job_spec_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         "id": "test-job-001",
         "provider_id": "lm_evaluation_harness",
         "benchmark_id": "mmlu",
+        "benchmark_index": 0,
         "model": {"url": "http://localhost:8000", "name": "test-model"},
         "num_examples": 10,
         "benchmark_config": {"random_seed": 42},
@@ -109,6 +110,7 @@ class TestOCIArtifactPersistenceE2E:
                 return JobResults(
                     id=config.id,
                     benchmark_id=config.benchmark_id,
+                    benchmark_index=config.benchmark_index,
                     model_name=config.model.name,
                     results=[
                         EvaluationResult(
@@ -131,6 +133,7 @@ class TestOCIArtifactPersistenceE2E:
             id="e2e-test-001",
             provider_id="lm_evaluation_harness",
             benchmark_id="mmlu",
+            benchmark_index=0,
             model=ModelConfig(url="http://localhost:8000", name="test-model"),
             benchmark_config={},
             callback_url="http://localhost:8080",

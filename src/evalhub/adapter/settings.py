@@ -13,10 +13,12 @@ The job spec is mounted in Kubernetes at `/meta/job.json`.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal, Self
+from typing import Self
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from evalhub.adapter.config import EvalHubMode
 
 
 class AdapterSettings(BaseSettings):
@@ -27,8 +29,8 @@ class AdapterSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="", extra="ignore")
 
     # Execution mode affects defaults only (env vars always win).
-    mode: Literal["k8s", "local"] = Field(
-        default="local", validation_alias="EVALHUB_MODE"
+    mode: EvalHubMode = Field(
+        default=EvalHubMode.LOCAL, validation_alias="EVALHUB_MODE"
     )
 
     # Job spec configuration
@@ -68,7 +70,11 @@ class AdapterSettings(BaseSettings):
         """Resolve job spec path using mode defaults."""
         if self.job_spec_path is not None:
             return self.job_spec_path
-        return Path("/meta/job.json") if self.mode == "k8s" else Path("meta/job.json")
+        return (
+            Path("/meta/job.json")
+            if self.mode == EvalHubMode.K8S
+            else Path("meta/job.json")
+        )
 
     @property
     def resolved_auth_token_path(self) -> Path | None:

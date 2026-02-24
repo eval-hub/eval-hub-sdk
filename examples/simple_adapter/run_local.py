@@ -50,7 +50,7 @@ class LocalCallbacks(DefaultCallbacks):
         """Print final results to console."""
         logger.info(
             f"Job {results.id} completed | "
-            f"Benchmark: {results.benchmark_id} | "
+            f"Benchmark: {results.benchmark_id}#{results.benchmark_index} | "
             f"Model: {results.model_name} | "
             f"Overall Score: {results.overall_score} | "
             f"Examples: {results.num_examples_evaluated} | "
@@ -73,6 +73,7 @@ def main() -> None:
         "id": "local-test-001",
         "provider_id": "local-provider",  # Required field
         "benchmark_id": "mmlu",
+        "benchmark_index": 0,
         "model": {
             "url": "http://localhost:8000/v1",  # Your local model server
             "name": "test-model",
@@ -133,7 +134,7 @@ def main() -> None:
         logger.info("EVALUATION COMPLETE")
         logger.info("=" * 60)
         logger.info(f"Job ID: {results.id}")
-        logger.info(f"Benchmark: {results.benchmark_id}")
+        logger.info(f"Benchmark: {results.benchmark_id}#{results.benchmark_index}")
         logger.info(f"Overall Score: {results.overall_score}")
         logger.info(f"Examples Evaluated: {results.num_examples_evaluated}")
         logger.info(f"Duration: {results.duration_seconds:.2f} seconds")

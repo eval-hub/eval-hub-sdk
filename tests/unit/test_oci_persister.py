@@ -152,7 +152,7 @@ class TestOCIArtifactPersisterPersist:
 
         result = persister.persist(spec)
 
-        expected_hash = hashlib.sha256(b"my-job:lm-eval:mmlu").hexdigest()
+        expected_hash = hashlib.sha256(b"my-job:lm-eval:mmlu:0").hexdigest()
         expected_tag = f"evalhub-{expected_hash}"
         assert result.reference == f"ghcr.io/org/repo:{expected_tag}@sha256:def456"
 

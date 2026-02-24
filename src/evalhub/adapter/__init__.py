@@ -45,6 +45,7 @@ Quick Start:
             return JobResults(
                 id=config.id,
                 benchmark_id=config.benchmark_id,
+                benchmark_index=config.benchmark_index,
                 model_name=config.model.name,
                 results=results,
                 ...

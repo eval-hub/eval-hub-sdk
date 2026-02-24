@@ -30,6 +30,7 @@ class OCIArtifactContext:
     benchmark_id: str
     # `provider_id`: while lenient if not existing, the JobSpec shall contain it
     provider_id: str | None = None
+    benchmark_index: int = 0
 
 
 def default_tag_hasher(ctx: OCIArtifactContext) -> str:
@@ -37,7 +38,9 @@ def default_tag_hasher(ctx: OCIArtifactContext) -> str:
 
     Produces a deterministic hash from the context fields.
     """
-    components = f"{ctx.job_id}:{ctx.provider_id or ''}:{ctx.benchmark_id}"
+    components = (
+        f"{ctx.job_id}:{ctx.provider_id or ''}:{ctx.benchmark_id}:{ctx.benchmark_index}"
+    )
     return hashlib.sha256(components.encode()).hexdigest()
 
 

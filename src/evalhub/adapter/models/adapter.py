@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import TYPE_CHECKING
+
+from evalhub.adapter.config import EvalHubMode
 
 from .job import JobCallbacks, JobResults, JobSpec
 
@@ -148,6 +151,63 @@ class FrameworkAdapter(ABC):
         """
         return self._job_spec
 
+    @property
+    def local_jobs_base_path(self) -> Path | None:
+        """
+        Get the run-scoped base directory for local mode runs.
+
+        In local mode, EvalHub expects the environment variable EVALHUB_JOB_SPEC_PATH to be
+        set to a path of the form:
+
+            /<some-path>/{job_id}/{benchmark_index}/{provider_id}/{benchmark_id}/meta/job.json
+
+        This function returns the base path that uniquely identifies the job run and is the parent
+        of the 'meta/' directory:
+
+            /<some-path>/{job_id}/{benchmark_index}/{provider_id}/{benchmark_id}
+
+        For example, if:
+            EVALHUB_JOB_SPEC_PATH=/tmp/evalhub-jobs/job-1/0/my-provider/my-benchmark/meta/job.json
+
+        then this function will return:
+            Path('/tmp/evalhub-jobs/job-1/0/my-provider/my-benchmark')
+
+        In local mode, this ensures results and outputs saved via this adapter are uniquely
+        scoped per benchmark job. This avoids collisions between multiple jobs or concurrent
+        runs, allowing safe sharing of a base results directory across jobs.
+
+        Example:
+            # Can be generalised for k8s and local mode
+            if self.local_jobs_base_path is not None:
+                output_dir = self.local_jobs_base_path / "results"
+            else:
+                output_dir = Path(__file__).parent / "results"
+
+        Returns:
+            Path | None: The base path prefix (parent of meta/), or None if not in local mode.
+
+        Raises:
+            AssertionError: If EVALHUB_JOB_SPEC_PATH is required but not set or invalid.
+        """
+        s = self._settings
+        if s.mode != EvalHubMode.LOCAL:
+            return None
+        if s.job_spec_path is None:
+            raise AssertionError(
+                "EVALHUB_JOB_SPEC_PATH must be set in local mode (got None)"
+            )
+        job_spec = s.job_spec_path.resolve()
+        parts = job_spec.parts
+        # Require that the path ends with 'meta/job.json'. The returned value is the parent
+        # directory of 'meta', i.e. .../{job_id}/{benchmark_index}/{provider_id}/{benchmark_id}
+        # This guarantees unique run paths for multiple local benchmark jobs.
+        if not (len(parts) >= 2 and parts[-2] == "meta" and parts[-1] == "job.json"):
+            raise AssertionError(
+                f"EVALHUB_JOB_SPEC_PATH must end with 'meta/job.json' in local mode, "
+                f"got: {s.job_spec_path}"
+            )
+        return job_spec.parent.parent
+
     @abstractmethod
     def run_benchmark_job(self, config: JobSpec, callbacks: JobCallbacks) -> JobResults:
         """Run a benchmark evaluation job.
@@ -172,7 +232,7 @@ class FrameworkAdapter(ABC):
 
         Testing usage:
             adapter = MyAdapter()
-            test_spec = JobSpec(job_id="test", benchmark_id="mmlu", ...)
+            test_spec = JobSpec(id="test", benchmark_id="mmlu", benchmark_index=0, ...)
             results = adapter.run_benchmark_job(test_spec, callbacks)
 
         Args:

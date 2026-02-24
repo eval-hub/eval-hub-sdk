@@ -195,6 +195,7 @@ adapter = MyFrameworkAdapter(settings=settings)
 callbacks = DefaultCallbacks(
     job_id=job_spec.job_id,
     benchmark_id=job_spec.benchmark_id,
+    benchmark_index=job_spec.benchmark_index,
     sidecar_url=job_spec.callback_url,  # SERVICE_URL
     registry_url=settings.registry_url,      # REGISTRY_URL
     registry_username=settings.registry_username,
@@ -206,7 +207,7 @@ results = adapter.run_benchmark_job(job_spec, callbacks)
 ```
 
 **Key Points:**
-- **Status updates**: Sent to sidecar if `sidecar_url` is provided, otherwise logged locally
+- **Status updates**: Sent to sidecar if `sidecar_url` is provided, otherwise logged locally. Both `report_status` and `report_results` events always include `benchmark_index` (and `provider_id` when set) so the service can associate events with the correct benchmark in multi-benchmark jobs.
 - **OCI artifacts**: Always pushed directly by the SDK using `OCIArtifactPersister`
 
 #### Advanced: Direct Persister Usage
@@ -299,6 +300,7 @@ adapter = MyFrameworkAdapter(settings=settings)
 callbacks = DefaultCallbacks(
     job_id=job_spec.job_id,
     benchmark_id=job_spec.benchmark_id,
+    benchmark_index=job_spec.benchmark_index,
     sidecar_url=job_spec.callback_url,
     registry_url=settings.registry_url,
     registry_username=settings.registry_username,
@@ -407,8 +409,10 @@ from evalhub.adapter import JobSpec
 
 # Load job specification
 job_spec = JobSpec(
-    job_id="eval-123",
+    id="eval-123",
+    provider_id="my-provider",
     benchmark_id="mmlu",
+    benchmark_index=0,
     model=ModelConfig(
         url="http://vllm-service:8000",
         name="llama-2-7b"
@@ -457,11 +461,13 @@ class MyFrameworkAdapter(FrameworkAdapter):
 ```python
 class JobSpec(BaseModel):
     # Mandatory fields
-    job_id: str                       # Unique job identifier
+    id: str                           # Unique job identifier
+    provider_id: str                   # Provider identifier
     benchmark_id: str                 # Benchmark to evaluate
+    benchmark_index: int              # Index of this benchmark within the job (included in all status/result events)
     model: ModelConfig                # Model configuration (url, name)
     benchmark_config: Dict[str, Any]  # Adapter-specific parameters
-    callback_url: str                 # Base URL for callbacks (SDK appends /status, /results)
+    callback_url: str                  # Base URL for callbacks (SDK appends /status, /results)
 
     # Optional fields
     num_examples: Optional[int]       # Number of examples to evaluate
@@ -496,11 +502,14 @@ class JobCallbacks(ABC):
         """Create and push OCI artifact"""
 ```
 
+When using `DefaultCallbacks`, pass `benchmark_index` (and optionally `provider_id`) from the job spec so that status and result events sent to the service always include `benchmark_index`, allowing the service to associate events with the correct benchmark in multi-benchmark jobs.
+
 **JobResults** - Returned when job completes:
 ```python
 class JobResults(BaseModel):
     job_id: str
     benchmark_id: str
+    benchmark_index: int                       # Index within the job
     model_name: str
     results: List[EvaluationResult]           # Evaluation metrics
     overall_score: Optional[float]            # Overall score if applicable
@@ -550,6 +559,7 @@ adapter = MyFrameworkAdapter(settings=settings)
 callbacks = DefaultCallbacks(
     job_id=job_spec.job_id,
     benchmark_id=job_spec.benchmark_id,
+    benchmark_index=job_spec.benchmark_index,
     sidecar_url=job_spec.callback_url,
     registry_url=settings.registry_url,
     insecure=settings.registry_insecure,

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "eval-hub-sdk"
-version = "0.1.0a8"
+version = "0.1.0a9"
 description = "Python SDK for EvalHub: common models, REST API client, and framework adapter SDK"
 authors = [
     {name = "Rui Vieira", email = "rui@redhat.com"},
@@ -124,6 +124,7 @@ module = [
     "httpx.*",
     "pydantic.*",
     "pydantic_settings",
+    "pydantic_settings.*",
     "rich.*",
     "rich",
     "github",
@@ -136,6 +137,9 @@ module = [
     "oras",
     "olot.*",
     "olot",
+    # Optional auth/cloud deps used by transitive deps (no stubs needed)
+    "google.*",
+    "databricks.*",
 ]
 ignore_missing_imports = true
 

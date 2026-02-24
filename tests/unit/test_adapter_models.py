@@ -30,6 +30,7 @@ def mock_job_spec_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         "id": "test-job-001",
         "provider_id": "lm_evaluation_harness",
         "benchmark_id": "mmlu",
+        "benchmark_index": 0,
         "model": {"url": "http://localhost:8000", "name": "test-model"},
         "num_examples": 10,
         "benchmark_config": {"random_seed": 42},
@@ -55,6 +56,7 @@ class TestJobSpec:
             id="test-job-001",
             provider_id="lm_evaluation_harness",
             benchmark_id="mmlu",
+            benchmark_index=0,
             model=ModelConfig(url="http://localhost:8000", name="test-model"),
             num_examples=10,
             benchmark_config={"num_few_shot": 5, "random_seed": 42},
@@ -75,6 +77,7 @@ class TestJobSpec:
             id="test-job-002",
             provider_id="lm_evaluation_harness",
             benchmark_id="hellaswag",
+            benchmark_index=0,
             model=ModelConfig(url="http://localhost:8000", name="model"),
             benchmark_config={},
             callback_url="http://localhost:8080",
@@ -91,6 +94,7 @@ class TestJobSpec:
             id="test-job-003",
             provider_id="lm_evaluation_harness",
             benchmark_id="mmlu",
+            benchmark_index=0,
             model=ModelConfig(url="http://localhost:8000", name="model"),
             benchmark_config={"subject": "physics", "difficulty": "hard"},
             callback_url="http://localhost:8080",
@@ -104,6 +108,7 @@ class TestJobSpec:
             id="test-job-004",
             provider_id="lm_evaluation_harness",
             benchmark_id="arc",
+            benchmark_index=0,
             model=ModelConfig(url="http://localhost:8000", name="model"),
             benchmark_config={},
             callback_url="http://localhost:8080",
@@ -124,6 +129,7 @@ class TestJobSpec:
             id="test-job-004b",
             provider_id="lm_evaluation_harness",
             benchmark_id="arc",
+            benchmark_index=0,
             model=ModelConfig(url="http://localhost:8000", name="model"),
             benchmark_config={},
             callback_url="http://localhost:8080",
@@ -137,6 +143,7 @@ class TestJobSpec:
             "id": "test-job-005",
             "provider_id": "lm_evaluation_harness",
             "benchmark_id": "mmlu",
+            "benchmark_index": 0,
             "model": {"url": "http://localhost:8000", "name": "test-model"},
             "benchmark_config": {},
             "callback_url": "http://localhost:8080",
@@ -162,6 +169,7 @@ class TestJobSpec:
             id="test-job-005",
             provider_id="lm_evaluation_harness",
             benchmark_id="gsm8k",
+            benchmark_index=0,
             model=ModelConfig(url="http://localhost:8000", name="model"),
             benchmark_config={},
             callback_url="http://localhost:8080",
@@ -316,6 +324,7 @@ class TestJobResults:
         results = JobResults(
             id="test-job-001",
             benchmark_id="mmlu",
+            benchmark_index=0,
             model_name="test-model",
             results=[
                 EvaluationResult(
@@ -339,6 +348,7 @@ class TestJobResults:
         results = JobResults(
             id="test-job-001",
             benchmark_id="mmlu",
+            benchmark_index=0,
             model_name="model",
             results=[],
             num_examples_evaluated=100,
@@ -353,6 +363,7 @@ class TestJobResults:
         results = JobResults(
             id="test-job-001",
             benchmark_id="mmlu",
+            benchmark_index=0,
             model_name="model",
             results=[],
             num_examples_evaluated=100,
@@ -377,6 +388,7 @@ class TestJobResults:
         results = JobResults(
             id="test-job-001",
             benchmark_id="mmlu",
+            benchmark_index=0,
             model_name="model",
             results=[],
             num_examples_evaluated=100,
@@ -392,6 +404,7 @@ class TestJobResults:
         results = JobResults(
             id="test-job-001",
             benchmark_id="mmlu",
+            benchmark_index=0,
             model_name="model",
             results=[],
             num_examples_evaluated=100,
@@ -482,6 +495,7 @@ class TestFrameworkAdapter:
                 return JobResults(
                     id=config.id,
                     benchmark_id=config.benchmark_id,
+                    benchmark_index=config.benchmark_index,
                     model_name=config.model.name,
                     results=[],
                     num_examples_evaluated=0,
@@ -524,6 +538,7 @@ class TestFrameworkAdapter:
                 return JobResults(
                     id=config.id,
                     benchmark_id=config.benchmark_id,
+                    benchmark_index=config.benchmark_index,
                     model_name=config.model.name,
                     results=[
                         EvaluationResult(
@@ -565,6 +580,7 @@ class TestFrameworkAdapter:
             id="test-job-001",
             provider_id="lm_evaluation_harness",
             benchmark_id="mmlu",
+            benchmark_index=0,
             model=ModelConfig(url="http://localhost:8000", name="test-model"),
             benchmark_config={},
             callback_url="http://localhost:8080",
@@ -583,3 +599,92 @@ class TestFrameworkAdapter:
         assert callbacks.status_updates[0].phase == JobPhase.INITIALIZING
         assert callbacks.status_updates[1].phase == JobPhase.RUNNING_EVALUATION
         assert mock_job_spec_file.exists()  # Use fixture
+
+
+class TestLocalJobsBasePath:
+    """Tests for FrameworkAdapter.local_jobs_base_path property."""
+
+    _JOB_SPEC_DATA = {
+        "id": "job-1",
+        "provider_id": "prov",
+        "benchmark_id": "bench",
+        "benchmark_index": 0,
+        "model": {"url": "http://localhost:8000", "name": "m"},
+        "benchmark_config": {},
+        "callback_url": "http://localhost:8080",
+    }
+
+    class _Adapter(FrameworkAdapter):
+        def run_benchmark_job(
+            self, config: JobSpec, callbacks: JobCallbacks
+        ) -> JobResults:
+            return JobResults(
+                id=config.id,
+                benchmark_id=config.benchmark_id,
+                benchmark_index=config.benchmark_index,
+                model_name=config.model.name,
+                results=[],
+                num_examples_evaluated=0,
+                duration_seconds=0.0,
+            )
+
+    def _write_spec(self, spec_path: Path) -> None:
+        spec_path.parent.mkdir(parents=True, exist_ok=True)
+        spec_path.write_text(json.dumps(self._JOB_SPEC_DATA))
+
+    def test_returns_parent_of_meta_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that local_jobs_base_path returns the parent of the meta/ directory."""
+        base = tmp_path / "job-1" / "0" / "prov" / "bench"
+        spec_path = base / "meta" / "job.json"
+        self._write_spec(spec_path)
+
+        monkeypatch.setenv("EVALHUB_MODE", "local")
+        monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(spec_path))
+        adapter = self._Adapter()
+
+        assert adapter.local_jobs_base_path == base.resolve()
+
+    def test_returns_none_in_k8s_mode(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that local_jobs_base_path returns None when not in local mode."""
+        spec_path = tmp_path / "meta" / "job.json"
+        self._write_spec(spec_path)
+
+        monkeypatch.setenv("EVALHUB_MODE", "k8s")
+        monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(spec_path))
+        adapter = self._Adapter()
+
+        assert adapter.local_jobs_base_path is None
+
+    def test_raises_when_path_does_not_end_with_meta_job_json(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that an AssertionError is raised if the path doesn't end with meta/job.json."""
+        spec_path = tmp_path / "job.json"
+        spec_path.write_text(json.dumps(self._JOB_SPEC_DATA))
+
+        monkeypatch.setenv("EVALHUB_MODE", "local")
+        monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(spec_path))
+        adapter = self._Adapter()
+
+        with pytest.raises(AssertionError, match="must end with 'meta/job.json'"):
+            adapter.local_jobs_base_path
+
+    def test_raises_when_job_spec_path_is_none(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that an AssertionError is raised if job_spec_path is None in local mode."""
+        spec_path = tmp_path / "meta" / "job.json"
+        self._write_spec(spec_path)
+
+        monkeypatch.setenv("EVALHUB_MODE", "local")
+        monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(spec_path))
+        adapter = self._Adapter()
+        # Manually clear to simulate missing path
+        adapter._settings.job_spec_path = None
+
+        with pytest.raises(AssertionError, match="must be set in local mode"):
+            adapter.local_jobs_base_path

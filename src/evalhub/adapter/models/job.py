@@ -57,6 +57,7 @@ class JobSpec(BaseModel):
         - id: Unique job identifier
         - provider_id: Provider identifier from service
         - benchmark_id: Benchmark to evaluate
+        - benchmark_index: Index of this benchmark within the job
         - model: Model configuration (url and name)
         - benchmark_config: Benchmark-specific parameters
         - callback_url: URL for status and result callbacks
@@ -76,6 +77,9 @@ class JobSpec(BaseModel):
     id: str = Field(..., description="Unique job identifier from service")
     provider_id: str = Field(..., description="Provider identifier from service")
     benchmark_id: str = Field(..., description="Benchmark to evaluate")
+    benchmark_index: int = Field(
+        ..., description="Index of this benchmark within the job"
+    )
 
     # Model configuration (mandatory)
     model: ModelConfig = Field(..., description="Model configuration")
@@ -230,6 +234,9 @@ class JobResults(BaseModel):
     # Core results
     id: str = Field(..., description="Job identifier")
     benchmark_id: str = Field(..., description="Benchmark that was evaluated")
+    benchmark_index: int = Field(
+        ..., description="Index of this benchmark within the job"
+    )
     model_name: str = Field(..., description="Model that was evaluated")
     results: list[EvaluationResult] = Field(..., description="Evaluation results")
 
