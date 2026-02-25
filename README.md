@@ -661,7 +661,7 @@ ruff check --fix .
 mypy src/evalhub
 
 # Run full test suite
-pytest -v --cov=src/evalhub
+Pytest -v --cov=src/evalhub
 ```
 
 ## Contributing

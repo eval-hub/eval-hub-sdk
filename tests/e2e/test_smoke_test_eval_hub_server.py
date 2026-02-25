@@ -5,7 +5,6 @@ from evalhub import (
     ModelConfig,
     SyncEvalHubClient,
 )
-from httpx import HTTPStatusError
 
 
 @pytest.mark.e2e
@@ -18,11 +17,10 @@ def test_evaluations_providers_endpoint(evalhub_server_with_real_config: str) ->
 
 @pytest.mark.e2e
 def test_collections_endpoint(evalhub_server_with_real_config: str) -> None:
-    """Test that the collections endpoint returns 501 Not Implemented."""
+    """Test that the collections endpoint is accessible."""
     with SyncEvalHubClient(base_url=evalhub_server_with_real_config) as client:
-        with pytest.raises(HTTPStatusError) as exc_info:
-            client.collections.list()
-        assert exc_info.value.response.status_code == 501
+        collections = client.collections.list()
+        assert isinstance(collections, list)
 
 
 @pytest.mark.e2e

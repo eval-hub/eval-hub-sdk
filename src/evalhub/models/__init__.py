@@ -28,6 +28,8 @@ from .api import (
     JobStatus,
     JobSubmissionRequest,
     ModelConfig,
+    PassCriteria,
+    PrimaryScore,
     Provider,
     ProviderList,
     Resource,
@@ -57,6 +59,8 @@ __all__ = [
     "BenchmarksList",
     "BenchmarkReference",
     "BenchmarkStatus",
+    "PrimaryScore",
+    "PassCriteria",
     # Collection models
     "Resource",
     "Collection",

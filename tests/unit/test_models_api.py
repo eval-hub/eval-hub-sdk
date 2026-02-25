@@ -437,14 +437,18 @@ class TestListModelsServerCompatibility:
 
     def test_provider_list_with_server_fields(self) -> None:
         """Test ProviderList parses server response format."""
-        # Go API returns 'items' and 'total_count'
+        # Go API returns 'items' and 'total_count' with nested resource
         server_response = {
             "items": [
                 {
-                    "id": "lm_eval",
+                    "resource": {
+                        "id": "lm_eval",
+                        "tenant": "default",
+                        "created_at": "2026-01-27T12:00:00Z",
+                        "updated_at": "2026-01-27T12:00:00Z",
+                    },
                     "name": "LM Evaluation Harness",
                     "description": "Evaluation harness for language models",
-                    "type": "lm_evaluation_harness",
                     "benchmarks": [],
                 }
             ],
@@ -454,7 +458,7 @@ class TestListModelsServerCompatibility:
         provider_list = ProviderList.model_validate(server_response)
         assert provider_list.total_count == 1
         assert len(provider_list.items) == 1
-        assert provider_list.items[0].id == "lm_eval"
+        assert provider_list.items[0].resource.id == "lm_eval"
         assert provider_list.items[0].name == "LM Evaluation Harness"
 
     def test_benchmarks_list_with_server_fields(self) -> None:

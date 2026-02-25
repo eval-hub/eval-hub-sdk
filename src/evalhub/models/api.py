@@ -164,7 +164,9 @@ class EvaluationJobResource(BaseModel):
     id: str = Field(..., description="Unique job identifier")
     tenant: str = Field(..., description="Tenant identifier")
     created_at: datetime = Field(..., description="When the job was created")
-    updated_at: datetime = Field(..., description="When the job was last updated")
+    updated_at: datetime | None = Field(
+        default=None, description="When the job was last updated"
+    )
     mlflow_experiment_id: str | None = Field(
         default=None, description="MLFlow experiment ID"
     )
@@ -183,8 +185,15 @@ class BenchmarkStatus(BaseModel):
 
     id: str = Field(..., description="Benchmark identifier")
     provider_id: str = Field(..., description="Provider identifier")
+    benchmark_index: int | None = Field(default=None, description="Benchmark index")
     status: JobStatus = Field(..., description="Benchmark status")
-    message: MessageInfo | None = Field(default=None, description="Status message")
+    error_message: MessageInfo | None = Field(default=None, description="Error message")
+    started_at: datetime | None = Field(
+        default=None, description="When benchmark started"
+    )
+    completed_at: datetime | None = Field(
+        default=None, description="When benchmark completed"
+    )
 
     # Convenience property for consistency with job state
     @property
@@ -208,6 +217,7 @@ class BenchmarkResult(BaseModel):
 
     id: str = Field(..., description="Benchmark identifier")
     provider_id: str = Field(..., description="Provider identifier")
+    benchmark_index: int | None = Field(default=None, description="Benchmark index")
     metrics: dict[str, Any] = Field(
         default_factory=dict, description="Benchmark metrics"
     )
@@ -405,17 +415,70 @@ class PersistResponse(BaseModel):
     )
 
 
+class Resource(BaseModel):
+    """Resource metadata."""
+
+    id: str = Field(..., description="Resource identifier")
+    tenant: str | None = Field(default=None, description="Tenant identifier")
+    created_at: datetime | None = Field(default=None, description="Creation timestamp")
+    updated_at: datetime | None = Field(
+        default=None, description="Last update timestamp"
+    )
+    read_only: bool | None = Field(
+        default=None, description="Whether the resource is read-only"
+    )
+    owner: str | None = Field(default=None, description="Resource owner")
+
+
+class PrimaryScore(BaseModel):
+    """Primary score configuration for a benchmark."""
+
+    metric: str = Field(..., description="Metric name for the primary score")
+    lower_is_better: bool = Field(
+        default=False, description="Whether lower scores are better"
+    )
+
+
+class PassCriteria(BaseModel):
+    """Pass/fail criteria for a benchmark."""
+
+    threshold: float = Field(..., description="Threshold value for passing")
+
+
+class Benchmark(BaseModel):
+    """Benchmark information from EvalHub API."""
+
+    id: str = Field(..., description="Unique benchmark identifier")
+    name: str = Field(..., description="Human-readable benchmark name")
+    description: str = Field(..., description="Benchmark description")
+    category: str = Field(..., description="Benchmark category")
+    metrics: list[str] = Field(default_factory=list, description="List of metrics")
+    num_few_shot: int | None = Field(None, description="Number of few-shot examples")
+    dataset_size: int | None = Field(None, description="Size of the evaluation dataset")
+    tags: list[str] = Field(default_factory=list, description="Tags for categorization")
+    primary_score: PrimaryScore | None = Field(
+        None, description="Primary score configuration"
+    )
+    pass_criteria: PassCriteria | None = Field(None, description="Pass/fail criteria")
+
+
+class BenchmarksList(BaseModel):
+    """List of benchmarks response."""
+
+    total_count: int = Field(..., description="Total number of benchmarks")
+    items: list[Benchmark] = Field(..., description="List of benchmarks")
+
+
 class Provider(BaseModel):
     """Provider information from EvalHub API.
 
     Matches the Go ProviderResource structure from pkg/api/providers.go
     """
 
-    id: str = Field(..., description="Provider identifier")
+    resource: Resource = Field(..., description="Resource metadata")
     name: str = Field(..., description="Provider display name")
     description: str = Field(..., description="Provider description")
-    type: str = Field(..., description="Provider type")
-    benchmarks: list["Benchmark"] = Field(
+    benchmarks: list[Benchmark] = Field(
         default_factory=list, description="Benchmarks supported by this provider"
     )
 
@@ -433,46 +496,20 @@ class ProviderList(BaseModel):
         return v if v is not None else []
 
 
-class Benchmark(BaseModel):
-    """Benchmark information from EvalHub API."""
-
-    id: str = Field(..., description="Unique benchmark identifier")
-    provider_id: str | None = Field(
-        None, description="Provider that owns this benchmark"
-    )
-    name: str = Field(..., description="Human-readable benchmark name")
-    description: str = Field(..., description="Benchmark description")
-    category: str = Field(..., description="Benchmark category")
-    metrics: list[str] = Field(default_factory=list, description="List of metrics")
-    num_few_shot: int | None = Field(None, description="Number of few-shot examples")
-    dataset_size: int | None = Field(None, description="Size of the evaluation dataset")
-    tags: list[str] = Field(default_factory=list, description="Tags for categorization")
-
-
-class BenchmarksList(BaseModel):
-    """List of benchmarks response."""
-
-    total_count: int = Field(..., description="Total number of benchmarks")
-    items: list[Benchmark] = Field(..., description="List of benchmarks")
-
-
-class Resource(BaseModel):
-    """Resource metadata."""
-
-    id: str = Field(..., description="Resource identifier")
-    tenant: str = Field(..., description="Tenant identifier")
-    created_at: datetime = Field(..., description="Creation timestamp")
-    updated_at: datetime = Field(..., description="Last update timestamp")
-
-
 class BenchmarkReference(BaseModel):
     """Reference to a benchmark within a collection."""
 
     provider_id: str = Field(..., description="Provider identifier")
     benchmark_id: str = Field(..., description="Benchmark identifier")
     weight: float = Field(default=1.0, description="Benchmark weight in collection")
-    config: dict[str, Any] = Field(
-        default_factory=dict, description="Benchmark configuration"
+    parameters: dict[str, Any] = Field(
+        default_factory=dict, description="Benchmark-specific parameters"
+    )
+    primary_score: PrimaryScore | None = Field(
+        default=None, description="Primary score configuration"
+    )
+    pass_criteria: PassCriteria | None = Field(
+        default=None, description="Pass/fail criteria"
     )
 
 
@@ -487,13 +524,25 @@ class Collection(BaseModel):
     benchmarks: list[BenchmarkReference] = Field(
         default_factory=list, description="Collection benchmarks"
     )
+    pass_criteria: PassCriteria | None = Field(
+        default=None, description="Pass/fail criteria"
+    )
 
 
 class CollectionList(BaseModel):
     """List of collections response."""
 
     total_count: int = Field(..., description="Total number of collections")
-    items: list[Collection] = Field(..., description="Collection resources")
+    items: list[Collection] = Field(
+        default_factory=list, description="Collection resources"
+    )
+
+    @field_validator("items", mode="before")
+    @classmethod
+    def handle_none_items(cls, v: list[Collection] | None) -> list[Collection]:
+        """Convert None to empty list for compatibility with server responses."""
+        return v if v is not None else []
+
     # Pagination fields
     first: dict[str, str] | None = Field(None, description="Link to first page")
     next: dict[str, str] | None = Field(None, description="Link to next page")

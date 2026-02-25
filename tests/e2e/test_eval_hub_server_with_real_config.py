@@ -28,7 +28,7 @@ def test_providers_endpoint_with_real_config(
             provider_id = data["id"]
             assert (
                 provider_id not in provider_yamls
-            ), f"Duplicate provider.id '{provider_id}' in {yaml_file}"
+            ), f"Duplicate provider.resource.id '{provider_id}' in {yaml_file}"
             provider_yamls[provider_id] = data
 
     # Get providers from actual server
@@ -36,7 +36,7 @@ def test_providers_endpoint_with_real_config(
         providers = client.providers.list()
         print(f"\n\n===== PROVIDERS COUNT: {len(providers)} =====")
         for p in providers:
-            print(f"  - {p.id}: {p.name}")
+            print(f"  - {p.resource.id}: {p.name}")
         print("=" * 50)
 
         assert isinstance(providers, list)
@@ -47,13 +47,13 @@ def test_providers_endpoint_with_real_config(
         # Verify each provider matches the YAML configuration
         for provider in providers:
             assert (
-                provider.id in provider_yamls
-            ), f"Provider {provider.id} not found in YAML configs"
-            yaml_data = provider_yamls[provider.id]
+                provider.resource.id in provider_yamls
+            ), f"Provider {provider.resource.id} not found in YAML configs"
+            yaml_data = provider_yamls[provider.resource.id]
 
             # Check provider fields
             assert provider.name == yaml_data["name"], (
-                f"Provider {provider.id}: label mismatch. "
+                f"Provider {provider.resource.id}: label mismatch. "
                 f"Expected '{yaml_data['name']}', got '{provider.name}'"
             )
 
@@ -61,13 +61,13 @@ def test_providers_endpoint_with_real_config(
             provider_benchmarks = provider.benchmarks
             yaml_benchmarks = yaml_data.get("benchmarks", [])
 
-            print(f"\n  Provider {provider.id}:")
+            print(f"\n  Provider {provider.resource.id}:")
             print(f"    Provider has {len(provider_benchmarks)} benchmarks")
             print(f"    YAML defines {len(yaml_benchmarks)} benchmarks")
 
             # Verify benchmark count matches exactly
             assert len(provider_benchmarks) == len(yaml_benchmarks), (
-                f"Provider {provider.id}: benchmark count mismatch. "
+                f"Provider {provider.resource.id}: benchmark count mismatch. "
                 f"Expected {len(yaml_benchmarks)}, got {len(provider_benchmarks)}"
             )
 
@@ -77,7 +77,7 @@ def test_providers_endpoint_with_real_config(
 
             missing_benchmarks = yaml_benchmark_ids - provider_benchmark_ids
             assert not missing_benchmarks, (
-                f"Provider {provider.id}: benchmarks defined in YAML are missing from server: "
+                f"Provider {provider.resource.id}: benchmarks defined in YAML are missing from server: "
                 f"{missing_benchmarks}"
             )
 
@@ -89,7 +89,7 @@ def test_providers_endpoint_with_real_config(
             # Verify all benchmarks in detail
             assert (
                 yaml_benchmarks
-            ), f"Provider {provider.id}: expected benchmarks in YAML config"
+            ), f"Provider {provider.resource.id}: expected benchmarks in YAML config"
 
             for yaml_benchmark in yaml_benchmarks:
                 # Find the corresponding benchmark from server
@@ -99,7 +99,7 @@ def test_providers_endpoint_with_real_config(
                 )
 
                 assert server_benchmark is not None, (
-                    f"Provider {provider.id}: benchmark '{yaml_benchmark['id']}' "
+                    f"Provider {provider.resource.id}: benchmark '{yaml_benchmark['id']}' "
                     "not found in server response"
                 )
 
@@ -144,7 +144,7 @@ def test_provider_single_endpoint_with_real_config(
             provider_id = data["id"]
             assert (
                 provider_id not in provider_yamls
-            ), f"Duplicate provider.id '{provider_id}' in {yaml_file}"
+            ), f"Duplicate provider.resource.id '{provider_id}' in {yaml_file}"
             provider_yamls[provider_id] = data
 
     # Get each provider individually from server and verify against YAML
@@ -152,10 +152,9 @@ def test_provider_single_endpoint_with_real_config(
         for provider_id, yaml_data in provider_yamls.items():
             provider = client.providers.get(provider_id=provider_id)
 
-            assert provider.id == provider_id
+            assert provider.resource.id == provider_id
             assert provider.name == yaml_data["name"]
             assert provider.description == yaml_data["description"]
-            assert provider.type == yaml_data["type"]
 
             yaml_benchmark_ids = {b["id"] for b in yaml_data.get("benchmarks", [])}
             provider_benchmark_ids = {b.id for b in provider.benchmarks}

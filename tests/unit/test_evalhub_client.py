@@ -195,17 +195,21 @@ class TestProvidersClient:
             "total_count": 2,
             "items": [
                 {
-                    "id": "lm_evaluation_harness",
+                    "resource": {
+                        "id": "lm_evaluation_harness",
+                        "tenant": "default",
+                    },
                     "name": "LM Evaluation Harness",
                     "description": "Evaluation harness for language models",
-                    "type": "lm_evaluation_harness",
                     "benchmarks": [],
                 },
                 {
-                    "id": "ragas",
+                    "resource": {
+                        "id": "ragas",
+                        "tenant": "default",
+                    },
                     "name": "RAGAS",
                     "description": "RAG Assessment framework",
-                    "type": "ragas",
                     "benchmarks": [],
                 },
             ],
@@ -265,7 +269,7 @@ class TestProvidersClient:
                 providers = client.list()
 
                 assert len(providers) >= 2
-                assert any(p.id == "lm_evaluation_harness" for p in providers)
+                assert any(p.resource.id == "lm_evaluation_harness" for p in providers)
 
                 if mock_request:
                     mock_request.assert_called_once()
