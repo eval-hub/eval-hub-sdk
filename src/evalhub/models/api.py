@@ -45,16 +45,36 @@ class ErrorInfo(BaseModel):
     message_code: str = Field(..., description="Error code identifier")
 
 
+class ModelAuth(BaseModel):
+    """Authentication configuration for the model endpoint."""
+
+    secret_ref: str = Field(
+        ..., description="Kubernetes Secret name containing model credentials"
+    )
+
+    @field_validator("secret_ref")
+    @classmethod
+    def validate_secret_ref(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("secret_ref cannot be empty")
+        return cleaned
+
+
 class ModelConfig(BaseModel):
     """Configuration for the model being evaluated.
 
     This matches the eval-hub API's ModelRef schema:
     - url: The model endpoint URL (e.g., vLLM, OpenAI-compatible endpoint)
     - name: Model name/identifier
+    - auth: Optional model authentication (secret_ref)
     """
 
     url: str = Field(..., description="Model endpoint URL")
     name: str = Field(..., description="Model name or identifier")
+    auth: ModelAuth | None = Field(
+        default=None, description="Authentication configuration for the model endpoint"
+    )
 
     @field_validator("name")
     @classmethod
