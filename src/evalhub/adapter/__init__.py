@@ -72,7 +72,7 @@ from ..models.api import (
     JobStatus,
     ModelConfig,
 )
-from .auth import ModelCredentials, resolve_model_credentials
+from .auth import ModelCredentials, read_model_auth_key, resolve_model_credentials
 from .callbacks import DefaultCallbacks
 from .config import get_job_spec_path
 from .models import (
@@ -114,6 +114,7 @@ __all__ = [
     "get_job_spec_path",
     "AdapterSettings",
     "ModelCredentials",
+    "read_model_auth_key",
     "resolve_model_credentials",
     # Common models (re-exported for convenience)
     "JobStatus",
