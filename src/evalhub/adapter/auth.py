@@ -18,6 +18,11 @@ class ModelCredentials:
 
     @property
     def auth_headers(self) -> dict[str, str]:
+        """Auth headers derived from the ServiceAccount token only.
+
+        The API key is intentionally excluded and must be consumed separately
+        by the adapter.
+        """
         if self._service_account_token:
             return {"Authorization": f"Bearer {self._service_account_token}"}
         return {}
