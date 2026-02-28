@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/eval-hub/eval-hub-sdk/blob/main/README.md
+    about: Check the documentation first
+  - name: Search existing issues
+    url: https://github.com/eval-hub/eval-hub-sdk/issues
+    about: Search before opening a new issue
+  - name: Discussions
+    url: https://github.com/eval-hub/eval-hub-sdk/discussions
+    about: Ask questions and discuss with the community
+  - name: Security vulnerabilities
+    url: https://github.com/eval-hub/eval-hub-sdk/security/advisories/new
+    about: Report security vulnerabilities privately

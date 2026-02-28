@@ -1,0 +1,17 @@
+name: Question
+description: Ask a question or start a discussion
+title: "question: "
+labels: ["kind/question"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What have you tried? What's your setup?
