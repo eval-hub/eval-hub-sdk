@@ -38,6 +38,12 @@ repos:
         ]
         args: [--config-file=pyproject.toml]
 
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.13.9
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
+
   - repo: local
     hooks:
       - id: pytest

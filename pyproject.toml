@@ -165,6 +165,11 @@ markers = [
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 
+[tool.commitizen]
+name = "cz_conventional_commits"
+version_scheme = "pep440"
+tag_format = "v$version"
+
 [dependency-groups]
 dev = [
     "eval-hub-server @ git+https://github.com/eval-hub/eval-hub#subdirectory=python-server",  # TODO: this should be moved to a pypi release
