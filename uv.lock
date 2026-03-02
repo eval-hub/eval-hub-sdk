@@ -680,7 +680,7 @@ wheels = [
 
 [[package]]
 name = "eval-hub-sdk"
-version = "0.1.0a9"
+version = "0.1.0a10"
 source = { editable = "." }
 dependencies = [
     { name = "importlib-metadata" },
