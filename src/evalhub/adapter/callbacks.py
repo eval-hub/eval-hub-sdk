@@ -312,7 +312,10 @@ class DefaultCallbacks(JobCallbacks):
                 logger.debug("Events report_status body: %s", data)
 
                 response = self._http_client.post(
-                    url, json=data, headers=self._request_headers(), timeout=10.0,
+                    url,
+                    json=data,
+                    headers=self._request_headers(),
+                    timeout=10.0,
                 )
                 response.raise_for_status()
 
@@ -410,7 +413,10 @@ class DefaultCallbacks(JobCallbacks):
                 logger.debug("Events report_results body: %s", data)
 
                 response = self._http_client.post(
-                    url, json=data, headers=self._request_headers(), timeout=10.0,
+                    url,
+                    json=data,
+                    headers=self._request_headers(),
+                    timeout=10.0,
                 )
                 response.raise_for_status()
 
