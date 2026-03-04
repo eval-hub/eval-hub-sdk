@@ -115,8 +115,9 @@ class DefaultCallbacks(JobCallbacks):
         # Store insecure flag for evalhub communication
         self._insecure = insecure
 
-        # Auto-detect or load authentication token
-        self._auth_token = self._resolve_auth_token(auth_token, auth_token_path)
+        # Store auth token source for per-request reading
+        self._explicit_auth_token = auth_token
+        self._auth_token_path = self._resolve_auth_token_path(auth_token_path)
 
         # Auto-detect or load CA bundle (only if TLS verification is enabled)
         if insecure:
@@ -141,43 +142,51 @@ class DefaultCallbacks(JobCallbacks):
                     "Install with: pip install httpx"
                 )
 
-    def _resolve_auth_token(
-        self, explicit_token: str | None, token_path: Path | str | None
-    ) -> str | None:
-        """Resolve authentication token with auto-detection.
+    @staticmethod
+    def _resolve_auth_token_path(token_path: Path | str | None) -> Path | None:
+        """Resolve the path to the authentication token file.
 
         Priority:
-        1. Explicit token parameter
-        2. Token from specified file path
-        3. Auto-detected Kubernetes ServiceAccount token
-        4. None (local mode, no authentication)
+        1. Specified token path (if it exists)
+        2. Auto-detected Kubernetes ServiceAccount token
+        3. None (local mode, no authentication)
 
         Args:
-            explicit_token: Explicit token string
             token_path: Path to token file
+
+        Returns:
+            Path to token file or None
+        """
+        if token_path:
+            path = Path(token_path)
+            if path.exists():
+                return path
+            logger.warning(f"Specified token path does not exist: {token_path}")
+
+        default_token_path = Path("/var/run/secrets/kubernetes.io/serviceaccount/token")
+        if default_token_path.exists():
+            logger.debug("Auto-detected Kubernetes ServiceAccount token")
+            return default_token_path
+
+        logger.debug("No authentication token found - running in local mode")
+        return None
+
+    def _read_auth_token(self) -> str | None:
+        """Read the authentication token fresh from disk (or return explicit token).
 
         Returns:
             Token string or None
         """
-        # Use explicit token if provided
-        if explicit_token:
-            return explicit_token
+        if self._explicit_auth_token:
+            return self._explicit_auth_token
 
-        # Try specified token path
-        if token_path:
-            path = Path(token_path)
-            if path.exists():
-                return path.read_text().strip()
-            logger.warning(f"Specified token path does not exist: {token_path}")
+        if self._auth_token_path:
+            try:
+                return self._auth_token_path.read_text().strip() or None
+            except OSError:
+                logger.warning(f"Failed to read token from {self._auth_token_path}")
+                return None
 
-        # Auto-detect Kubernetes ServiceAccount token
-        default_token_path = Path("/var/run/secrets/kubernetes.io/serviceaccount/token")
-        if default_token_path.exists():
-            logger.debug("Auto-detected Kubernetes ServiceAccount token")
-            return default_token_path.read_text().strip()
-
-        # No token available (local mode)
-        logger.debug("No authentication token found - running in local mode")
         return None
 
     def _resolve_ca_bundle(self, ca_bundle_path: Path | str | None) -> Path | None:
@@ -220,18 +229,40 @@ class DefaultCallbacks(JobCallbacks):
         logger.debug("No CA bundle found - using system defaults")
         return None
 
+    @staticmethod
+    def _resolve_namespace() -> str | None:
+        """Read the pod namespace from the ServiceAccount mount."""
+        ns_path = Path("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+        if ns_path.exists():
+            try:
+                return ns_path.read_text().strip() or None
+            except OSError:
+                return None
+        return None
+
+    def _request_headers(self) -> dict[str, str]:
+        """Build per-request headers with fresh auth token and tenant namespace."""
+        headers: dict[str, str] = {}
+
+        token = self._read_auth_token()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+
+        namespace = self._resolve_namespace()
+        if namespace:
+            headers["X-Tenant"] = namespace
+
+        return headers
+
     def _create_http_client(self) -> Any:
-        """Create httpx client with authentication and TLS configuration.
+        """Create httpx client with TLS configuration.
+
+        Auth headers are added per-request via _request_headers() so that
+        rotated ServiceAccount tokens are picked up automatically.
 
         Returns:
             httpx.Client: Configured HTTP client
         """
-        # Build headers
-        headers: dict[str, str] = {}
-        if self._auth_token:
-            headers["Authorization"] = f"Bearer {self._auth_token}"
-            logger.debug("HTTP client configured with Bearer token authentication")
-
         # Determine TLS verification settings
         verify: bool | str
         if self._insecure:
@@ -245,7 +276,6 @@ class DefaultCallbacks(JobCallbacks):
             logger.debug("TLS verification using system CA certificates")
 
         return self.httpx.Client(
-            headers=headers,
             verify=verify,
             timeout=30.0,
         )
@@ -281,7 +311,9 @@ class DefaultCallbacks(JobCallbacks):
                 data = {"benchmark_status_event": status_event}
                 logger.debug("Events report_status body: %s", data)
 
-                response = self._http_client.post(url, json=data, timeout=10.0)
+                response = self._http_client.post(
+                    url, json=data, headers=self._request_headers(), timeout=10.0,
+                )
                 response.raise_for_status()
 
                 logger.debug(f"Status update sent to evalhub: {update.status}")
@@ -296,7 +328,7 @@ class DefaultCallbacks(JobCallbacks):
                 elif e.response.status_code == 403:
                     logger.error(
                         "Authorization failed (403). Ensure the ServiceAccount has RBAC "
-                        "permissions for services/proxy resource with create/update verbs"
+                        "permissions for evaluations resource in the trustyai.opendatahub.io API group"
                     )
                 else:
                     logger.warning(f"Failed to send status to evalhub: {e}")
@@ -377,7 +409,9 @@ class DefaultCallbacks(JobCallbacks):
                 data = {"benchmark_status_event": status_event}
                 logger.debug("Events report_results body: %s", data)
 
-                response = self._http_client.post(url, json=data, timeout=10.0)
+                response = self._http_client.post(
+                    url, json=data, headers=self._request_headers(), timeout=10.0,
+                )
                 response.raise_for_status()
 
                 logger.info(
