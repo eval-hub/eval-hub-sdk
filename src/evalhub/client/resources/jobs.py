@@ -30,11 +30,14 @@ class AsyncJobsResource:
     def __init__(self, client: BaseAsyncClient):
         self._client = client
 
-    async def submit(self, request: JobSubmissionRequest) -> EvaluationJob:
+    async def submit(
+        self, request: JobSubmissionRequest, *, tenant: str | None = None
+    ) -> EvaluationJob:
         """Submit an evaluation job.
 
         Args:
             request: The job submission request
+            tenant: Tenant override for this request (default: client-level tenant)
 
         Returns:
             EvaluationJob: The submitted job
@@ -43,15 +46,16 @@ class AsyncJobsResource:
             httpx.HTTPError: If request fails or is invalid
         """
         response = await self._client._request_post(
-            "/evaluations/jobs", json=request.model_dump()
+            "/evaluations/jobs", json=request.model_dump(), tenant=tenant
         )
         return EvaluationJob(**response.json())
 
-    async def get(self, job_id: str) -> EvaluationJob:
+    async def get(self, job_id: str, *, tenant: str | None = None) -> EvaluationJob:
         """Get the status of an evaluation job.
 
         Args:
             job_id: The job identifier
+            tenant: Tenant override for this request (default: client-level tenant)
 
         Returns:
             EvaluationJob: Current job status
@@ -59,15 +63,20 @@ class AsyncJobsResource:
         Raises:
             httpx.HTTPError: If job not found or request fails
         """
-        response = await self._client._request_get(f"/evaluations/jobs/{job_id}")
+        response = await self._client._request_get(
+            f"/evaluations/jobs/{job_id}", tenant=tenant
+        )
         return EvaluationJob(**response.json())
 
-    async def cancel(self, job_id: str, hard_delete: bool = False) -> bool:
+    async def cancel(
+        self, job_id: str, hard_delete: bool = False, *, tenant: str | None = None
+    ) -> bool:
         """Cancel an evaluation job.
 
         Args:
             job_id: The job identifier
             hard_delete: If True, permanently delete the job instead of just cancelling it
+            tenant: Tenant override for this request (default: client-level tenant)
 
         Returns:
             bool: True if job was successfully cancelled
@@ -83,7 +92,7 @@ class AsyncJobsResource:
             if hard_delete:
                 params["hard_delete"] = "true"
             await self._client._request_delete(
-                f"/evaluations/jobs/{job_id}", params=params
+                f"/evaluations/jobs/{job_id}", params=params, tenant=tenant
             )
             return True
         except httpx.HTTPStatusError as e:
@@ -100,13 +109,18 @@ class AsyncJobsResource:
             raise
 
     async def list(
-        self, status: JobStatus | None = None, limit: int | None = None
+        self,
+        status: JobStatus | None = None,
+        limit: int | None = None,
+        *,
+        tenant: str | None = None,
     ) -> list[EvaluationJob]:
         """List evaluation jobs.
 
         Args:
             status: Filter by job status (optional)
             limit: Maximum number of jobs to return (optional)
+            tenant: Tenant override for this request (default: client-level tenant)
 
         Returns:
             list[EvaluationJob]: List of jobs
@@ -120,13 +134,20 @@ class AsyncJobsResource:
         if limit:
             params["limit"] = str(limit)
 
-        response = await self._client._request_get("/evaluations/jobs", params=params)
+        response = await self._client._request_get(
+            "/evaluations/jobs", params=params, tenant=tenant
+        )
         data = response.json()
         jobs_list = JobsList(**data)
         return jobs_list.items
 
     async def wait_for_completion(
-        self, job_id: str, timeout: float | None = None, poll_interval: float = 5.0
+        self,
+        job_id: str,
+        timeout: float | None = None,
+        poll_interval: float = 5.0,
+        *,
+        tenant: str | None = None,
     ) -> EvaluationJob:
         """Wait for an evaluation job to complete.
 
@@ -134,6 +155,7 @@ class AsyncJobsResource:
             job_id: The job identifier
             timeout: Maximum time to wait in seconds (optional)
             poll_interval: Polling interval in seconds
+            tenant: Tenant override for this request (default: client-level tenant)
 
         Returns:
             EvaluationJob: Final job status
@@ -145,7 +167,7 @@ class AsyncJobsResource:
         start_time = time.time()
 
         while True:
-            job = await self.get(job_id)
+            job = await self.get(job_id, tenant=tenant)
 
             # Check if job is in a terminal state
             if job.state in [
@@ -169,11 +191,14 @@ class SyncJobsResource:
     def __init__(self, client: BaseSyncClient):
         self._client = client
 
-    def submit(self, request: JobSubmissionRequest) -> EvaluationJob:
+    def submit(
+        self, request: JobSubmissionRequest, *, tenant: str | None = None
+    ) -> EvaluationJob:
         """Submit an evaluation job.
 
         Args:
             request: The job submission request
+            tenant: Tenant override for this request (default: client-level tenant)
 
         Returns:
             EvaluationJob: The submitted job
@@ -182,15 +207,16 @@ class SyncJobsResource:
             httpx.HTTPError: If request fails or is invalid
         """
         response = self._client._request_post(
-            "/evaluations/jobs", json=request.model_dump()
+            "/evaluations/jobs", json=request.model_dump(), tenant=tenant
         )
         return EvaluationJob(**response.json())
 
-    def get(self, job_id: str) -> EvaluationJob:
+    def get(self, job_id: str, *, tenant: str | None = None) -> EvaluationJob:
         """Get the status of an evaluation job.
 
         Args:
             job_id: The job identifier
+            tenant: Tenant override for this request (default: client-level tenant)
 
         Returns:
             EvaluationJob: Current job status
@@ -198,15 +224,20 @@ class SyncJobsResource:
         Raises:
             httpx.HTTPError: If job not found or request fails
         """
-        response = self._client._request_get(f"/evaluations/jobs/{job_id}")
+        response = self._client._request_get(
+            f"/evaluations/jobs/{job_id}", tenant=tenant
+        )
         return EvaluationJob(**response.json())
 
-    def cancel(self, job_id: str, hard_delete: bool = False) -> bool:
+    def cancel(
+        self, job_id: str, hard_delete: bool = False, *, tenant: str | None = None
+    ) -> bool:
         """Cancel an evaluation job.
 
         Args:
             job_id: The job identifier
             hard_delete: If True, permanently delete the job instead of just cancelling it
+            tenant: Tenant override for this request (default: client-level tenant)
 
         Returns:
             bool: True if job was successfully cancelled
@@ -221,7 +252,9 @@ class SyncJobsResource:
             params = {}
             if hard_delete:
                 params["hard_delete"] = "true"
-            self._client._request_delete(f"/evaluations/jobs/{job_id}", params=params)
+            self._client._request_delete(
+                f"/evaluations/jobs/{job_id}", params=params, tenant=tenant
+            )
             return True
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:
@@ -237,13 +270,18 @@ class SyncJobsResource:
             raise
 
     def list(
-        self, status: JobStatus | None = None, limit: int | None = None
+        self,
+        status: JobStatus | None = None,
+        limit: int | None = None,
+        *,
+        tenant: str | None = None,
     ) -> list[EvaluationJob]:
         """List evaluation jobs.
 
         Args:
             status: Filter by job status (optional)
             limit: Maximum number of jobs to return (optional)
+            tenant: Tenant override for this request (default: client-level tenant)
 
         Returns:
             list[EvaluationJob]: List of jobs
@@ -257,13 +295,20 @@ class SyncJobsResource:
         if limit:
             params["limit"] = str(limit)
 
-        response = self._client._request_get("/evaluations/jobs", params=params)
+        response = self._client._request_get(
+            "/evaluations/jobs", params=params, tenant=tenant
+        )
         data = response.json()
         jobs_list = JobsList(**data)
         return jobs_list.items
 
     def wait_for_completion(
-        self, job_id: str, timeout: float | None = None, poll_interval: float = 5.0
+        self,
+        job_id: str,
+        timeout: float | None = None,
+        poll_interval: float = 5.0,
+        *,
+        tenant: str | None = None,
     ) -> EvaluationJob:
         """Wait for an evaluation job to complete.
 
@@ -271,6 +316,7 @@ class SyncJobsResource:
             job_id: The job identifier
             timeout: Maximum time to wait in seconds (optional)
             poll_interval: Polling interval in seconds
+            tenant: Tenant override for this request (default: client-level tenant)
 
         Returns:
             EvaluationJob: Final job status
@@ -282,7 +328,7 @@ class SyncJobsResource:
         start_time = time.time()
 
         while True:
-            job = self.get(job_id)
+            job = self.get(job_id, tenant=tenant)
 
             # Check if job is in a terminal state
             if job.state in [

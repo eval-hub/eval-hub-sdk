@@ -203,6 +203,7 @@ class BaseAsyncClient:
         retry_max_delay: float = 60.0,
         retry_backoff_factor: float = 2.0,
         retry_randomization: bool = True,
+        tenant: str | None = None,
     ):
         """Initialize the base async client.
 
@@ -219,6 +220,7 @@ class BaseAsyncClient:
             retry_max_delay: Maximum delay between retries in seconds (default: 60.0)
             retry_backoff_factor: Multiplier for exponential backoff (default: 2.0)
             retry_randomization: Add random jitter to retry delays to prevent thundering herd (default: True)
+            tenant: Default tenant identifier sent as X-Tenant header on all requests
         """
         self.base_url = base_url.rstrip("/")
         self.api_base = f"{self.base_url}/api/v1"
@@ -227,6 +229,7 @@ class BaseAsyncClient:
         self.retry_max_delay = retry_max_delay
         self.retry_backoff_factor = retry_backoff_factor
         self.retry_randomization = retry_randomization
+        self.tenant = tenant
 
         # Handle backward compatibility: verify_ssl=False -> insecure=True
         if not verify_ssl:
@@ -247,6 +250,9 @@ class BaseAsyncClient:
         if self.auth_token:
             headers["Authorization"] = f"Bearer {self.auth_token}"
             logger.debug("HTTP client configured with Bearer token authentication")
+        if self.tenant:
+            headers["X-Tenant"] = self.tenant
+            logger.debug(f"HTTP client configured with tenant: {self.tenant}")
 
         # Determine TLS verification settings
         verify: bool | str
@@ -291,7 +297,8 @@ class BaseAsyncClient:
         Args:
             method: HTTP method
             path: API path (without base URL)
-            **kwargs: Additional arguments for httpx
+            **kwargs: Additional arguments for httpx. Supports a ``tenant``
+                keyword to override the default tenant for this single request.
 
         Returns:
             httpx.Response: Response object
@@ -299,6 +306,13 @@ class BaseAsyncClient:
         Raises:
             httpx.HTTPError: If request fails after retries
         """
+        # Allow per-request tenant override
+        tenant = kwargs.pop("tenant", None)
+        if tenant is not None:
+            headers = dict(kwargs.pop("headers", None) or {})
+            headers["X-Tenant"] = tenant
+            kwargs["headers"] = headers
+
         url = f"{self.api_base}{path}"
         last_exception: Exception | None = None
 
@@ -480,6 +494,7 @@ class BaseSyncClient:
         retry_max_delay: float = 60.0,
         retry_backoff_factor: float = 2.0,
         retry_randomization: bool = True,
+        tenant: str | None = None,
     ):
         """Initialize the base sync client.
 
@@ -496,6 +511,7 @@ class BaseSyncClient:
             retry_max_delay: Maximum delay between retries in seconds (default: 60.0)
             retry_backoff_factor: Multiplier for exponential backoff (default: 2.0)
             retry_randomization: Add random jitter to retry delays to prevent thundering herd (default: True)
+            tenant: Default tenant identifier sent as X-Tenant header on all requests
         """
         self.base_url = base_url.rstrip("/")
         self.api_base = f"{self.base_url}/api/v1"
@@ -504,6 +520,7 @@ class BaseSyncClient:
         self.retry_max_delay = retry_max_delay
         self.retry_backoff_factor = retry_backoff_factor
         self.retry_randomization = retry_randomization
+        self.tenant = tenant
 
         # Handle backward compatibility: verify_ssl=False -> insecure=True
         if not verify_ssl:
@@ -524,6 +541,9 @@ class BaseSyncClient:
         if self.auth_token:
             headers["Authorization"] = f"Bearer {self.auth_token}"
             logger.debug("HTTP client configured with Bearer token authentication")
+        if self.tenant:
+            headers["X-Tenant"] = self.tenant
+            logger.debug(f"HTTP client configured with tenant: {self.tenant}")
 
         # Determine TLS verification settings
         verify: bool | str
@@ -568,7 +588,8 @@ class BaseSyncClient:
         Args:
             method: HTTP method
             path: API path (without base URL)
-            **kwargs: Additional arguments for httpx
+            **kwargs: Additional arguments for httpx. Supports a ``tenant``
+                keyword to override the default tenant for this single request.
 
         Returns:
             httpx.Response: Response object
@@ -576,6 +597,13 @@ class BaseSyncClient:
         Raises:
             httpx.HTTPError: If request fails after retries
         """
+        # Allow per-request tenant override
+        tenant = kwargs.pop("tenant", None)
+        if tenant is not None:
+            headers = dict(kwargs.pop("headers", None) or {})
+            headers["X-Tenant"] = tenant
+            kwargs["headers"] = headers
+
         url = f"{self.api_base}{path}"
         last_exception: Exception | None = None
 
