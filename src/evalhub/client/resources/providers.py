@@ -35,9 +35,7 @@ class AsyncProvidersResource:
         provider_list = ProviderList(**data)
         return provider_list.items
 
-    async def get(
-        self, provider_id: str, *, tenant: str | None = None
-    ) -> Provider:
+    async def get(self, provider_id: str, *, tenant: str | None = None) -> Provider:
         """Get information about a specific provider.
 
         Args:
@@ -79,9 +77,7 @@ class SyncProvidersResource:
         Raises:
             httpx.HTTPError: If request fails
         """
-        response = self._client._request_get(
-            "/evaluations/providers", tenant=tenant
-        )
+        response = self._client._request_get("/evaluations/providers", tenant=tenant)
         data = response.json()
         provider_list = ProviderList(**data)
         return provider_list.items

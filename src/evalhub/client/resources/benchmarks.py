@@ -103,7 +103,5 @@ class SyncBenchmarksResource:
         Raises:
             httpx.HTTPError: If request fails
         """
-        response = self._client._request_get(
-            "/evaluations/providers", tenant=tenant
-        )
+        response = self._client._request_get("/evaluations/providers", tenant=tenant)
         return _extract_benchmarks(response.json(), provider_id, category, limit)

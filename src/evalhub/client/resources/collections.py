@@ -35,9 +35,7 @@ class AsyncCollectionsResource:
         collection_list = CollectionList(**data)
         return collection_list.items
 
-    async def get(
-        self, collection_id: str, *, tenant: str | None = None
-    ) -> Collection:
+    async def get(self, collection_id: str, *, tenant: str | None = None) -> Collection:
         """Get information about a specific collection.
 
         Args:
@@ -74,9 +72,7 @@ class SyncCollectionsResource:
         Raises:
             httpx.HTTPError: If request fails
         """
-        response = self._client._request_get(
-            "/evaluations/collections", tenant=tenant
-        )
+        response = self._client._request_get("/evaluations/collections", tenant=tenant)
         data = response.json()
         collection_list = CollectionList(**data)
         return collection_list.items
