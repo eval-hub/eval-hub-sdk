@@ -129,7 +129,7 @@ class MlflowClient:
         token: str | None = None,
         token_path: str | Path | None = None,
         headers: dict[str, str] | None = None,
-        insecure: bool = False,
+        insecure: bool | None = None,
         timeout: float = 30.0,
         ca_bundle: str | Path | None = None,
     ) -> None:
@@ -171,7 +171,8 @@ class MlflowClient:
         #   4. MLFLOW_TRACKING_SERVER_CERT_PATH env (what mlflow-skinny used)
         #   5. auto-detect from standard OpenShift / K8s locations
         #   6. system defaults
-        if not insecure:
+        if insecure is None:
+            insecure = False
             for env_name in ("MLFLOW_TRACKING_INSECURE_TLS", "MLFLOW_INSECURE_SKIP_TLS_VERIFY"):
                 if os.environ.get(env_name, "").lower() in ("true", "1"):
                     insecure = True
