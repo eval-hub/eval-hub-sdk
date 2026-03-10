@@ -358,12 +358,21 @@ class MlflowClient:
         """
         run_info = self.create_run(experiment_id, run_name=run_name, tags=tags)
         run_id = run_info.run_id
+        # Keep the FINISHED and FAILED paths separate so that a transient
+        # failure in the FINISHED update doesn't incorrectly mark the run
+        # as FAILED (the work completed successfully in that case).
+        failed = False
         try:
             yield run_id
-            self.update_run(run_id, status="FINISHED", end_time=_now_ms())
         except BaseException:
-            self.update_run(run_id, status="FAILED", end_time=_now_ms())
+            failed = True
+            try:
+                self.update_run(run_id, status="FAILED", end_time=_now_ms())
+            except Exception:
+                logger.warning("Could not mark run %s as FAILED", run_id)
             raise
+        if not failed:
+            self.update_run(run_id, status="FINISHED", end_time=_now_ms())
 
     # -- Logging operations -------------------------------------------------
 
