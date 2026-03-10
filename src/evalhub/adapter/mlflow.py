@@ -12,10 +12,11 @@ from __future__ import annotations
 import logging
 import os
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 import httpx
 
@@ -80,14 +81,18 @@ class MLflowAPIError(Exception):
 
 
 def _is_resource_already_exists(err: Exception) -> bool:
-    return isinstance(err, MLflowAPIError) and err.error_code == "RESOURCE_ALREADY_EXISTS"
+    return (
+        isinstance(err, MLflowAPIError) and err.error_code == "RESOURCE_ALREADY_EXISTS"
+    )
 
 
 def _detect_ca_bundle() -> Path | None:
     """Auto-detect CA bundle from standard OpenShift / Kubernetes locations."""
     candidates = [
         Path("/etc/pki/ca-trust/source/anchors/service-ca.crt"),  # OpenShift
-        Path("/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt"),  # OpenShift SA
+        Path(
+            "/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt"
+        ),  # OpenShift SA
         Path("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"),  # Kubernetes
     ]
     for path in candidates:
@@ -135,7 +140,7 @@ class MlflowClient:
     ) -> None:
         # --- Tracking URI ---
         self._tracking_uri = (
-            tracking_uri or os.environ.get("MLFLOW_TRACKING_URI", "")
+            tracking_uri or os.environ.get("MLFLOW_TRACKING_URI") or ""
         ).rstrip("/")
         if not self._tracking_uri:
             raise ValueError(
@@ -173,7 +178,10 @@ class MlflowClient:
         #   6. system defaults
         if insecure is None:
             insecure = False
-            for env_name in ("MLFLOW_TRACKING_INSECURE_TLS", "MLFLOW_INSECURE_SKIP_TLS_VERIFY"):
+            for env_name in (
+                "MLFLOW_TRACKING_INSECURE_TLS",
+                "MLFLOW_INSECURE_SKIP_TLS_VERIFY",
+            ):
                 if os.environ.get(env_name, "").lower() in ("true", "1"):
                     insecure = True
                     break
@@ -263,7 +271,7 @@ class MlflowClient:
 
     def create_experiment(self, name: str) -> str:
         data = self._post("/experiments/create", {"name": name})
-        return data["experiment_id"]
+        return str(data["experiment_id"])
 
     def get_experiment_by_name(self, name: str) -> Experiment | None:
         try:

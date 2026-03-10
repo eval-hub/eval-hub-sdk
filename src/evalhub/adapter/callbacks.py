@@ -497,9 +497,7 @@ class DefaultCallbacks(JobCallbacks):
                                 Metric(result.metric_name, float(result.metric_value))
                             )
                     if results.overall_score is not None:
-                        metrics.append(
-                            Metric("overall_score", results.overall_score)
-                        )
+                        metrics.append(Metric("overall_score", results.overall_score))
 
                     # Single batch call instead of N individual calls
                     client.log_batch(
