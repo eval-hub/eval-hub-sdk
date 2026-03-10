@@ -55,7 +55,7 @@ def resolve_model_credentials() -> ModelCredentials:
     if api_key:
         creds.api_key = api_key
 
-    if not creds.api_key and _MODEL_AUTH_DIR.is_dir():
+    if not creds.api_key:
         sa_token_path = "/var/run/secrets/kubernetes.io/serviceaccount/token"
         path = Path(sa_token_path)
         if path.is_file():
