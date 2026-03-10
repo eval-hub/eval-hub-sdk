@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
@@ -448,6 +447,9 @@ class DefaultCallbacks(JobCallbacks):
     def report_metrics_to_mlflow(self, results: JobResults, job_spec: JobSpec) -> None:
         """Report evaluation metrics to MLflow if experiment is configured.
 
+        Uses the built-in lightweight MLflow REST client (no mlflow-skinny
+        dependency required).
+
         Args:
             results: Final job results containing metrics to log
             job_spec: Job specification that may contain experiment configuration
@@ -455,70 +457,55 @@ class DefaultCallbacks(JobCallbacks):
         Raises:
             RuntimeError: If MLflow logging fails
         """
-        # Check if experiment is configured
         if not job_spec.experiment_name:
             logger.debug("No MLflow experiment configured, skipping MLflow logging")
             return
 
-        # Try to import mlflow
-        try:
-            import mlflow
-        except ImportError:
-            logger.warning(
-                "mlflow-skinny not installed. MLflow logging skipped. "
-                "Install with: pip install mlflow-skinny>=3.10.0rc0"
-            )
-            return
+        from .mlflow import Metric, MlflowClient, Param
 
         try:
-            # Load auth token from projected volume if configured into env variable.
-            # On ROSA/STS clusters the auto-mounted SA token has the wrong audience,
-            # so the operator mounts a projected token with the default K8s API audience.
-            token_path = os.environ.get("MLFLOW_TRACKING_TOKEN_PATH")
-            if token_path:
-                try:
-                    with open(token_path) as f:
-                        token = f.read().strip()
-                    if token:
-                        os.environ["MLFLOW_TRACKING_TOKEN"] = token
-                except OSError as e:
-                    logger.warning(
-                        f"Could not read MLFlow token from {token_path}: {e}"
-                    )
+            client = MlflowClient()
 
-            # Set or create experiment
-            mlflow.set_experiment(job_spec.experiment_name)
+            experiment_id = client.get_or_create_experiment(job_spec.experiment_name)
 
-            # Start a run with the job ID as run name
-            with mlflow.start_run(run_name=results.id):
-                # Log parameters
-                mlflow.log_param("benchmark_id", results.benchmark_id)
-                mlflow.log_param("model_name", results.model_name)
-                mlflow.log_param(
-                    "num_examples_evaluated", results.num_examples_evaluated
-                )
-                mlflow.log_param("duration_seconds", results.duration_seconds)
+            # Collect tags from job spec
+            run_tags: dict[str, str] = {}
+            if job_spec.tags:
+                for tag in job_spec.tags:
+                    run_tags[tag["key"]] = tag["value"]
 
-                # Log tags from job spec (tags is list[dict] with "key"/"value" entries)
-                if job_spec.tags:
-                    for tag in job_spec.tags:
-                        mlflow.set_tag(tag["key"], tag["value"])
+            with client.start_run(
+                experiment_id, run_name=results.id, tags=run_tags
+            ) as run_id:
+                # Build params
+                params = [
+                    Param("benchmark_id", results.benchmark_id),
+                    Param("model_name", results.model_name),
+                    Param(
+                        "num_examples_evaluated", str(results.num_examples_evaluated)
+                    ),
+                    Param("duration_seconds", str(results.duration_seconds)),
+                ]
 
-                # Log evaluation metrics (only numeric values)
+                # Build metrics (only numeric values)
+                metrics: list[Metric] = []
                 for result in results.results:
                     if isinstance(result.metric_value, int | float):
-                        mlflow.log_metric(
-                            result.metric_name, float(result.metric_value)
+                        metrics.append(
+                            Metric(result.metric_name, float(result.metric_value))
                         )
-
-                # Log overall score if available
                 if results.overall_score is not None:
-                    mlflow.log_metric("overall_score", results.overall_score)
+                    metrics.append(Metric("overall_score", results.overall_score))
 
-                logger.info(
-                    f"Metrics logged to MLflow experiment '{job_spec.experiment_name}' "
-                    f"(run: {results.id})"
+                # Single batch call instead of N individual calls
+                client.log_batch(
+                    run_id, metrics=metrics, params=params, tags=run_tags
                 )
+
+            logger.info(
+                f"Metrics logged to MLflow experiment '{job_spec.experiment_name}' "
+                f"(run: {results.id})"
+            )
 
         except Exception as e:
             logger.error(f"Failed to log metrics to MLflow: {e}")

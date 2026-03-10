@@ -40,7 +40,6 @@ core = [
 # Adapter development - for building custom evaluation framework adapters
 adapter = [
     "eval-hub-sdk[core]",
-    "mlflow-skinny>=3.10.0rc0",
     "olot>=0.1.15",
     "oras>=0.2.39",
 ]
@@ -131,8 +130,6 @@ module = [
     "github.*",
     "evalhub_server.*",
     "evalhub_server",
-    "mlflow.*",
-    "mlflow",
     "oras.*",
     "oras",
     "olot.*",
