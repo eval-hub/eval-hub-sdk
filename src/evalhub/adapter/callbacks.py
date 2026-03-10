@@ -464,48 +464,52 @@ class DefaultCallbacks(JobCallbacks):
         from .mlflow import Metric, MlflowClient, Param
 
         try:
-            client = MlflowClient()
-
-            experiment_id = client.get_or_create_experiment(job_spec.experiment_name)
-
-            # Collect tags from job spec
-            run_tags: dict[str, str] = {}
-            if job_spec.tags:
-                for tag in job_spec.tags:
-                    run_tags[tag["key"]] = tag["value"]
-
-            with client.start_run(
-                experiment_id, run_name=results.id, tags=run_tags
-            ) as run_id:
-                # Build params
-                params = [
-                    Param("benchmark_id", results.benchmark_id),
-                    Param("model_name", results.model_name),
-                    Param(
-                        "num_examples_evaluated", str(results.num_examples_evaluated)
-                    ),
-                    Param("duration_seconds", str(results.duration_seconds)),
-                ]
-
-                # Build metrics (only numeric values)
-                metrics: list[Metric] = []
-                for result in results.results:
-                    if isinstance(result.metric_value, int | float):
-                        metrics.append(
-                            Metric(result.metric_name, float(result.metric_value))
-                        )
-                if results.overall_score is not None:
-                    metrics.append(Metric("overall_score", results.overall_score))
-
-                # Single batch call instead of N individual calls
-                client.log_batch(
-                    run_id, metrics=metrics, params=params, tags=run_tags
+            with MlflowClient() as client:
+                experiment_id = client.get_or_create_experiment(
+                    job_spec.experiment_name
                 )
 
-            logger.info(
-                f"Metrics logged to MLflow experiment '{job_spec.experiment_name}' "
-                f"(run: {results.id})"
-            )
+                # Collect tags from job spec
+                run_tags: dict[str, str] = {}
+                if job_spec.tags:
+                    for tag in job_spec.tags:
+                        run_tags[tag["key"]] = tag["value"]
+
+                with client.start_run(
+                    experiment_id, run_name=results.id, tags=run_tags
+                ) as run_id:
+                    # Build params
+                    params = [
+                        Param("benchmark_id", results.benchmark_id),
+                        Param("model_name", results.model_name),
+                        Param(
+                            "num_examples_evaluated",
+                            str(results.num_examples_evaluated),
+                        ),
+                        Param("duration_seconds", str(results.duration_seconds)),
+                    ]
+
+                    # Build metrics (only numeric values)
+                    metrics: list[Metric] = []
+                    for result in results.results:
+                        if isinstance(result.metric_value, int | float):
+                            metrics.append(
+                                Metric(result.metric_name, float(result.metric_value))
+                            )
+                    if results.overall_score is not None:
+                        metrics.append(
+                            Metric("overall_score", results.overall_score)
+                        )
+
+                    # Single batch call instead of N individual calls
+                    client.log_batch(
+                        run_id, metrics=metrics, params=params, tags=run_tags
+                    )
+
+                logger.info(
+                    f"Metrics logged to MLflow experiment "
+                    f"'{job_spec.experiment_name}' (run: {results.id})"
+                )
 
         except Exception as e:
             logger.error(f"Failed to log metrics to MLflow: {e}")
