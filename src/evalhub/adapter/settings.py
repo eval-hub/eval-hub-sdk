@@ -13,12 +13,17 @@ The job spec is mounted in Kubernetes at `/meta/job.json`.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Self
+from typing import Annotated, Self
 
-from pydantic import Field
+from pydantic import BeforeValidator, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from evalhub.adapter.config import EvalHubMode
+from evalhub.adapter.config import (
+    DEFAULT_JOB_SPEC_PATH_K8S,
+    DEFAULT_JOB_SPEC_PATH_LOCAL,
+    JOB_SPEC_PATH_ENV,
+    EvalHubMode,
+)
 
 
 class AdapterSettings(BaseSettings):
@@ -29,9 +34,10 @@ class AdapterSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="", extra="ignore")
 
     # Execution mode affects defaults only (env vars always win).
-    mode: EvalHubMode = Field(
-        default=EvalHubMode.LOCAL, validation_alias="EVALHUB_MODE"
-    )
+    mode: Annotated[
+        EvalHubMode,
+        BeforeValidator(lambda v: v.strip().lower() if isinstance(v, str) else v),
+    ] = Field(default=EvalHubMode.LOCAL, validation_alias="EVALHUB_MODE")
 
     # Job spec configuration
     job_spec_path: Path | None = Field(
@@ -71,9 +77,9 @@ class AdapterSettings(BaseSettings):
         if self.job_spec_path is not None:
             return self.job_spec_path
         return (
-            Path("/meta/job.json")
+            Path(DEFAULT_JOB_SPEC_PATH_K8S)
             if self.mode == EvalHubMode.K8S
-            else Path("meta/job.json")
+            else Path(DEFAULT_JOB_SPEC_PATH_LOCAL)
         )
 
     @property
@@ -123,5 +129,5 @@ class AdapterSettings(BaseSettings):
         if not self.resolved_job_spec_path.exists():
             raise FileNotFoundError(
                 f"Job spec file not found at {self.resolved_job_spec_path}. "
-                "Set EVALHUB_JOB_SPEC_PATH (or EVALHUB_MODE=k8s for /meta/job.json)."
+                f"Set {JOB_SPEC_PATH_ENV} (or EVALHUB_MODE=k8s for {DEFAULT_JOB_SPEC_PATH_K8S})."
             )

@@ -4,7 +4,6 @@ This module provides utilities for configuring the adapter, including
 environment variable handling for job spec location and other settings.
 """
 
-import os
 from enum import StrEnum
 from pathlib import Path
 
@@ -36,8 +35,8 @@ def get_job_spec_path() -> Path:
     environment variable. This allows the SDK to work in different
     environments:
 
-    - Kubernetes (production): /meta/job.json (default)
-    - Local testing: ./meta/job.json or any custom path
+    - Kubernetes (EVALHUB_MODE=k8s): /meta/job.json
+    - Local testing (default): meta/job.json or any custom path
     - Job runs submitted via evalhub server in --local mode:
          will always use EVALHUB_JOB_SPEC_PATH environment variable to find the job spec file
     - CI/CD: Custom paths as needed
@@ -62,15 +61,10 @@ def get_job_spec_path() -> Path:
         EVALHUB_JOB_SPEC_PATH: Path to job spec JSON file (optional)
             Default: /meta/job.json
     """
-    # Env var always wins.
-    path_str = os.getenv(JOB_SPEC_PATH_ENV)
-    if not path_str:
-        mode = os.getenv("EVALHUB_MODE", EvalHubMode.K8S).strip().lower()
-        if mode == EvalHubMode.LOCAL:
-            path_str = DEFAULT_JOB_SPEC_PATH_LOCAL
-        else:
-            path_str = DEFAULT_JOB_SPEC_PATH_K8S
-    path = Path(path_str)
+    from .settings import AdapterSettings
+
+    settings = AdapterSettings.from_env()
+    path = settings.resolved_job_spec_path
 
     if not path.exists():
         raise FileNotFoundError(
