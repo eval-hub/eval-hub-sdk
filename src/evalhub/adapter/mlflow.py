@@ -479,14 +479,19 @@ class MlflowClient:
     def _artifact_server_path(artifact_uri: str, artifact_path: str) -> str:
         """Compute the PUT path for the MLflow Artifacts server from a run's artifact_uri.
 
-        The ODH fork ignores ``?run_id=`` for path resolution and stores files
-        relative to the workspace root.  The run's ``artifact_uri`` has the form::
+        The standard MLflow artifact server derives the storage path from a
+        ``?run_id=`` query parameter on artifact upload requests. The ODH fork
+        ignores that parameter and instead resolves paths from the ``artifact_uri``
+        embedded in the run record, which has the form::
 
             mlflow-artifacts:/workspaces/{workspace}/{experiment_id}/{run_id}/artifacts
 
         Stripping ``mlflow-artifacts:/workspaces/{workspace}/`` gives the path
-        within the workspace's artifact storage, which is what the server expects
-        in the URL after ``/api/2.0/mlflow-artifacts/artifacts/``.
+        within the workspace's artifact storage, which is what the ODH server
+        expects after ``/api/2.0/mlflow-artifacts/artifacts/`` — no ``?run_id=``
+        query string. The upstream library would send ``?run_id=``, which the ODH
+        server ignores for path resolution, potentially causing files to land in
+        the wrong location.
         """
         # Strip scheme
         path = artifact_uri.removeprefix("mlflow-artifacts:/")
