@@ -176,8 +176,6 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         model_url = arguments["model_url"]
         model_name = arguments["model_name"]
         benchmarks_data = arguments["benchmarks"]
-        timeout_minutes = arguments.get("timeout_minutes")
-        retry_attempts = arguments.get("retry_attempts")
 
         # Build the job submission request
         model = ModelConfig(url=model_url, name=model_name)
@@ -193,8 +191,6 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         request = JobSubmissionRequest(
             model=model,
             benchmarks=benchmarks,
-            timeout_minutes=timeout_minutes,
-            retry_attempts=retry_attempts,
         )
 
         # Submit the job
@@ -255,7 +251,7 @@ async def handle_completion(
             and argument.name == "provider_id"
         ):
             providers = await _client.providers.list()
-            provider_ids = sorted([provider.id for provider in providers])
+            provider_ids = sorted([provider.resource.id for provider in providers])
             return types.Completion(
                 values=provider_ids,
                 total=len(provider_ids),
@@ -295,7 +291,7 @@ async def read_resource(uri: str) -> str:
         provider_id = uri_str.replace("evalhub://providers/", "")
         # TODO: API seems doesn't support individual provider fetch, so filter from list
         providers = await _client.providers.list()
-        provider = next((p for p in providers if p.id == provider_id), None)
+        provider = next((p for p in providers if p.resource.id == provider_id), None)
         if provider is None:
             raise ValueError(f"Provider not found: {provider_id}")
         return provider.model_dump_json()

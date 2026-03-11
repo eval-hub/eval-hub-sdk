@@ -14,6 +14,7 @@ from evalhub.models import (
     JobStatus,
     ModelConfig,
     Provider,
+    Resource,
 )
 from inline_snapshot import snapshot
 from mcp.client.session import ClientSession
@@ -30,15 +31,13 @@ async def client_session() -> AsyncGenerator[ClientSession, None]:
     """Create a client session connected to the MCP server with mocked data."""
     mock_client = MagicMock()
     mock_provider = Provider(
-        id="test-provider",
+        resource=Resource(id="test-provider"),
         name="Test Provider",
         description="A test provider",
-        type="test",
         benchmarks=[],
     )
     mock_benchmark = Benchmark(
         id="test-benchmark",
-        provider_id="test-provider",
         name="Test Benchmark",
         description="A test benchmark",
         category="test-category",
@@ -46,6 +45,8 @@ async def client_session() -> AsyncGenerator[ClientSession, None]:
         num_few_shot=5,
         dataset_size=100,
         tags=["test"],
+        primary_score=None,
+        pass_criteria=None,
     )
     mock_providers_resource = MagicMock()
     mock_providers_resource.list = AsyncMock(return_value=[mock_provider])
