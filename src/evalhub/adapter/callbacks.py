@@ -1,18 +1,23 @@
 """Default callback implementation for adapters."""
+from __future__ import annotations
 
 import logging
 from pathlib import Path
 from typing import Any
 
+from evalhub.adapter.models.adapter import FrameworkAdapter
+
 from ..models.api import JobStatus
 from .models import (
     JobCallbacks,
     JobResults,
+    JobSpec,
     JobStatusUpdate,
     OCIArtifactResult,
     OCIArtifactSpec,
 )
 from .oci import OCIArtifactPersister
+from .oci.persister import OCIArtifactContext
 
 logger = logging.getLogger(__name__)
 
@@ -32,19 +37,18 @@ class DefaultCallbacks(JobCallbacks):
         callbacks = DefaultCallbacks(
             job_id="my-job-123",
             benchmark_id="mmlu",
+            benchmark_index=0,
             provider_id="lm_evaluation_harness",
             sidecar_url="http://localhost:8080",
-            registry_url="ghcr.io",
-            registry_username=os.getenv("REGISTRY_USER"),
-            registry_password=os.getenv("REGISTRY_TOKEN")
+            oci_auth_config_path=Path("~/.docker/config.json"),
         )
 
         # Local development (no evalhub, just logging)
         callbacks = DefaultCallbacks(
             job_id="my-job-123",
             benchmark_id="mmlu",
-            registry_url="localhost:5000",
-            insecure=True
+            benchmark_index=0,
+            oci_insecure=True,
         )
 
         adapter = MyAdapter()
@@ -57,15 +61,15 @@ class DefaultCallbacks(JobCallbacks):
         job_id: str,
         benchmark_id: str,
         provider_id: str | None = None,
+        benchmark_index: int = 0,
         sidecar_url: str | None = None,
-        registry_url: str | None = None,
-        registry_username: str | None = None,
-        registry_password: str | None = None,
         insecure: bool = False,
         auth_token: str | None = None,
         auth_token_path: Path | str | None = None,
         ca_bundle_path: Path | str | None = None,
         events_path_template: str | None = None,
+        oci_auth_config_path: Path | None = None,
+        oci_insecure: bool = False,
     ):
         """Initialize default callbacks.
 
@@ -74,12 +78,10 @@ class DefaultCallbacks(JobCallbacks):
             benchmark_id: Benchmark identifier for status event validation.
             provider_id: Provider identifier (optional). If not provided, status updates
                         will not include provider_id field.
+            benchmark_index: Index of this benchmark within the job (default 0).
             sidecar_url: URL of evalhub service for status updates (optional).
                         If None, status updates are logged locally.
-            registry_url: OCI registry URL (e.g., "ghcr.io")
-            registry_username: Registry username
-            registry_password: Registry password/token
-            insecure: Allow insecure HTTP connections (both registry and evalhub)
+            insecure: Allow insecure HTTP connections (evalhub)
             auth_token: Explicit authentication token (overrides auto-detection)
             auth_token_path: Path to authentication token file (e.g., ServiceAccount token)
                            If not provided, auto-detects Kubernetes ServiceAccount token
@@ -89,6 +91,7 @@ class DefaultCallbacks(JobCallbacks):
         self.job_id = job_id
         self.benchmark_id = benchmark_id
         self.provider_id = provider_id
+        self.benchmark_index = benchmark_index
         self.sidecar_url = sidecar_url.rstrip("/") if sidecar_url else None
         self._events_path_template = (
             events_path_template
@@ -98,17 +101,22 @@ class DefaultCallbacks(JobCallbacks):
 
         # Initialize OCI persister
         self.persister = OCIArtifactPersister(
-            registry_url=registry_url,
-            username=registry_username,
-            password=registry_password,
-            insecure=insecure,
+            context=OCIArtifactContext(
+                job_id=job_id,
+                benchmark_id=benchmark_id,
+                provider_id=provider_id,
+                benchmark_index=benchmark_index,
+            ),
+            oci_auth_config_path=oci_auth_config_path,
+            oci_insecure=oci_insecure,
         )
 
         # Store insecure flag for evalhub communication
         self._insecure = insecure
 
-        # Auto-detect or load authentication token
-        self._auth_token = self._resolve_auth_token(auth_token, auth_token_path)
+        # Store auth token source for per-request reading
+        self._explicit_auth_token = auth_token
+        self._auth_token_path = self._resolve_auth_token_path(auth_token_path)
 
         # Auto-detect or load CA bundle (only if TLS verification is enabled)
         if insecure:
@@ -133,43 +141,51 @@ class DefaultCallbacks(JobCallbacks):
                     "Install with: pip install httpx"
                 )
 
-    def _resolve_auth_token(
-        self, explicit_token: str | None, token_path: Path | str | None
-    ) -> str | None:
-        """Resolve authentication token with auto-detection.
+    @staticmethod
+    def _resolve_auth_token_path(token_path: Path | str | None) -> Path | None:
+        """Resolve the path to the authentication token file.
 
         Priority:
-        1. Explicit token parameter
-        2. Token from specified file path
-        3. Auto-detected Kubernetes ServiceAccount token
-        4. None (local mode, no authentication)
+        1. Specified token path (if it exists)
+        2. Auto-detected Kubernetes ServiceAccount token
+        3. None (local mode, no authentication)
 
         Args:
-            explicit_token: Explicit token string
             token_path: Path to token file
+
+        Returns:
+            Path to token file or None
+        """
+        if token_path:
+            path = Path(token_path)
+            if path.exists():
+                return path
+            logger.warning(f"Specified token path does not exist: {token_path}")
+
+        default_token_path = Path("/var/run/secrets/kubernetes.io/serviceaccount/token")
+        if default_token_path.exists():
+            logger.debug("Auto-detected Kubernetes ServiceAccount token")
+            return default_token_path
+
+        logger.debug("No authentication token found - running in local mode")
+        return None
+
+    def _read_auth_token(self) -> str | None:
+        """Read the authentication token fresh from disk (or return explicit token).
 
         Returns:
             Token string or None
         """
-        # Use explicit token if provided
-        if explicit_token:
-            return explicit_token
+        if self._explicit_auth_token:
+            return self._explicit_auth_token
 
-        # Try specified token path
-        if token_path:
-            path = Path(token_path)
-            if path.exists():
-                return path.read_text().strip()
-            logger.warning(f"Specified token path does not exist: {token_path}")
+        if self._auth_token_path:
+            try:
+                return self._auth_token_path.read_text().strip() or None
+            except OSError:
+                logger.warning(f"Failed to read token from {self._auth_token_path}")
+                return None
 
-        # Auto-detect Kubernetes ServiceAccount token
-        default_token_path = Path("/var/run/secrets/kubernetes.io/serviceaccount/token")
-        if default_token_path.exists():
-            logger.debug("Auto-detected Kubernetes ServiceAccount token")
-            return default_token_path.read_text().strip()
-
-        # No token available (local mode)
-        logger.debug("No authentication token found - running in local mode")
         return None
 
     def _resolve_ca_bundle(self, ca_bundle_path: Path | str | None) -> Path | None:
@@ -212,18 +228,40 @@ class DefaultCallbacks(JobCallbacks):
         logger.debug("No CA bundle found - using system defaults")
         return None
 
+    @staticmethod
+    def _resolve_namespace() -> str | None:
+        """Read the pod namespace from the ServiceAccount mount."""
+        ns_path = Path("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+        if ns_path.exists():
+            try:
+                return ns_path.read_text().strip() or None
+            except OSError:
+                return None
+        return None
+
+    def _request_headers(self) -> dict[str, str]:
+        """Build per-request headers with fresh auth token and tenant namespace."""
+        headers: dict[str, str] = {}
+
+        token = self._read_auth_token()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+
+        namespace = self._resolve_namespace()
+        if namespace:
+            headers["X-Tenant"] = namespace
+
+        return headers
+
     def _create_http_client(self) -> Any:
-        """Create httpx client with authentication and TLS configuration.
+        """Create httpx client with TLS configuration.
+
+        Auth headers are added per-request via _request_headers() so that
+        rotated ServiceAccount tokens are picked up automatically.
 
         Returns:
             httpx.Client: Configured HTTP client
         """
-        # Build headers
-        headers: dict[str, str] = {}
-        if self._auth_token:
-            headers["Authorization"] = f"Bearer {self._auth_token}"
-            logger.debug("HTTP client configured with Bearer token authentication")
-
         # Determine TLS verification settings
         verify: bool | str
         if self._insecure:
@@ -237,7 +275,6 @@ class DefaultCallbacks(JobCallbacks):
             logger.debug("TLS verification using system CA certificates")
 
         return self.httpx.Client(
-            headers=headers,
             verify=verify,
             timeout=30.0,
         )
@@ -256,6 +293,7 @@ class DefaultCallbacks(JobCallbacks):
                 # Transform to eval-hub API format
                 status_event = {
                     "id": self.benchmark_id,
+                    "benchmark_index": self.benchmark_index,
                     "state": update.status.value,
                     "status": update.status.value,
                     "message": update.message.model_dump(mode="json"),
@@ -270,8 +308,14 @@ class DefaultCallbacks(JobCallbacks):
                     status_event["provider_id"] = self.provider_id
 
                 data = {"benchmark_status_event": status_event}
+                logger.debug("Events report_status body: %s", data)
 
-                response = self._http_client.post(url, json=data, timeout=10.0)
+                response = self._http_client.post(
+                    url,
+                    json=data,
+                    headers=self._request_headers(),
+                    timeout=10.0,
+                )
                 response.raise_for_status()
 
                 logger.debug(f"Status update sent to evalhub: {update.status}")
@@ -286,7 +330,7 @@ class DefaultCallbacks(JobCallbacks):
                 elif e.response.status_code == 403:
                     logger.error(
                         "Authorization failed (403). Ensure the ServiceAccount has RBAC "
-                        "permissions for services/proxy resource with create/update verbs"
+                        "permissions for evaluations resource in the trustyai.opendatahub.io API group"
                     )
                 else:
                     logger.warning(f"Failed to send status to evalhub: {e}")
@@ -306,9 +350,6 @@ class DefaultCallbacks(JobCallbacks):
     def create_oci_artifact(self, spec: OCIArtifactSpec) -> OCIArtifactResult:
         """Create OCI artifact using the SDK persister.
 
-        The SDK always handles OCI pushing directly, regardless of whether
-        a sidecar is present.
-
         Args:
             spec: Artifact specification
 
@@ -318,8 +359,10 @@ class DefaultCallbacks(JobCallbacks):
         Raises:
             RuntimeError: If artifact creation fails
         """
-        logger.info(f"Creating OCI artifact for job {spec.id}")
-        return self.persister.persist(spec)
+        logger.info(f"Creating OCI artifact for job {self.job_id}")
+        result = self.persister.persist(spec)
+        logger.info(f"Created OCI artifact for job {self.job_id} as: {result}")
+        return result
 
     def report_results(self, results: JobResults) -> None:
         """Report final evaluation results to evalhub or log them.
@@ -342,6 +385,7 @@ class DefaultCallbacks(JobCallbacks):
                 # Build status event with results
                 status_event = {
                     "id": self.benchmark_id,
+                    "benchmark_index": self.benchmark_index,
                     "state": JobStatus.COMPLETED.value,
                     "status": JobStatus.COMPLETED.value,
                     "message": {
@@ -362,12 +406,17 @@ class DefaultCallbacks(JobCallbacks):
                     status_event["artifacts"] = {
                         "oci_reference": results.oci_artifact.reference,
                         "oci_digest": results.oci_artifact.digest,
-                        "size_bytes": results.oci_artifact.size_bytes,
                     }
 
                 data = {"benchmark_status_event": status_event}
+                logger.debug("Events report_results body: %s", data)
 
-                response = self._http_client.post(url, json=data, timeout=10.0)
+                response = self._http_client.post(
+                    url,
+                    json=data,
+                    headers=self._request_headers(),
+                    timeout=10.0,
+                )
                 response.raise_for_status()
 
                 logger.info(
@@ -393,4 +442,87 @@ class DefaultCallbacks(JobCallbacks):
             f"Score: {results.overall_score} | "
             f"Examples: {results.num_examples_evaluated} | "
             f"Duration: {results.duration_seconds:.2f}s"
+        )
+
+    def report_metrics_to_mlflow(self, results: JobResults, job_spec: JobSpec) -> None:
+        """Report evaluation metrics to MLflow if experiment is configured.
+
+        Uses the built-in lightweight MLflow REST client (no mlflow-skinny
+        dependency required).
+
+        Args:
+            results: Final job results containing metrics to log
+            job_spec: Job specification that may contain experiment configuration
+
+        Raises:
+            RuntimeError: If MLflow logging fails
+        """
+        if not job_spec.experiment_name:
+            logger.debug("No MLflow experiment configured, skipping MLflow logging")
+            return
+
+        from .mlflow import Metric, MlflowClient, Param
+
+        try:
+            with MlflowClient() as client:
+                experiment_id = client.get_or_create_experiment(
+                    job_spec.experiment_name
+                )
+
+                # Collect tags from job spec
+                run_tags: dict[str, str] = {}
+                if job_spec.tags:
+                    for tag in job_spec.tags:
+                        run_tags[tag["key"]] = tag["value"]
+
+                with client.start_run(
+                    experiment_id, run_name=results.id, tags=run_tags
+                ) as run_id:
+                    # Build params
+                    params = [
+                        Param("benchmark_id", results.benchmark_id),
+                        Param("model_name", results.model_name),
+                        Param(
+                            "num_examples_evaluated",
+                            str(results.num_examples_evaluated),
+                        ),
+                        Param("duration_seconds", str(results.duration_seconds)),
+                    ]
+
+                    # Build metrics (only numeric values)
+                    metrics: list[Metric] = []
+                    for result in results.results:
+                        if isinstance(result.metric_value, int | float):
+                            metrics.append(
+                                Metric(result.metric_name, float(result.metric_value))
+                            )
+                    if results.overall_score is not None:
+                        metrics.append(Metric("overall_score", results.overall_score))
+
+                    # Single batch call instead of N individual calls
+                    client.log_batch(
+                        run_id, metrics=metrics, params=params, tags=run_tags
+                    )
+
+                logger.info(
+                    f"Metrics logged to MLflow experiment "
+                    f"'{job_spec.experiment_name}' (run: {results.id})"
+                )
+
+        except Exception as e:
+            logger.error(f"Failed to log metrics to MLflow: {e}")
+            raise RuntimeError(f"MLflow logging failed: {e}") from e
+
+    @staticmethod
+    def from_adapter(adapter: FrameworkAdapter) -> DefaultCallbacks:
+        """convenience method, and do not store adapter instance"""
+        return DefaultCallbacks(
+            job_id=adapter.job_spec.id,
+            provider_id=adapter.job_spec.provider_id,
+            benchmark_id=adapter.job_spec.benchmark_id,
+            benchmark_index=adapter.job_spec.benchmark_index,
+            sidecar_url=adapter.job_spec.callback_url,
+            insecure=adapter.settings.evalhub_insecure,
+            oci_auth_config_path=adapter.settings.oci_auth_config_path,
+            oci_insecure=adapter.settings.oci_insecure,
         )

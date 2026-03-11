@@ -136,8 +136,10 @@ Example job spec in ConfigMap:
 
 ```json
 {
-  "job_id": "eval-001",
+  "id": "eval-001",
+  "provider_id": "evalhub-provider",
   "benchmark_id": "mmlu",
+  "benchmark_index": 0,
   "model": {
     "url": "http://model-server:8000/v1",
     "name": "llama-2-7b"
@@ -185,8 +187,10 @@ class LocalCallbacks(JobCallbacks):
 
 # Create job spec
 spec = JobSpec(
-    job_id="local-test",
+    id="local-test",
+    provider_id="local-provider",
     benchmark_id="mmlu",
+    benchmark_index=0,
     model={"url": "http://localhost:8000", "name": "test-model"},
     benchmark_config={},
     callback_url="http://localhost:8080",

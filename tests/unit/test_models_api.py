@@ -179,15 +179,11 @@ class TestEvaluationJob:
                 BenchmarkConfig(id="test", provider_id="test_provider", parameters={})
             ],
             results=EvaluationJobResults(
-                total_evaluations=1,
-                completed_evaluations=1,
-                failed_evaluations=0,
                 benchmarks=[],
             ),
         )
         assert job.state == JobStatus.COMPLETED
         assert job.results is not None
-        assert job.results.completed_evaluations == 1
 
     def test_failed_evaluation_job(self) -> None:
         """Test failed EvaluationJob."""
@@ -441,14 +437,18 @@ class TestListModelsServerCompatibility:
 
     def test_provider_list_with_server_fields(self) -> None:
         """Test ProviderList parses server response format."""
-        # Go API returns 'items' and 'total_count'
+        # Go API returns 'items' and 'total_count' with nested resource
         server_response = {
             "items": [
                 {
-                    "id": "lm_eval",
+                    "resource": {
+                        "id": "lm_eval",
+                        "tenant": "default",
+                        "created_at": "2026-01-27T12:00:00Z",
+                        "updated_at": "2026-01-27T12:00:00Z",
+                    },
                     "name": "LM Evaluation Harness",
                     "description": "Evaluation harness for language models",
-                    "type": "lm_evaluation_harness",
                     "benchmarks": [],
                 }
             ],
@@ -458,7 +458,7 @@ class TestListModelsServerCompatibility:
         provider_list = ProviderList.model_validate(server_response)
         assert provider_list.total_count == 1
         assert len(provider_list.items) == 1
-        assert provider_list.items[0].id == "lm_eval"
+        assert provider_list.items[0].resource.id == "lm_eval"
         assert provider_list.items[0].name == "LM Evaluation Harness"
 
     def test_benchmarks_list_with_server_fields(self) -> None:

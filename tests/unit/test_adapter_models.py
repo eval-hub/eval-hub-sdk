@@ -28,7 +28,9 @@ def mock_job_spec_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     # Create test job spec
     job_spec = {
         "id": "test-job-001",
+        "provider_id": "lm_evaluation_harness",
         "benchmark_id": "mmlu",
+        "benchmark_index": 0,
         "model": {"url": "http://localhost:8000", "name": "test-model"},
         "num_examples": 10,
         "benchmark_config": {"random_seed": 42},
@@ -52,7 +54,9 @@ class TestJobSpec:
         """Test creating a valid JobSpec."""
         spec = JobSpec(
             id="test-job-001",
+            provider_id="lm_evaluation_harness",
             benchmark_id="mmlu",
+            benchmark_index=0,
             model=ModelConfig(url="http://localhost:8000", name="test-model"),
             num_examples=10,
             benchmark_config={"num_few_shot": 5, "random_seed": 42},
@@ -60,6 +64,7 @@ class TestJobSpec:
         )
 
         assert spec.id == "test-job-001"
+        assert spec.provider_id == "lm_evaluation_harness"
         assert spec.benchmark_id == "mmlu"
         assert spec.model.name == "test-model"
         assert spec.num_examples == 10
@@ -70,7 +75,9 @@ class TestJobSpec:
         """Test creating JobSpec with minimal mandatory fields."""
         spec = JobSpec(
             id="test-job-002",
+            provider_id="lm_evaluation_harness",
             benchmark_id="hellaswag",
+            benchmark_index=0,
             model=ModelConfig(url="http://localhost:8000", name="model"),
             benchmark_config={},
             callback_url="http://localhost:8080",
@@ -85,7 +92,9 @@ class TestJobSpec:
         """Test JobSpec with benchmark-specific configuration."""
         spec = JobSpec(
             id="test-job-003",
+            provider_id="lm_evaluation_harness",
             benchmark_id="mmlu",
+            benchmark_index=0,
             model=ModelConfig(url="http://localhost:8000", name="model"),
             benchmark_config={"subject": "physics", "difficulty": "hard"},
             callback_url="http://localhost:8080",
@@ -94,23 +103,73 @@ class TestJobSpec:
         assert spec.benchmark_config == {"subject": "physics", "difficulty": "hard"}
 
     def test_jobspec_with_custom_tags(self) -> None:
-        """Test JobSpec with custom tags."""
+        """Test JobSpec with custom tags in list-of-dicts format (eval-hub/eval-hub#166)."""
         spec = JobSpec(
             id="test-job-004",
+            provider_id="lm_evaluation_harness",
             benchmark_id="arc",
+            benchmark_index=0,
             model=ModelConfig(url="http://localhost:8000", name="model"),
             benchmark_config={},
             callback_url="http://localhost:8080",
-            tags={"env": "test", "developer": "alice"},
+            tags=[
+                {"key": "env", "value": "test"},
+                {"key": "developer", "value": "alice"},
+            ],
         )
 
-        assert spec.tags == {"env": "test", "developer": "alice"}
+        assert spec.tags == [
+            {"key": "env", "value": "test"},
+            {"key": "developer", "value": "alice"},
+        ]
+
+    def test_jobspec_default_tags_is_empty_list(self) -> None:
+        """Test that tags default to an empty list."""
+        spec = JobSpec(
+            id="test-job-004b",
+            provider_id="lm_evaluation_harness",
+            benchmark_id="arc",
+            benchmark_index=0,
+            model=ModelConfig(url="http://localhost:8000", name="model"),
+            benchmark_config={},
+            callback_url="http://localhost:8080",
+        )
+
+        assert spec.tags == []
+
+    def test_jobspec_from_file_with_list_tags(self, tmp_path: Path) -> None:
+        """Test loading JobSpec from JSON file with new list-of-dicts tags format."""
+        job_spec = {
+            "id": "test-job-005",
+            "provider_id": "lm_evaluation_harness",
+            "benchmark_id": "mmlu",
+            "benchmark_index": 0,
+            "model": {"url": "http://localhost:8000", "name": "test-model"},
+            "benchmark_config": {},
+            "callback_url": "http://localhost:8080",
+            "tags": [
+                {"key": "team", "value": "ml-platform"},
+                {"key": "env", "value": "production"},
+            ],
+        }
+
+        spec_file = tmp_path / "job.json"
+        spec_file.write_text(json.dumps(job_spec))
+
+        spec = JobSpec.from_file(spec_file)
+
+        assert spec.tags == [
+            {"key": "team", "value": "ml-platform"},
+            {"key": "env", "value": "production"},
+        ]
 
     def test_jobspec_can_be_serialized_to_json(self) -> None:
         """Test JobSpec can be serialized to JSON."""
         spec = JobSpec(
             id="test-job-005",
+            provider_id="lm_evaluation_harness",
             benchmark_id="gsm8k",
+            benchmark_index=0,
             model=ModelConfig(url="http://localhost:8000", name="model"),
             benchmark_config={},
             callback_url="http://localhost:8080",
@@ -207,50 +266,40 @@ class TestOCIArtifactSpec:
 
     def test_creating_an_oci_artifact_specification(self) -> None:
         """Test creating an OCI artifact specification."""
-        files = [Path("/tmp/results.json"), Path("/tmp/summary.txt")]
+        from evalhub.models.api import OCICoordinates
 
         spec = OCIArtifactSpec(
-            files=files,
-            id="test-job-001",
-            benchmark_id="mmlu",
-            model_name="test-model",
-            title="Test Results",
-            description="Results from test job",
+            files_path=Path("/tmp/results"),
+            coordinates=OCICoordinates(
+                oci_host="ghcr.io",
+                oci_repository="org/repo",
+                oci_tag="eval-123",
+            ),
         )
 
-        assert spec.files == files
-        assert spec.id == "test-job-001"
-        assert spec.benchmark_id == "mmlu"
-        assert spec.model_name == "test-model"
-        assert spec.title == "Test Results"
+        assert spec.files_path == Path("/tmp/results")
+        assert spec.coordinates.oci_host == "ghcr.io"
+        assert spec.coordinates.oci_repository == "org/repo"
+        assert spec.coordinates.oci_tag == "eval-123"
 
-    def test_artifact_spec_with_base_path(self) -> None:
-        """Test artifact spec with base path."""
+    def test_artifact_spec_with_annotations(self) -> None:
+        """Test artifact spec with custom annotations on coordinates."""
+        from evalhub.models.api import OCICoordinates
+
         spec = OCIArtifactSpec(
-            files=[Path("results.json")],
-            base_path=Path("/tmp/job-001"),
-            id="test-job-001",
-            benchmark_id="mmlu",
-            model_name="model",
+            files_path=Path("/tmp/job-001"),
+            coordinates=OCICoordinates(
+                oci_host="ghcr.io",
+                oci_repository="org/repo",
+                annotations={
+                    "score": "0.85",
+                    "framework": "lm-eval",
+                },
+            ),
         )
 
-        assert spec.base_path == Path("/tmp/job-001")
-
-    def test_artifact_spec_with_custom_annotations(self) -> None:
-        """Test artifact spec with custom annotations."""
-        spec = OCIArtifactSpec(
-            files=[Path("results.json")],
-            id="test-job-001",
-            benchmark_id="mmlu",
-            model_name="model",
-            annotations={
-                "score": "0.85",
-                "framework": "lm-eval",
-            },
-        )
-
-        assert spec.annotations["score"] == "0.85"
-        assert spec.annotations["framework"] == "lm-eval"
+        assert spec.coordinates.annotations["score"] == "0.85"
+        assert spec.coordinates.annotations["framework"] == "lm-eval"
 
 
 class TestOCIArtifactResult:
@@ -261,13 +310,10 @@ class TestOCIArtifactResult:
         result = OCIArtifactResult(
             digest="sha256:abc123...",
             reference="ghcr.io/eval-hub/results:test@sha256:abc123...",
-            size_bytes=1048576,
         )
 
         assert result.digest == "sha256:abc123..."
         assert result.reference == "ghcr.io/eval-hub/results:test@sha256:abc123..."
-        assert result.size_bytes == 1048576
-        assert isinstance(result.created_at, datetime)
 
 
 class TestJobResults:
@@ -278,6 +324,7 @@ class TestJobResults:
         results = JobResults(
             id="test-job-001",
             benchmark_id="mmlu",
+            benchmark_index=0,
             model_name="test-model",
             results=[
                 EvaluationResult(
@@ -301,6 +348,7 @@ class TestJobResults:
         results = JobResults(
             id="test-job-001",
             benchmark_id="mmlu",
+            benchmark_index=0,
             model_name="model",
             results=[],
             num_examples_evaluated=100,
@@ -315,6 +363,7 @@ class TestJobResults:
         results = JobResults(
             id="test-job-001",
             benchmark_id="mmlu",
+            benchmark_index=0,
             model_name="model",
             results=[],
             num_examples_evaluated=100,
@@ -334,12 +383,12 @@ class TestJobResults:
         artifact = OCIArtifactResult(
             digest="sha256:abc123",
             reference="ghcr.io/eval-hub/results:test",
-            size_bytes=1024,
         )
 
         results = JobResults(
             id="test-job-001",
             benchmark_id="mmlu",
+            benchmark_index=0,
             model_name="model",
             results=[],
             num_examples_evaluated=100,
@@ -355,6 +404,7 @@ class TestJobResults:
         results = JobResults(
             id="test-job-001",
             benchmark_id="mmlu",
+            benchmark_index=0,
             model_name="model",
             results=[],
             num_examples_evaluated=100,
@@ -375,6 +425,7 @@ class TestJobCallbacks:
 
     def test_implementing_jobcallbacks_with_a_mock(self) -> None:
         """Test implementing JobCallbacks with a mock."""
+        from evalhub.models.api import OCICoordinates
 
         class MockCallbacks(JobCallbacks):
             def __init__(self) -> None:
@@ -390,11 +441,15 @@ class TestJobCallbacks:
                 return OCIArtifactResult(
                     digest="sha256:test",
                     reference="test://artifact",
-                    size_bytes=1024,
                 )
 
             def report_results(self, results: JobResults) -> None:
                 self.results.append(results)
+
+            def report_metrics_to_mlflow(
+                self, results: JobResults, job_spec: JobSpec
+            ) -> None:
+                pass
 
         # Should be able to instantiate the implementation
         callbacks = MockCallbacks()
@@ -408,10 +463,11 @@ class TestJobCallbacks:
 
         # Test create_oci_artifact
         spec = OCIArtifactSpec(
-            files=[Path("/tmp/test.json")],
-            id="test",
-            benchmark_id="mmlu",
-            model_name="model",
+            files_path=Path("/tmp/test"),
+            coordinates=OCICoordinates(
+                oci_host="ghcr.io",
+                oci_repository="org/repo",
+            ),
         )
         result = callbacks.create_oci_artifact(spec)
 
@@ -439,6 +495,7 @@ class TestFrameworkAdapter:
                 return JobResults(
                     id=config.id,
                     benchmark_id=config.benchmark_id,
+                    benchmark_index=config.benchmark_index,
                     model_name=config.model.name,
                     results=[],
                     num_examples_evaluated=0,
@@ -481,6 +538,7 @@ class TestFrameworkAdapter:
                 return JobResults(
                     id=config.id,
                     benchmark_id=config.benchmark_id,
+                    benchmark_index=config.benchmark_index,
                     model_name=config.model.name,
                     results=[
                         EvaluationResult(
@@ -505,19 +563,24 @@ class TestFrameworkAdapter:
             def create_oci_artifact(self, spec: OCIArtifactSpec) -> OCIArtifactResult:
                 # Unused but required by interface
                 _ = spec
-                return OCIArtifactResult(
-                    digest="sha256:test", reference="test", size_bytes=1024
-                )
+                return OCIArtifactResult(digest="sha256:test", reference="test")
 
             def report_results(self, results: JobResults) -> None:
                 self.results.append(results)
+
+            def report_metrics_to_mlflow(
+                self, results: JobResults, job_spec: JobSpec
+            ) -> None:
+                pass
 
         # Run the adapter
         adapter = TestAdapter()
         callbacks = MockCallbacks()
         spec = JobSpec(
             id="test-job-001",
+            provider_id="lm_evaluation_harness",
             benchmark_id="mmlu",
+            benchmark_index=0,
             model=ModelConfig(url="http://localhost:8000", name="test-model"),
             benchmark_config={},
             callback_url="http://localhost:8080",
@@ -536,3 +599,92 @@ class TestFrameworkAdapter:
         assert callbacks.status_updates[0].phase == JobPhase.INITIALIZING
         assert callbacks.status_updates[1].phase == JobPhase.RUNNING_EVALUATION
         assert mock_job_spec_file.exists()  # Use fixture
+
+
+class TestLocalJobsBasePath:
+    """Tests for FrameworkAdapter.local_jobs_base_path property."""
+
+    _JOB_SPEC_DATA = {
+        "id": "job-1",
+        "provider_id": "prov",
+        "benchmark_id": "bench",
+        "benchmark_index": 0,
+        "model": {"url": "http://localhost:8000", "name": "m"},
+        "benchmark_config": {},
+        "callback_url": "http://localhost:8080",
+    }
+
+    class _Adapter(FrameworkAdapter):
+        def run_benchmark_job(
+            self, config: JobSpec, callbacks: JobCallbacks
+        ) -> JobResults:
+            return JobResults(
+                id=config.id,
+                benchmark_id=config.benchmark_id,
+                benchmark_index=config.benchmark_index,
+                model_name=config.model.name,
+                results=[],
+                num_examples_evaluated=0,
+                duration_seconds=0.0,
+            )
+
+    def _write_spec(self, spec_path: Path) -> None:
+        spec_path.parent.mkdir(parents=True, exist_ok=True)
+        spec_path.write_text(json.dumps(self._JOB_SPEC_DATA))
+
+    def test_returns_parent_of_meta_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that local_jobs_base_path returns the parent of the meta/ directory."""
+        base = tmp_path / "job-1" / "0" / "prov" / "bench"
+        spec_path = base / "meta" / "job.json"
+        self._write_spec(spec_path)
+
+        monkeypatch.setenv("EVALHUB_MODE", "local")
+        monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(spec_path))
+        adapter = self._Adapter()
+
+        assert adapter.local_jobs_base_path == base.resolve()
+
+    def test_returns_none_in_k8s_mode(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that local_jobs_base_path returns None when not in local mode."""
+        spec_path = tmp_path / "meta" / "job.json"
+        self._write_spec(spec_path)
+
+        monkeypatch.setenv("EVALHUB_MODE", "k8s")
+        monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(spec_path))
+        adapter = self._Adapter()
+
+        assert adapter.local_jobs_base_path is None
+
+    def test_raises_when_path_does_not_end_with_meta_job_json(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that an AssertionError is raised if the path doesn't end with meta/job.json."""
+        spec_path = tmp_path / "job.json"
+        spec_path.write_text(json.dumps(self._JOB_SPEC_DATA))
+
+        monkeypatch.setenv("EVALHUB_MODE", "local")
+        monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(spec_path))
+        adapter = self._Adapter()
+
+        with pytest.raises(AssertionError, match="must end with 'meta/job.json'"):
+            adapter.local_jobs_base_path
+
+    def test_raises_when_job_spec_path_is_none(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that an AssertionError is raised if job_spec_path is None in local mode."""
+        spec_path = tmp_path / "meta" / "job.json"
+        self._write_spec(spec_path)
+
+        monkeypatch.setenv("EVALHUB_MODE", "local")
+        monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(spec_path))
+        adapter = self._Adapter()
+        # Manually clear to simulate missing path
+        adapter._settings.job_spec_path = None
+
+        with pytest.raises(AssertionError, match="must be set in local mode"):
+            adapter.local_jobs_base_path

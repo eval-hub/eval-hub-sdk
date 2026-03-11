@@ -3,50 +3,63 @@
 import pytest
 from evalhub.models.api import (
     EvaluationJobFilesLocation,
-    OCICoordinate,
+    OCICoordinates,
     PersistResponse,
 )
 from pydantic import ValidationError
 
 
-class TestOCICoordinate:
-    """Tests for OCICoordinate model."""
+class TestOCICoordinates:
+    """Tests for OCICoordinates model."""
 
-    def test_oci_coordinate_required_fields(self) -> None:
-        """Test OCICoordinate with required fields only."""
-        coord = OCICoordinate(oci_ref="ghcr.io/org/repo:tag")
-        assert coord.oci_ref == "ghcr.io/org/repo:tag"
+    def test_oci_coordinates_required_fields(self) -> None:
+        """Test OCICoordinates with required fields only."""
+        coord = OCICoordinates(oci_host="quay.io", oci_repository="my-org/my-repo")
+        assert coord.oci_host == "quay.io"
+        assert coord.oci_repository == "my-org/my-repo"
+        assert coord.oci_tag is None
         assert coord.oci_subject is None
+        assert coord.annotations == {}
 
-    def test_oci_coordinate_with_subject(self) -> None:
-        """Test OCICoordinate with optional subject."""
-        coord = OCICoordinate(
-            oci_ref="ghcr.io/org/repo:tag", oci_subject="subject_value"
+    def test_oci_coordinates_all_fields(self) -> None:
+        """Test OCICoordinates with all optional fields."""
+        coord = OCICoordinates(
+            oci_host="quay.io",
+            oci_repository="my-org/my-repo",
+            oci_tag="eval-123",
+            oci_subject="quay.io/my-org/my-repo:model",
+            annotations={"model": "quay.io/my-org/my-repo:model"},
         )
-        assert coord.oci_ref == "ghcr.io/org/repo:tag"
-        assert coord.oci_subject == "subject_value"
+        assert coord.oci_host == "quay.io"
+        assert coord.oci_repository == "my-org/my-repo"
+        assert coord.oci_tag == "eval-123"
+        assert coord.oci_subject == "quay.io/my-org/my-repo:model"
+        assert coord.annotations == {"model": "quay.io/my-org/my-repo:model"}
 
-    def test_oci_coordinate_missing_required_field(self) -> None:
-        """Test OCICoordinate fails without required oci_ref."""
+    def test_oci_coordinates_missing_required_fields(self) -> None:
+        """Test OCICoordinates fails without required fields."""
         with pytest.raises(ValidationError) as exc_info:
-            OCICoordinate()  # type: ignore[call-arg]
-        assert "oci_ref" in str(exc_info.value)
+            OCICoordinates()  # type: ignore[call-arg]
+        error_str = str(exc_info.value)
+        assert "oci_host" in error_str
+        assert "oci_repository" in error_str
 
-    def test_oci_coordinate_serialization(self) -> None:
-        """Test OCICoordinate JSON serialization."""
-        coord = OCICoordinate(
-            oci_ref="ghcr.io/org/repo:tag", oci_subject="subject_value"
+    def test_oci_coordinates_serialization(self) -> None:
+        """Test OCICoordinates JSON serialization roundtrip."""
+        coord = OCICoordinates(
+            oci_host="quay.io",
+            oci_repository="my-org/my-repo",
+            oci_tag="eval-123",
+            oci_subject="subject_value",
         )
         data = coord.model_dump()
-        assert data["oci_ref"] == "ghcr.io/org/repo:tag"
+        assert data["oci_host"] == "quay.io"
+        assert data["oci_repository"] == "my-org/my-repo"
+        assert data["oci_tag"] == "eval-123"
         assert data["oci_subject"] == "subject_value"
 
-    def test_oci_coordinate_deserialization(self) -> None:
-        """Test OCICoordinate JSON deserialization."""
-        data = {"oci_ref": "ghcr.io/org/repo:tag", "oci_subject": "subject_value"}
-        coord = OCICoordinate(**data)
-        assert coord.oci_ref == "ghcr.io/org/repo:tag"
-        assert coord.oci_subject == "subject_value"
+        restored = OCICoordinates(**data)
+        assert restored == coord
 
 
 class TestEvaluationJobFilesLocation:

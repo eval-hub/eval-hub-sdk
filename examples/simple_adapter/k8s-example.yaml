@@ -5,38 +5,49 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: eval-job-001-spec
-  namespace: evalhub
+  namespace: evalhub-test
 data:
   job.json: |
     {
-      "job_id": "eval-job-001",
+      "id": "eval-job-001",
+      "provider_id": "evalhub-provider",
       "benchmark_id": "mmlu",
+      "benchmark_index": 0,
       "model": {
         "url": "http://model-server.models.svc.cluster.local:8000/v1",
         "name": "llama-2-7b-chat"
       },
       "num_examples": 1000,
-      "num_few_shot": 5,
-      "random_seed": 42,
       "benchmark_config": {
-        "subject": "all"
+        "subject": "all",
+        "num_few_shot": 5,
+        "random_seed": 42
       },
+      "callback_url": "unused",
       "experiment_name": "llama-2-evaluation",
-      "tags": {
-        "model_family": "llama-2",
-        "model_size": "7b",
-        "env": "production"
-      },
-      "timeout_seconds": 3600
+      "tags": [
+        {"key": "model_family", "value": "llama-2"},
+        {"key": "model_size", "value": "7b"},
+        {"key": "env", "value": "production"}
+      ]
     }
 
+# might want to append:
+# "exports": {
+#   "oci": {
+#     "coordinates": {
+#       "oci_host": "quay.io",
+#       "oci_repository": "mmortari/demo20260212"
+#     }
+#   }
+# }
 ---
 # Pod running the adapter with sidecar
 apiVersion: v1
 kind: Pod
 metadata:
   name: eval-job-001
-  namespace: evalhub
+  namespace: evalhub-test
   labels:
     app: evalhub-adapter
     job-id: eval-job-001
@@ -51,29 +62,25 @@ spec:
   containers:
     # Main adapter container
     - name: adapter
-      image: ghcr.io/your-org/simple-adapter:latest
-      imagePullPolicy: IfNotPresent
+      image: quay.io/mmortari/simple-adapter:latest
+      # imagePullPolicy: Always
 
       # ConfigMap mounted at /meta/job.json
       volumeMounts:
         - name: job-spec
           mountPath: /meta
           readOnly: true
+        # - name: oci-credentials
+        #   mountPath: /etc/evalhub/.docker/config.json
+        #   subPath: .dockerconfigjson
+        #   readOnly: true
 
       # Environment variables for registry access
       env:
-        - name: REGISTRY_URL
-          value: "ghcr.io"
-        - name: REGISTRY_USERNAME
-          valueFrom:
-            secretKeyRef:
-              name: registry-credentials
-              key: username
-        - name: REGISTRY_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: registry-credentials
-              key: password
+        # - name: OCI_AUTH_CONFIG_PATH
+        #   value: "/etc/evalhub/.docker/config.json"
+        - name: EVALHUB_MODE  # necessary for the defaults
+          value: "k8s"
 
       # Resource limits
       resources:
@@ -84,44 +91,47 @@ spec:
           memory: "4Gi"
           cpu: "2"
 
-    # Sidecar for communication with EvalHub service
-    - name: sidecar
-      image: ghcr.io/evalhub/job-sidecar:latest
-      imagePullPolicy: IfNotPresent
+    # Sidecar (not yet implemented) for communication with EvalHub service
+    # - name: sidecar
+    #   image: ghcr.io/evalhub/job-sidecar:latest
+    #   imagePullPolicy: IfNotPresent
 
-      # Sidecar listens on localhost:8080
-      ports:
-        - name: http
-          containerPort: 8080
-          protocol: TCP
+    #   # Sidecar listens on localhost:8080
+    #   ports:
+    #     - name: http
+    #       containerPort: 8080
+    #       protocol: TCP
 
-      # Environment variables for EvalHub service connection
-      env:
-        - name: EVALHUB_SERVICE_URL
-          value: "http://evalhub-service.evalhub.svc.cluster.local:8080"
-        - name: JOB_ID
-          value: "eval-job-001"
+    #   # Environment variables for EvalHub service connection
+    #   env:
+    #     - name: EVALHUB_SERVICE_URL
+    #       value: "http://evalhub-service.evalhub.svc.cluster.local:8080"
+    #     - name: JOB_ID
+    #       value: "eval-job-001"
 
-      # Health check
-      livenessProbe:
-        httpGet:
-          path: /health
-          port: 8080
-        initialDelaySeconds: 5
-        periodSeconds: 10
+    #   # Health check
+    #   livenessProbe:
+    #     httpGet:
+    #       path: /health
+    #       port: 8080
+    #     initialDelaySeconds: 5
+    #     periodSeconds: 10
 
-      resources:
-        requests:
-          memory: "128Mi"
-          cpu: "100m"
-        limits:
-          memory: "256Mi"
-          cpu: "200m"
+    #   resources:
+    #     requests:
+    #       memory: "128Mi"
+    #       cpu: "100m"
+    #     limits:
+    #       memory: "256Mi"
+    #       cpu: "200m"
 
   volumes:
     - name: job-spec
       configMap:
         name: eval-job-001-spec
+    # - name: oci-credentials
+    #   secret:
+    #     secretName: my-oci-credentials
 
 ---
 # Secret containing registry credentials
@@ -130,7 +140,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: registry-credentials
-  namespace: evalhub
+  namespace: evalhub-test
 type: Opaque
 stringData:
   username: "your-github-username"
@@ -142,7 +152,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: evalhub-job-runner
-  namespace: evalhub
+  namespace: evalhub-test
 
 ---
 # Role for job pods (minimal permissions)
@@ -150,7 +160,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: evalhub-job-runner
-  namespace: evalhub
+  namespace: evalhub-test
 rules:
   # Pods can read their own metadata
   - apiGroups: [""]
@@ -163,11 +173,11 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: evalhub-job-runner
-  namespace: evalhub
+  namespace: evalhub-test
 subjects:
   - kind: ServiceAccount
     name: evalhub-job-runner
-    namespace: evalhub
+    namespace: evalhub-test
 roleRef:
   kind: Role
   name: evalhub-job-runner

@@ -35,18 +35,17 @@ Quick Start:
             )
 
             # Persist artifacts if needed
-            if output_files:
+            if config.exports and config.exports.oci:
                 artifact = callbacks.create_oci_artifact(OCIArtifactSpec(
-                    files=output_files,
-                    id=config.id,
-                    benchmark_id=config.benchmark_id,
-                    model_name=config.model.name
+                    files_path=output_dir,
+                    coordinates=config.exports.oci.coordinates,
                 ))
 
             # Return results
             return JobResults(
                 id=config.id,
                 benchmark_id=config.benchmark_id,
+                benchmark_index=config.benchmark_index,
                 model_name=config.model.name,
                 results=results,
                 ...
@@ -73,6 +72,7 @@ from ..models.api import (
     JobStatus,
     ModelConfig,
 )
+from .auth import ModelCredentials, read_model_auth_key, resolve_model_credentials
 from .callbacks import DefaultCallbacks
 from .config import get_job_spec_path
 from .models import (
@@ -87,7 +87,7 @@ from .models import (
     OCIArtifactResult,
     OCIArtifactSpec,
 )
-from .oci import OCIArtifactPersister, Persister
+from .oci import OCIArtifactPersister
 from .settings import AdapterSettings
 
 # Legacy API is available but deprecated
@@ -107,13 +107,15 @@ __all__ = [
     # OCI models
     "OCIArtifactSpec",
     "OCIArtifactResult",
-    "Persister",
     "OCIArtifactPersister",
     # Callback implementation
     "DefaultCallbacks",
     # Configuration utilities
     "get_job_spec_path",
     "AdapterSettings",
+    "ModelCredentials",
+    "read_model_auth_key",
+    "resolve_model_credentials",
     # Common models (re-exported for convenience)
     "JobStatus",
     "ModelConfig",

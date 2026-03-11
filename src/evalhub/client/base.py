@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json as json_module
 import logging
 import random
 import time
@@ -12,6 +13,35 @@ from typing import Any, Self, cast
 import httpx
 
 logger = logging.getLogger(__name__)
+
+
+def _log_debug_http_error(
+    error: httpx.HTTPStatusError,
+    method: str,
+    url: str,
+    kwargs: dict[str, Any],
+) -> None:
+    request_body = kwargs.get("json") or kwargs.get("data")
+    if request_body is not None:
+        try:
+            body_str = json_module.dumps(request_body, indent=2, default=str)
+        except (TypeError, ValueError):
+            body_str = str(request_body)
+        logger.debug(f"HTTP {method} {url} request payload:\n{body_str}")
+
+    try:
+        response_text = error.response.text
+        try:
+            response_text = json_module.dumps(
+                json_module.loads(response_text), indent=2
+            )
+        except (json_module.JSONDecodeError, ValueError):
+            pass
+    except Exception:
+        response_text = "<unable to read response body>"
+    logger.debug(
+        f"HTTP {error.response.status_code} response from {method} {url}:\n{response_text}"
+    )
 
 
 def _calculate_retry_delay(
@@ -130,6 +160,28 @@ class ClientError(Exception):
         self.cause = cause
 
 
+class JobNotFoundError(ClientError):
+    """Raised when a job does not exist or has already been deleted."""
+
+    def __init__(self, job_id: str, cause: Exception | None = None) -> None:
+        super().__init__(f"Job '{job_id}' not found", cause=cause)
+        self.job_id = job_id
+
+
+class JobCanNotBeCancelledError(ClientError):
+    """Raised when a job cannot be cancelled (e.g. already completed, failed, or cancelled)."""
+
+    def __init__(
+        self, job_id: str, reason: str | None = None, cause: Exception | None = None
+    ) -> None:
+        msg = f"Job '{job_id}' cannot be cancelled"
+        if reason:
+            msg += f": {reason}"
+        super().__init__(msg, cause=cause)
+        self.job_id = job_id
+        self.reason = reason
+
+
 class BaseAsyncClient:
     """Base async client for EvalHub API communication.
 
@@ -151,6 +203,7 @@ class BaseAsyncClient:
         retry_max_delay: float = 60.0,
         retry_backoff_factor: float = 2.0,
         retry_randomization: bool = True,
+        tenant: str | None = None,
     ):
         """Initialize the base async client.
 
@@ -167,6 +220,7 @@ class BaseAsyncClient:
             retry_max_delay: Maximum delay between retries in seconds (default: 60.0)
             retry_backoff_factor: Multiplier for exponential backoff (default: 2.0)
             retry_randomization: Add random jitter to retry delays to prevent thundering herd (default: True)
+            tenant: Default tenant identifier sent as X-Tenant header on all requests
         """
         self.base_url = base_url.rstrip("/")
         self.api_base = f"{self.base_url}/api/v1"
@@ -175,6 +229,7 @@ class BaseAsyncClient:
         self.retry_max_delay = retry_max_delay
         self.retry_backoff_factor = retry_backoff_factor
         self.retry_randomization = retry_randomization
+        self.tenant = tenant
 
         # Handle backward compatibility: verify_ssl=False -> insecure=True
         if not verify_ssl:
@@ -195,6 +250,9 @@ class BaseAsyncClient:
         if self.auth_token:
             headers["Authorization"] = f"Bearer {self.auth_token}"
             logger.debug("HTTP client configured with Bearer token authentication")
+        if self.tenant:
+            headers["X-Tenant"] = self.tenant
+            logger.debug(f"HTTP client configured with tenant: {self.tenant}")
 
         # Determine TLS verification settings
         verify: bool | str
@@ -239,7 +297,8 @@ class BaseAsyncClient:
         Args:
             method: HTTP method
             path: API path (without base URL)
-            **kwargs: Additional arguments for httpx
+            **kwargs: Additional arguments for httpx. Supports a ``tenant``
+                keyword to override the default tenant for this single request.
 
         Returns:
             httpx.Response: Response object
@@ -247,6 +306,13 @@ class BaseAsyncClient:
         Raises:
             httpx.HTTPError: If request fails after retries
         """
+        # Allow per-request tenant override
+        tenant = kwargs.pop("tenant", None)
+        if tenant is not None:
+            headers = dict(kwargs.pop("headers", None) or {})
+            headers["X-Tenant"] = tenant
+            kwargs["headers"] = headers
+
         url = f"{self.api_base}{path}"
         last_exception: Exception | None = None
 
@@ -278,6 +344,8 @@ class BaseAsyncClient:
 
             except httpx.HTTPStatusError as e:
                 last_exception = e
+                # Log detailed request/response info for debugging
+                _log_debug_http_error(e, method, url, kwargs)
                 # Provide helpful error messages for authentication/authorization failures
                 if e.response.status_code == 401:
                     logger.error(
@@ -426,6 +494,7 @@ class BaseSyncClient:
         retry_max_delay: float = 60.0,
         retry_backoff_factor: float = 2.0,
         retry_randomization: bool = True,
+        tenant: str | None = None,
     ):
         """Initialize the base sync client.
 
@@ -442,6 +511,7 @@ class BaseSyncClient:
             retry_max_delay: Maximum delay between retries in seconds (default: 60.0)
             retry_backoff_factor: Multiplier for exponential backoff (default: 2.0)
             retry_randomization: Add random jitter to retry delays to prevent thundering herd (default: True)
+            tenant: Default tenant identifier sent as X-Tenant header on all requests
         """
         self.base_url = base_url.rstrip("/")
         self.api_base = f"{self.base_url}/api/v1"
@@ -450,6 +520,7 @@ class BaseSyncClient:
         self.retry_max_delay = retry_max_delay
         self.retry_backoff_factor = retry_backoff_factor
         self.retry_randomization = retry_randomization
+        self.tenant = tenant
 
         # Handle backward compatibility: verify_ssl=False -> insecure=True
         if not verify_ssl:
@@ -470,6 +541,9 @@ class BaseSyncClient:
         if self.auth_token:
             headers["Authorization"] = f"Bearer {self.auth_token}"
             logger.debug("HTTP client configured with Bearer token authentication")
+        if self.tenant:
+            headers["X-Tenant"] = self.tenant
+            logger.debug(f"HTTP client configured with tenant: {self.tenant}")
 
         # Determine TLS verification settings
         verify: bool | str
@@ -514,7 +588,8 @@ class BaseSyncClient:
         Args:
             method: HTTP method
             path: API path (without base URL)
-            **kwargs: Additional arguments for httpx
+            **kwargs: Additional arguments for httpx. Supports a ``tenant``
+                keyword to override the default tenant for this single request.
 
         Returns:
             httpx.Response: Response object
@@ -522,6 +597,13 @@ class BaseSyncClient:
         Raises:
             httpx.HTTPError: If request fails after retries
         """
+        # Allow per-request tenant override
+        tenant = kwargs.pop("tenant", None)
+        if tenant is not None:
+            headers = dict(kwargs.pop("headers", None) or {})
+            headers["X-Tenant"] = tenant
+            kwargs["headers"] = headers
+
         url = f"{self.api_base}{path}"
         last_exception: Exception | None = None
 
@@ -553,6 +635,8 @@ class BaseSyncClient:
 
             except httpx.HTTPStatusError as e:
                 last_exception = e
+                # Log detailed request/response info for debugging
+                _log_debug_http_error(e, method, url, kwargs)
                 # Provide helpful error messages for authentication/authorization failures
                 if e.response.status_code == 401:
                     logger.error(

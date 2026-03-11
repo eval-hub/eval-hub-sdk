@@ -11,7 +11,7 @@ from typing import Any, Self
 
 from pydantic import BaseModel, Field
 
-from ...models.api import EvaluationResult, JobStatus, ModelConfig
+from ...models.api import EvaluationResult, JobStatus, ModelConfig, OCICoordinates
 
 
 class MessageInfo(BaseModel):
@@ -54,8 +54,10 @@ class JobSpec(BaseModel):
     Matches the Go service's EvaluationJobConfig structure.
 
     Mandatory fields:
-        - job_id: Unique job identifier
+        - id: Unique job identifier
+        - provider_id: Provider identifier from service
         - benchmark_id: Benchmark to evaluate
+        - benchmark_index: Index of this benchmark within the job
         - model: Model configuration (url and name)
         - benchmark_config: Benchmark-specific parameters
         - callback_url: URL for status and result callbacks
@@ -64,8 +66,7 @@ class JobSpec(BaseModel):
         - num_examples: Number of examples to evaluate (None = all)
         - experiment_name: Name for this evaluation experiment
         - tags: Custom tags for the job
-        - timeout_seconds: Maximum job execution time (default: 3600)
-        - retry_attempts: Number of retry attempts on failure
+        - exports: Mechanism to provide exports callbacks
     """
 
     # ============================================================================
@@ -74,7 +75,11 @@ class JobSpec(BaseModel):
 
     # Job identification (mandatory)
     id: str = Field(..., description="Unique job identifier from service")
+    provider_id: str = Field(..., description="Provider identifier from service")
     benchmark_id: str = Field(..., description="Benchmark to evaluate")
+    benchmark_index: int = Field(
+        ..., description="Index of this benchmark within the job"
+    )
 
     # Model configuration (mandatory)
     model: ModelConfig = Field(..., description="Model configuration")
@@ -104,16 +109,13 @@ class JobSpec(BaseModel):
     experiment_name: str | None = Field(
         default=None, description="Name for this evaluation experiment"
     )
-    tags: dict[str, str] = Field(
-        default_factory=dict, description="Custom tags for the job"
+    tags: list[dict[str, str]] = Field(
+        default_factory=list, description="Custom tags for the job"
     )
 
-    # Resource hints (optional)
-    timeout_seconds: int | None = Field(
-        default=3600, description="Maximum job execution time"
-    )
-    retry_attempts: int | None = Field(
-        default=None, description="Number of retry attempts on failure"
+    # Job exports
+    exports: JobSpecExports | None = Field(
+        default=None, description="Specify JobSpec.exports"
     )
 
     @classmethod
@@ -152,6 +154,23 @@ class JobSpec(BaseModel):
             raise ValueError(f"Invalid JSON in job spec file: {e}") from e
 
 
+class JobSpecExports(BaseModel):
+    """Specify Job exports"""
+
+    oci: JobSpecExportsOCI | None = Field(
+        default=None, description="EvalHub-provided coordinates (user)"
+    )
+
+
+class JobSpecExportsOCI(BaseModel):
+    """OCI export JobSpec specification"""
+
+    # Where should be stored (registry, repo, any optional metadata)
+    coordinates: OCICoordinates = Field(
+        ..., description="Coordinates where to store the OCI Artifact"
+    )
+
+
 class JobStatusUpdate(BaseModel):
     """Status update sent to service via callback."""
 
@@ -188,23 +207,15 @@ class JobStatusUpdate(BaseModel):
 class OCIArtifactSpec(BaseModel):
     """Specification for OCI artifact creation."""
 
-    # Source files
-    files: list[Path] = Field(..., description="Paths to files to include in artifact")
-    base_path: Path | None = Field(
-        default=None, description="Base path for relative file paths"
+    # What should be stored in OCI Artifact
+    files_path: Path = Field(
+        ..., description="Paths to files to include in OCI Artifact"
     )
 
-    # Artifact metadata
-    title: str | None = Field(default=None, description="Artifact title")
-    description: str | None = Field(default=None, description="Artifact description")
-    annotations: dict[str, str] = Field(
-        default_factory=dict, description="Custom annotations"
+    # Where should be stored (registry, repo, any optional metadata)
+    coordinates: OCICoordinates = Field(
+        ..., description="Coordinates where to store the OCI Artifact"
     )
-
-    # Job context
-    id: str = Field(..., description="Job ID for tracking")
-    benchmark_id: str = Field(..., description="Benchmark ID")
-    model_name: str = Field(..., description="Model name")
 
 
 class OCIArtifactResult(BaseModel):
@@ -212,10 +223,6 @@ class OCIArtifactResult(BaseModel):
 
     digest: str = Field(..., description="Artifact digest (SHA256)")
     reference: str = Field(..., description="Full OCI reference with digest")
-    size_bytes: int = Field(..., description="Artifact size in bytes")
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC), description="Creation timestamp"
-    )
 
 
 class JobResults(BaseModel):
@@ -227,6 +234,9 @@ class JobResults(BaseModel):
     # Core results
     id: str = Field(..., description="Job identifier")
     benchmark_id: str = Field(..., description="Benchmark that was evaluated")
+    benchmark_index: int = Field(
+        ..., description="Index of this benchmark within the job"
+    )
     model_name: str = Field(..., description="Model that was evaluated")
     results: list[EvaluationResult] = Field(..., description="Evaluation results")
 
@@ -277,9 +287,10 @@ class JobCallbacks(ABC):
 
     @abstractmethod
     def create_oci_artifact(self, spec: OCIArtifactSpec) -> OCIArtifactResult:
-        """Create and push OCI artifact via sidecar.
+        """Create and push OCI artifact.
 
-        This requests the localhost sidecar to create an OCI artifact from
+        Implementors are responsible to invoke if they choose to support this capability.
+        This requests to create an OCI artifact from
         the specified files and push it to the configured registry.
 
         Args:
@@ -308,3 +319,21 @@ class JobCallbacks(ABC):
             RuntimeError: If results reporting fails
         """
         pass
+
+    def report_metrics_to_mlflow(self, results: JobResults, job_spec: JobSpec) -> None:
+        """Report evaluation metrics to MLflow if experiment is configured.
+
+        This logs metrics to MLflow if the job_spec contains experiment information.
+        If no experiment is configured, this method does nothing.
+
+        The default implementation is a no-op. Subclasses (e.g. DefaultCallbacks)
+        override this to perform actual MLflow logging.
+
+        Args:
+            results: Final job results containing metrics to log
+            job_spec: Job specification that may contain experiment configuration
+
+        Raises:
+            RuntimeError: If MLflow logging fails
+        """
+        return

@@ -16,8 +16,11 @@ class AsyncProvidersResource:
     def __init__(self, client: BaseAsyncClient):
         self._client = client
 
-    async def list(self) -> list[Provider]:
+    async def list(self, *, tenant: str | None = None) -> list[Provider]:
         """List all registered providers.
+
+        Args:
+            tenant: Tenant override for this request (default: client-level tenant)
 
         Returns:
             list[Provider]: List of provider information
@@ -25,16 +28,19 @@ class AsyncProvidersResource:
         Raises:
             httpx.HTTPError: If request fails
         """
-        response = await self._client._request_get("/evaluations/providers")
+        response = await self._client._request_get(
+            "/evaluations/providers", tenant=tenant
+        )
         data = response.json()
         provider_list = ProviderList(**data)
         return provider_list.items
 
-    async def get(self, provider_id: str) -> Provider:
+    async def get(self, provider_id: str, *, tenant: str | None = None) -> Provider:
         """Get information about a specific provider.
 
         Args:
             provider_id: The provider identifier
+            tenant: Tenant override for this request (default: client-level tenant)
 
         Returns:
             Provider: Provider information
@@ -43,7 +49,7 @@ class AsyncProvidersResource:
             httpx.HTTPError: If provider not found or request fails
         """
         response = await self._client._request_get(
-            f"/evaluations/providers/{provider_id}"
+            f"/evaluations/providers/{provider_id}", tenant=tenant
         )
         return Provider(**response.json())
 
@@ -54,8 +60,11 @@ class SyncProvidersResource:
     def __init__(self, client: BaseSyncClient):
         self._client = client
 
-    def list(self) -> list[Provider]:
+    def list(self, *, tenant: str | None = None) -> list[Provider]:
         """List all registered providers.
+
+        Args:
+            tenant: Tenant override for this request (default: client-level tenant)
 
         Returns:
             list[Provider]: List of provider information
@@ -63,16 +72,17 @@ class SyncProvidersResource:
         Raises:
             httpx.HTTPError: If request fails
         """
-        response = self._client._request_get("/evaluations/providers")
+        response = self._client._request_get("/evaluations/providers", tenant=tenant)
         data = response.json()
         provider_list = ProviderList(**data)
         return provider_list.items
 
-    def get(self, provider_id: str) -> Provider:
+    def get(self, provider_id: str, *, tenant: str | None = None) -> Provider:
         """Get information about a specific provider.
 
         Args:
             provider_id: The provider identifier
+            tenant: Tenant override for this request (default: client-level tenant)
 
         Returns:
             Provider: Provider information
@@ -80,5 +90,7 @@ class SyncProvidersResource:
         Raises:
             httpx.HTTPError: If provider not found or request fails
         """
-        response = self._client._request_get(f"/evaluations/providers/{provider_id}")
+        response = self._client._request_get(
+            f"/evaluations/providers/{provider_id}", tenant=tenant
+        )
         return Provider(**response.json())

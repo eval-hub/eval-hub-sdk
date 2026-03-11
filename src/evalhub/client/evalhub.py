@@ -48,6 +48,7 @@ class AsyncEvalHubClient(BaseAsyncClient):
         retry_max_delay: float = 60.0,
         retry_backoff_factor: float = 2.0,
         retry_randomization: bool = True,
+        tenant: str | None = None,
     ):
         """Initialize the async EvalHub client.
 
@@ -64,6 +65,8 @@ class AsyncEvalHubClient(BaseAsyncClient):
             retry_max_delay: Maximum delay between retries in seconds (default: 60.0)
             retry_backoff_factor: Multiplier for exponential backoff (default: 2.0)
             retry_randomization: Add random jitter to retry delays (default: True)
+            tenant: Default tenant identifier (Kubernetes namespace) sent as
+                X-Tenant header on all requests. Can be overridden per-call.
         """
         super().__init__(
             base_url=base_url,
@@ -78,6 +81,7 @@ class AsyncEvalHubClient(BaseAsyncClient):
             retry_max_delay=retry_max_delay,
             retry_backoff_factor=retry_backoff_factor,
             retry_randomization=retry_randomization,
+            tenant=tenant,
         )
 
     @cached_property
@@ -131,6 +135,7 @@ class SyncEvalHubClient(BaseSyncClient):
         retry_max_delay: float = 60.0,
         retry_backoff_factor: float = 2.0,
         retry_randomization: bool = True,
+        tenant: str | None = None,
     ):
         """Initialize the sync EvalHub client.
 
@@ -147,6 +152,8 @@ class SyncEvalHubClient(BaseSyncClient):
             retry_max_delay: Maximum delay between retries in seconds (default: 60.0)
             retry_backoff_factor: Multiplier for exponential backoff (default: 2.0)
             retry_randomization: Add random jitter to retry delays (default: True)
+            tenant: Default tenant identifier (Kubernetes namespace) sent as
+                X-Tenant header on all requests. Can be overridden per-call.
         """
         super().__init__(
             base_url=base_url,
@@ -161,6 +168,7 @@ class SyncEvalHubClient(BaseSyncClient):
             retry_max_delay=retry_max_delay,
             retry_backoff_factor=retry_backoff_factor,
             retry_randomization=retry_randomization,
+            tenant=tenant,
         )
 
     @cached_property

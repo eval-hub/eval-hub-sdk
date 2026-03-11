@@ -1,6 +1,5 @@
 """OCI artifact persistence for evaluation job files."""
 
-from .adapter import OCIArtifactPersister
-from .persister import Persister
+from .persister import OCIArtifactContext, OCIArtifactPersister
 
-__all__ = ["Persister", "OCIArtifactPersister"]
+__all__ = ["OCIArtifactContext", "OCIArtifactPersister"]

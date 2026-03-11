@@ -1,13 +1,38 @@
-"""Benchmark resource for EvalHub client."""
+"""Benchmark resource for EvalHub client.
+
+Benchmarks are nested inside providers on the server. This resource fetches
+providers and extracts/filters benchmarks client-side.
+"""
 
 from __future__ import annotations
 
 import logging
 
-from ...models import Benchmark, BenchmarksList
+from ...models import Benchmark, ProviderList
 from ..base import BaseAsyncClient, BaseSyncClient
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_benchmarks(
+    data: dict,
+    provider_id: str | None,
+    category: str | None,
+    limit: int | None,
+) -> list[Benchmark]:
+    """Extract and filter benchmarks from a providers response."""
+    provider_list = ProviderList(**data)
+    benchmarks: list[Benchmark] = []
+    for provider in provider_list.items:
+        if provider_id and provider.resource.id != provider_id:
+            continue
+        for b in provider.benchmarks:
+            if category and b.category != category:
+                continue
+            benchmarks.append(b)
+    if limit:
+        benchmarks = benchmarks[:limit]
+    return benchmarks
 
 
 class AsyncBenchmarksResource:
@@ -21,13 +46,19 @@ class AsyncBenchmarksResource:
         provider_id: str | None = None,
         category: str | None = None,
         limit: int | None = None,
+        *,
+        tenant: str | None = None,
     ) -> list[Benchmark]:
         """List available benchmarks.
+
+        Fetches providers and extracts their benchmarks, applying optional
+        filters client-side.
 
         Args:
             provider_id: Filter by provider (optional)
             category: Filter by category (optional)
             limit: Maximum number of benchmarks to return (optional)
+            tenant: Tenant override for this request (default: client-level tenant)
 
         Returns:
             list[Benchmark]: List of benchmarks
@@ -35,20 +66,10 @@ class AsyncBenchmarksResource:
         Raises:
             httpx.HTTPError: If request fails
         """
-        params = {}
-        if provider_id:
-            params["provider_id"] = provider_id
-        if category:
-            params["category"] = category
-        if limit:
-            params["limit"] = str(limit)
-
         response = await self._client._request_get(
-            "/evaluations/benchmarks", params=params
+            "/evaluations/providers", tenant=tenant
         )
-        data = response.json()
-        benchmarks_list = BenchmarksList(**data)
-        return benchmarks_list.items
+        return _extract_benchmarks(response.json(), provider_id, category, limit)
 
 
 class SyncBenchmarksResource:
@@ -62,13 +83,19 @@ class SyncBenchmarksResource:
         provider_id: str | None = None,
         category: str | None = None,
         limit: int | None = None,
+        *,
+        tenant: str | None = None,
     ) -> list[Benchmark]:
         """List available benchmarks.
+
+        Fetches providers and extracts their benchmarks, applying optional
+        filters client-side.
 
         Args:
             provider_id: Filter by provider (optional)
             category: Filter by category (optional)
             limit: Maximum number of benchmarks to return (optional)
+            tenant: Tenant override for this request (default: client-level tenant)
 
         Returns:
             list[Benchmark]: List of benchmarks
@@ -76,15 +103,5 @@ class SyncBenchmarksResource:
         Raises:
             httpx.HTTPError: If request fails
         """
-        params = {}
-        if provider_id:
-            params["provider_id"] = provider_id
-        if category:
-            params["category"] = category
-        if limit:
-            params["limit"] = str(limit)
-
-        response = self._client._request_get("/evaluations/benchmarks", params=params)
-        data = response.json()
-        benchmarks_list = BenchmarksList(**data)
-        return benchmarks_list.items
+        response = self._client._request_get("/evaluations/providers", tenant=tenant)
+        return _extract_benchmarks(response.json(), provider_id, category, limit)

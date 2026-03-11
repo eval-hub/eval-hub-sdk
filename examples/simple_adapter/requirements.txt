@@ -1,5 +1,5 @@
-# EvalHub Adapter SDK
-eval-hub-sdk[adapter]>=0.1.0
+# EvalHub Adapter SDK (to allow alphas)
+eval-hub-sdk[adapter]>=0.1.0a0
 
 # Optional: Add your evaluation framework dependencies here
 # For example:

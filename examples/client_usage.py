@@ -28,7 +28,7 @@ with SyncEvalHubClient() as client:  # type: SyncEvalHubClient
         providers = client.providers.list()
         print(f"\n✓ Found {len(providers)} providers")
         for provider in providers[:3]:  # Show first 3
-            print(f"  - {provider.id}: {provider.name}")
+            print(f"  - {provider.resource.id}: {provider.name}")
     except Exception as e:
         print(f"✗ Failed to list providers: {e}")
 
@@ -78,7 +78,6 @@ with SyncEvalHubClient() as eval_client:  # type: SyncEvalHubClient
     request = JobSubmissionRequest(
         model=model,
         benchmarks=[benchmark_config],
-        timeout_minutes=30,
     )
 
     try:

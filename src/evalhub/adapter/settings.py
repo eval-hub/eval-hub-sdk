@@ -13,10 +13,17 @@ The job spec is mounted in Kubernetes at `/meta/job.json`.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal, Self
+from typing import Annotated, Self
 
-from pydantic import Field
+from pydantic import BeforeValidator, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from evalhub.adapter.config import (
+    DEFAULT_JOB_SPEC_PATH_K8S,
+    DEFAULT_JOB_SPEC_PATH_LOCAL,
+    JOB_SPEC_PATH_ENV,
+    EvalHubMode,
+)
 
 
 class AdapterSettings(BaseSettings):
@@ -27,9 +34,10 @@ class AdapterSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="", extra="ignore")
 
     # Execution mode affects defaults only (env vars always win).
-    mode: Literal["k8s", "local"] = Field(
-        default="local", validation_alias="EVALHUB_MODE"
-    )
+    mode: Annotated[
+        EvalHubMode,
+        BeforeValidator(lambda v: v.strip().lower() if isinstance(v, str) else v),
+    ] = Field(default=EvalHubMode.LOCAL, validation_alias="EVALHUB_MODE")
 
     # Job spec configuration
     job_spec_path: Path | None = Field(
@@ -37,14 +45,10 @@ class AdapterSettings(BaseSettings):
     )
 
     # OCI registry configuration
-    registry_url: str | None = Field(default=None, validation_alias="REGISTRY_URL")
-    registry_username: str | None = Field(
-        default=None, validation_alias="REGISTRY_USERNAME"
+    oci_auth_config_path: Path | None = Field(
+        default=None, validation_alias="OCI_AUTH_CONFIG_PATH"
     )
-    registry_password: str | None = Field(
-        default=None, validation_alias="REGISTRY_PASSWORD"
-    )
-    registry_insecure: bool = Field(default=False, validation_alias="REGISTRY_INSECURE")
+    oci_insecure: bool = Field(default=False, validation_alias="OCI_INSECURE")
 
     # Authentication configuration (for Kubernetes ServiceAccount tokens)
     auth_token_path: Path | None = Field(
@@ -53,6 +57,10 @@ class AdapterSettings(BaseSettings):
     ca_bundle_path: Path | None = Field(
         default=None, validation_alias="EVALHUB_CA_BUNDLE_PATH"
     )
+
+    # Connection to evalhub
+    # (separate of OCI, as local EH might be localhost but OCI registry a real one)
+    evalhub_insecure: bool = Field(default=False, validation_alias="EVALHUB_INSECURE")
 
     @classmethod
     def from_env(cls) -> Self:
@@ -68,7 +76,11 @@ class AdapterSettings(BaseSettings):
         """Resolve job spec path using mode defaults."""
         if self.job_spec_path is not None:
             return self.job_spec_path
-        return Path("/meta/job.json") if self.mode == "k8s" else Path("meta/job.json")
+        return (
+            Path(DEFAULT_JOB_SPEC_PATH_K8S)
+            if self.mode == EvalHubMode.K8S
+            else Path(DEFAULT_JOB_SPEC_PATH_LOCAL)
+        )
 
     @property
     def resolved_auth_token_path(self) -> Path | None:
@@ -117,9 +129,5 @@ class AdapterSettings(BaseSettings):
         if not self.resolved_job_spec_path.exists():
             raise FileNotFoundError(
                 f"Job spec file not found at {self.resolved_job_spec_path}. "
-                "Set EVALHUB_JOB_SPEC_PATH (or EVALHUB_MODE=k8s for /meta/job.json)."
+                f"Set {JOB_SPEC_PATH_ENV} (or EVALHUB_MODE=k8s for {DEFAULT_JOB_SPEC_PATH_K8S})."
             )
-
-        # For the current adapter callbacks implementation, registry is required.
-        if not self.registry_url:
-            raise ValueError("REGISTRY_URL environment variable is required")

@@ -14,14 +14,12 @@ import tempfile
 from pathlib import Path
 
 from evalhub.adapter import (
-    JobCallbacks,
     JobResults,
     JobStatusUpdate,
-    OCIArtifactResult,
-    OCIArtifactSpec,
 )
 
 # Import the example adapter from the local file
+from evalhub.adapter.callbacks import DefaultCallbacks
 from simple_adapter import ExampleAdapter
 
 # Configure logging
@@ -33,7 +31,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class LocalCallbacks(JobCallbacks):
+class LocalCallbacks(DefaultCallbacks):
     """Local callbacks for testing without sidecar."""
 
     def report_status(self, update: JobStatusUpdate) -> None:
@@ -45,26 +43,14 @@ class LocalCallbacks(JobCallbacks):
             f"Message: {update.message or ''}"
         )
 
-    def create_oci_artifact(self, spec: OCIArtifactSpec) -> OCIArtifactResult:
-        """Mock OCI artifact creation for local testing."""
-        logger.info(
-            f"Would create OCI artifact with {len(spec.files)} files "
-            f"for job {spec.id}"
-        )
-
-        # In local mode, we just return a mock result
-        # In production, this would push to an actual registry
-        return OCIArtifactResult(
-            digest="sha256:local-test",
-            reference=f"localhost/eval-results/{spec.benchmark_id}:{spec.id}",
-            size_bytes=sum(f.stat().st_size for f in spec.files if f.exists()),
-        )
+    # def create_oci_artifact(self, spec: OCIArtifactSpec) -> OCIArtifactResult:
+    #     """Use default."""
 
     def report_results(self, results: JobResults) -> None:
         """Print final results to console."""
         logger.info(
             f"Job {results.id} completed | "
-            f"Benchmark: {results.benchmark_id} | "
+            f"Benchmark: {results.benchmark_id}#{results.benchmark_index} | "
             f"Model: {results.model_name} | "
             f"Overall Score: {results.overall_score} | "
             f"Examples: {results.num_examples_evaluated} | "
@@ -85,7 +71,9 @@ def main() -> None:
     # In production, this would be loaded from /meta/job.json
     spec_data = {
         "id": "local-test-001",
+        "provider_id": "local-provider",  # Required field
         "benchmark_id": "mmlu",
+        "benchmark_index": 0,
         "model": {
             "url": "http://localhost:8000/v1",  # Your local model server
             "name": "test-model",
@@ -98,10 +86,18 @@ def main() -> None:
             "random_seed": 42,
         },
         "experiment_name": "local-test",
-        "tags": {
-            "env": "local",
-            "test": "true",
-        },
+        "tags": [
+            {"key": "env", "value": "local"},
+            {"key": "test", "value": "true"},
+        ],
+        # "exports": {
+        #     "oci": {
+        #         "coordinates": {
+        #             "oci_host": "quay.io",
+        #             "oci_repository": "mmortari/demo20260212"
+        #         }
+        #     }
+        # }
     }
 
     # For local testing, create a temporary job spec file
@@ -116,11 +112,14 @@ def main() -> None:
         os.environ["EVALHUB_JOB_SPEC_PATH"] = temp_file_path
         logger.info(f"Using temp job spec: {temp_file_path}")
 
-        # Create callbacks
-        callbacks = LocalCallbacks()
-
         # Create adapter (will automatically load from temp file)
         adapter = ExampleAdapter()
+
+        # Create callbacks
+        callbacks = LocalCallbacks(
+            job_id=adapter.job_spec.id,
+            benchmark_id=adapter.job_spec.benchmark_id,
+        )
 
         logger.info(f"Running benchmark: {adapter.job_spec.benchmark_id}")
         logger.info(
@@ -135,7 +134,7 @@ def main() -> None:
         logger.info("EVALUATION COMPLETE")
         logger.info("=" * 60)
         logger.info(f"Job ID: {results.id}")
-        logger.info(f"Benchmark: {results.benchmark_id}")
+        logger.info(f"Benchmark: {results.benchmark_id}#{results.benchmark_index}")
         logger.info(f"Overall Score: {results.overall_score}")
         logger.info(f"Examples Evaluated: {results.num_examples_evaluated}")
         logger.info(f"Duration: {results.duration_seconds:.2f} seconds")
