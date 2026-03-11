@@ -8,6 +8,7 @@ from typing import Any
 from evalhub.adapter.models.adapter import FrameworkAdapter
 
 from ..models.api import JobStatus
+from .config import MlflowBackend
 from .models import (
     JobCallbacks,
     JobResults,
@@ -41,7 +42,17 @@ class _MlflowOps:
 
     Metrics, params, and all artifacts are saved in a single MLflow run.
     Does nothing if ``job_spec.experiment_name`` is not set.
+
+    The backend is controlled by the ``backend`` constructor argument or the
+    ``EVALHUB_MLFLOW_BACKEND`` environment variable:
+
+    - ``odh`` (default): lightweight built-in client, no extra dependencies.
+    - ``upstream``: official ``mlflow`` library; requires ``mlflow`` or
+      ``mlflow-skinny`` to be installed.
     """
+
+    def __init__(self, backend: MlflowBackend = MlflowBackend.ODH) -> None:
+        self._backend = backend
 
     def save(
         self,
@@ -53,60 +64,123 @@ class _MlflowOps:
             logger.debug("No MLflow experiment configured, skipping")
             return
 
-        from .mlflow import Metric, MlflowClient, Param
-
         try:
-            with MlflowClient() as client:
-                experiment_id = client.get_or_create_experiment(
-                    job_spec.experiment_name
-                )
-                run_tags: dict[str, str] = {
-                    tag["key"]: tag["value"] for tag in (job_spec.tags or [])
-                }
-
-                with client.start_run(
-                    experiment_id, run_name=job_spec.id, tags=run_tags
-                ) as run_id:
-                    # -- metrics & params --
-                    params = [
-                        Param("benchmark_id", results.benchmark_id),
-                        Param("model_name", results.model_name),
-                        Param(
-                            "num_examples_evaluated",
-                            str(results.num_examples_evaluated),
-                        ),
-                        Param("duration_seconds", str(results.duration_seconds)),
-                    ]
-                    metrics: list[Metric] = [
-                        Metric(r.metric_name, float(r.metric_value))
-                        for r in results.results
-                        if isinstance(r.metric_value, int | float)
-                    ]
-                    if results.overall_score is not None:
-                        metrics.append(Metric("overall_score", results.overall_score))
-
-                    client.log_batch(run_id, metrics=metrics, params=params)
-
-                    # -- artifacts --
-                    for artifact in artifacts or []:
-                        client.upload_artifact(
-                            run_id,
-                            artifact.path,
-                            artifact.content,
-                            artifact.content_type,
-                        )
-
-            logger.info(
-                "Saved to MLflow experiment '%s' (run: %s) — "
-                "%d metric(s), %d artifact(s)",
-                job_spec.experiment_name,
-                job_spec.id,
-                len(metrics),
-                len(artifacts or []),
-            )
+            if self._backend == MlflowBackend.UPSTREAM:
+                self._save_upstream(results, job_spec, artifacts)
+            else:
+                self._save_odh(results, job_spec, artifacts)
         except Exception as e:
             logger.error("Failed to save to MLflow: %s", e)
             raise RuntimeError(f"MLflow save failed: {e}") from e
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _build_params_metrics(
+        results: JobResults,
+    ) -> tuple[list, list]:
+        from .mlflow import Metric, Param
+
+        params = [
+            Param("benchmark_id", results.benchmark_id),
+            Param("model_name", results.model_name),
+            Param("num_examples_evaluated", str(results.num_examples_evaluated)),
+            Param("duration_seconds", str(results.duration_seconds)),
+        ]
+        metrics: list[Metric] = [
+            Metric(r.metric_name, float(r.metric_value))
+            for r in results.results
+            if isinstance(r.metric_value, int | float)
+        ]
+        if results.overall_score is not None:
+            metrics.append(Metric("overall_score", results.overall_score))
+        return params, metrics
+
+    def _save_odh(
+        self,
+        results: JobResults,
+        job_spec: JobSpec,
+        artifacts: list[MlflowArtifact] | None,
+    ) -> None:
+        from .mlflow import MlflowClient
+
+        params, metrics = self._build_params_metrics(results)
+        run_tags: dict[str, str] = {
+            tag["key"]: tag["value"] for tag in (job_spec.tags or [])
+        }
+
+        with MlflowClient() as client:
+            experiment_id = client.get_or_create_experiment(job_spec.experiment_name)
+            with client.start_run(
+                experiment_id, run_name=job_spec.id, tags=run_tags
+            ) as run_id:
+                client.log_batch(run_id, metrics=metrics, params=params)
+                for artifact in artifacts or []:
+                    client.upload_artifact(
+                        run_id,
+                        artifact.path,
+                        artifact.content,
+                        artifact.content_type,
+                    )
+
+        logger.info(
+            "Saved to MLflow (odh) experiment '%s' (run: %s) — "
+            "%d metric(s), %d artifact(s)",
+            job_spec.experiment_name,
+            job_spec.id,
+            len(metrics),
+            len(artifacts or []),
+        )
+
+    def _save_upstream(
+        self,
+        results: JobResults,
+        job_spec: JobSpec,
+        artifacts: list[MlflowArtifact] | None,
+    ) -> None:
+        import tempfile
+        from pathlib import Path as _Path
+
+        try:
+            import mlflow
+        except ImportError as exc:
+            raise RuntimeError(
+                "EVALHUB_MLFLOW_BACKEND=upstream requires the 'mlflow' package. "
+                "Install it with: pip install mlflow-skinny"
+            ) from exc
+
+        params, metrics = self._build_params_metrics(results)
+        run_tags: dict[str, str] = {
+            tag["key"]: tag["value"] for tag in (job_spec.tags or [])
+        }
+
+        mlflow.set_experiment(job_spec.experiment_name)
+        with mlflow.start_run(run_name=job_spec.id, tags=run_tags):
+            mlflow.log_params({p.key: p.value for p in params})
+            mlflow.log_metrics({m.key: m.value for m in metrics})
+
+            for artifact in artifacts or []:
+                artifact_file = _Path(artifact.path)
+                artifact_dir = (
+                    str(artifact_file.parent)
+                    if str(artifact_file.parent) != "."
+                    else None
+                )
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    tmp_file = _Path(tmpdir) / artifact_file.name
+                    tmp_file.write_bytes(artifact.content)
+                    mlflow.log_artifact(str(tmp_file), artifact_path=artifact_dir)
+
+        logger.info(
+            "Saved to MLflow (upstream) experiment '%s' (run: %s) — "
+            "%d metric(s), %d artifact(s)",
+            job_spec.experiment_name,
+            job_spec.id,
+            len(metrics),
+            len(artifacts or []),
+        )
 
 
 class DefaultCallbacks(JobCallbacks):
@@ -157,6 +231,7 @@ class DefaultCallbacks(JobCallbacks):
         events_path_template: str | None = None,
         oci_auth_config_path: Path | None = None,
         oci_insecure: bool = False,
+        mlflow_backend: MlflowBackend = MlflowBackend.ODH,
     ):
         """Initialize default callbacks.
 
@@ -174,6 +249,11 @@ class DefaultCallbacks(JobCallbacks):
                            If not provided, auto-detects Kubernetes ServiceAccount token
             ca_bundle_path: Path to CA bundle for TLS verification
                           If not provided, auto-detects OpenShift/Kubernetes CA bundles
+            mlflow_backend: MLflow client backend to use for artifact saving.
+                           Use MlflowBackend.ODH (default) for the built-in client or
+                           MlflowBackend.UPSTREAM for the official mlflow library.
+                           Can also be set via EVALHUB_MLFLOW_BACKEND env var when
+                           constructing via from_adapter().
         """
         self.job_id = job_id
         self.benchmark_id = benchmark_id
@@ -213,7 +293,7 @@ class DefaultCallbacks(JobCallbacks):
             self._ca_bundle = self._resolve_ca_bundle(ca_bundle_path)
 
         # MLflow integration (single-method API)
-        self.mlflow = _MlflowOps()
+        self.mlflow = _MlflowOps(backend=mlflow_backend)
 
         # Try to import httpx for sidecar communication
         self._httpx_available = False
@@ -547,4 +627,5 @@ class DefaultCallbacks(JobCallbacks):
             insecure=adapter.settings.evalhub_insecure,
             oci_auth_config_path=adapter.settings.oci_auth_config_path,
             oci_insecure=adapter.settings.oci_insecure,
+            mlflow_backend=adapter.settings.mlflow_backend,
         )
