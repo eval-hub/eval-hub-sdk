@@ -319,6 +319,3 @@ class JobCallbacks(ABC):
             RuntimeError: If results reporting fails
         """
         pass
-
-
-

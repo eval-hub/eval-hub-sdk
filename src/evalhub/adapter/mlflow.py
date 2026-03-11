@@ -500,7 +500,9 @@ class MlflowClient:
         artifact_path = artifact_path.lstrip("/")
         return f"{_ARTIFACTS_API}/{run_root}/{artifact_path}"
 
-    def _put_artifact(self, path: str, content: bytes | IO[bytes], content_type: str) -> None:
+    def _put_artifact(
+        self, path: str, content: bytes | IO[bytes], content_type: str
+    ) -> None:
         """Raw PUT to the MLflow Artifacts server."""
         url = f"{self._tracking_uri}{path}"
         headers = {"Content-Type": content_type}

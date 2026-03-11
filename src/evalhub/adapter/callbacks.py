@@ -9,6 +9,7 @@ from evalhub.adapter.models.adapter import FrameworkAdapter
 
 from ..models.api import JobStatus
 from .config import MlflowBackend
+from .mlflow import MlflowArtifact
 from .models import (
     JobCallbacks,
     JobResults,
@@ -17,7 +18,6 @@ from .models import (
     OCIArtifactResult,
     OCIArtifactSpec,
 )
-from .mlflow import MlflowArtifact
 from .oci import OCIArtifactPersister
 from .oci.persister import OCIArtifactContext
 
@@ -112,7 +112,9 @@ class _MlflowOps:
         }
 
         with MlflowClient() as client:
-            experiment_id = client.get_or_create_experiment(job_spec.experiment_name)
+            experiment_id = client.get_or_create_experiment(
+                job_spec.experiment_name or ""
+            )
             with client.start_run(
                 experiment_id, run_name=job_spec.id, tags=run_tags
             ) as run_id:
@@ -144,7 +146,7 @@ class _MlflowOps:
         from pathlib import Path as _Path
 
         try:
-            import mlflow
+            import mlflow  # type: ignore[import-not-found]
         except ImportError as exc:
             raise RuntimeError(
                 "EVALHUB_MLFLOW_BACKEND=upstream requires the 'mlflow' package. "
@@ -613,7 +615,6 @@ class DefaultCallbacks(JobCallbacks):
             f"Examples: {results.num_examples_evaluated} | "
             f"Duration: {results.duration_seconds:.2f}s"
         )
-
 
     @staticmethod
     def from_adapter(adapter: FrameworkAdapter) -> DefaultCallbacks:
