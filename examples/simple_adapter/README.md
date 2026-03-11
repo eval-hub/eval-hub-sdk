@@ -144,7 +144,7 @@ Example job spec in ConfigMap:
     "url": "http://model-server:8000/v1",
     "name": "llama-2-7b"
   },
-  "benchmark_config": {
+  "parameters": {
     "num_few_shot": 5,
     "random_seed": 42
   },
@@ -192,7 +192,7 @@ spec = JobSpec(
     benchmark_id="mmlu",
     benchmark_index=0,
     model={"url": "http://localhost:8000", "name": "test-model"},
-    benchmark_config={},
+    parameters={},
     callback_url="http://localhost:8080",
     num_examples=10
 )
@@ -242,7 +242,7 @@ To implement your own adapter for a different framework:
 1. **Replace the evaluation logic** in `_evaluate()` to call your framework
 2. **Update dataset loading** in `_load_dataset()` to load your benchmark data
 3. **Customize metrics** in `_compute_overall_score()` and return appropriate results
-4. **Add framework-specific configuration** to `benchmark_config` in JobSpec
+4. **Add framework-specific configuration** to `parameters` in JobSpec
 
 The adapter pattern handles all the infrastructure (status reporting, OCI artifacts, job lifecycle) so you only need to implement the framework-specific evaluation logic.
 

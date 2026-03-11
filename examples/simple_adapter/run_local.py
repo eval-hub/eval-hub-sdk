@@ -80,7 +80,7 @@ def main() -> None:
         },
         "callback_url": "unused",  # Mock URL for local testing
         "num_examples": 10,  # Small number for quick testing
-        "benchmark_config": {
+        "parameters": {
             "subject": "mathematics",
             "num_few_shot": 5,
             "random_seed": 42,

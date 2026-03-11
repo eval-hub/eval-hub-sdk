@@ -33,7 +33,7 @@ def mock_job_spec_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         "benchmark_index": 0,
         "model": {"url": "http://localhost:8000", "name": "test-model"},
         "num_examples": 10,
-        "benchmark_config": {"random_seed": 42},
+        "parameters": {"random_seed": 42},
         "callback_url": "http://localhost:8080",
     }
 
@@ -59,7 +59,7 @@ class TestJobSpec:
             benchmark_index=0,
             model=ModelConfig(url="http://localhost:8000", name="test-model"),
             num_examples=10,
-            benchmark_config={"num_few_shot": 5, "random_seed": 42},
+            parameters={"num_few_shot": 5, "random_seed": 42},
             callback_url="http://localhost:8080",
         )
 
@@ -68,8 +68,8 @@ class TestJobSpec:
         assert spec.benchmark_id == "mmlu"
         assert spec.model.name == "test-model"
         assert spec.num_examples == 10
-        assert spec.benchmark_config["num_few_shot"] == 5
-        assert spec.benchmark_config["random_seed"] == 42
+        assert spec.parameters["num_few_shot"] == 5
+        assert spec.parameters["random_seed"] == 42
 
     def test_creating_jobspec_with_minimal_fields(self) -> None:
         """Test creating JobSpec with minimal mandatory fields."""
@@ -79,14 +79,14 @@ class TestJobSpec:
             benchmark_id="hellaswag",
             benchmark_index=0,
             model=ModelConfig(url="http://localhost:8000", name="model"),
-            benchmark_config={},
+            parameters={},
             callback_url="http://localhost:8080",
         )
 
         assert spec.id == "test-job-002"
         assert spec.benchmark_id == "hellaswag"
         assert spec.num_examples is None
-        assert spec.benchmark_config == {}
+        assert spec.parameters == {}
 
     def test_jobspec_with_benchmarkspecific_configuration(self) -> None:
         """Test JobSpec with benchmark-specific configuration."""
@@ -96,11 +96,11 @@ class TestJobSpec:
             benchmark_id="mmlu",
             benchmark_index=0,
             model=ModelConfig(url="http://localhost:8000", name="model"),
-            benchmark_config={"subject": "physics", "difficulty": "hard"},
+            parameters={"subject": "physics", "difficulty": "hard"},
             callback_url="http://localhost:8080",
         )
 
-        assert spec.benchmark_config == {"subject": "physics", "difficulty": "hard"}
+        assert spec.parameters == {"subject": "physics", "difficulty": "hard"}
 
     def test_jobspec_with_custom_tags(self) -> None:
         """Test JobSpec with custom tags in list-of-dicts format (eval-hub/eval-hub#166)."""
@@ -110,7 +110,7 @@ class TestJobSpec:
             benchmark_id="arc",
             benchmark_index=0,
             model=ModelConfig(url="http://localhost:8000", name="model"),
-            benchmark_config={},
+            parameters={},
             callback_url="http://localhost:8080",
             tags=[
                 {"key": "env", "value": "test"},
@@ -131,7 +131,7 @@ class TestJobSpec:
             benchmark_id="arc",
             benchmark_index=0,
             model=ModelConfig(url="http://localhost:8000", name="model"),
-            benchmark_config={},
+            parameters={},
             callback_url="http://localhost:8080",
         )
 
@@ -145,7 +145,7 @@ class TestJobSpec:
             "benchmark_id": "mmlu",
             "benchmark_index": 0,
             "model": {"url": "http://localhost:8000", "name": "test-model"},
-            "benchmark_config": {},
+            "parameters": {},
             "callback_url": "http://localhost:8080",
             "tags": [
                 {"key": "team", "value": "ml-platform"},
@@ -171,7 +171,7 @@ class TestJobSpec:
             benchmark_id="gsm8k",
             benchmark_index=0,
             model=ModelConfig(url="http://localhost:8000", name="model"),
-            benchmark_config={},
+            parameters={},
             callback_url="http://localhost:8080",
             num_examples=50,
         )
@@ -582,7 +582,7 @@ class TestFrameworkAdapter:
             benchmark_id="mmlu",
             benchmark_index=0,
             model=ModelConfig(url="http://localhost:8000", name="test-model"),
-            benchmark_config={},
+            parameters={},
             callback_url="http://localhost:8080",
         )
 
@@ -610,7 +610,7 @@ class TestLocalJobsBasePath:
         "benchmark_id": "bench",
         "benchmark_index": 0,
         "model": {"url": "http://localhost:8000", "name": "m"},
-        "benchmark_config": {},
+        "parameters": {},
         "callback_url": "http://localhost:8080",
     }
 

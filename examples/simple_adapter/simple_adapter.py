@@ -114,7 +114,7 @@ class ExampleAdapter(FrameworkAdapter):
                 )
             )
 
-            results = self._evaluate(config.model, dataset, config.benchmark_config)
+            results = self._evaluate(config.model, dataset, config.parameters)
             logger.info(f"Evaluation complete with {len(results)} metrics")
 
             # Phase 4: Post-processing
@@ -176,9 +176,9 @@ class ExampleAdapter(FrameworkAdapter):
                 evaluation_metadata={
                     "framework": "simple_adapter",
                     "framework_version": "1.0.0",
-                    "num_few_shot": config.benchmark_config.get("num_few_shot"),
-                    "random_seed": config.benchmark_config.get("random_seed"),
-                    "benchmark_config": config.benchmark_config,
+                    "num_few_shot": config.parameters.get("num_few_shot"),
+                    "random_seed": config.parameters.get("random_seed"),
+                    "parameters": config.parameters,
                 },
                 oci_artifact=oci_artifact,
             )
@@ -247,14 +247,14 @@ class ExampleAdapter(FrameworkAdapter):
         self,
         model: ModelConfig,
         dataset: list[dict[str, Any]],
-        benchmark_config: dict[str, Any],
+        parameters: dict[str, Any],
     ) -> list[EvaluationResult]:
         """Run evaluation on the dataset.
 
         Args:
             model: Model configuration
             dataset: Dataset to evaluate on
-            benchmark_config: Benchmark-specific configuration
+            parameters: Benchmark-specific configuration
 
         Returns:
             List of evaluation results
@@ -263,7 +263,7 @@ class ExampleAdapter(FrameworkAdapter):
         # and compute metrics using the benchmark framework
         logger.info(
             f"Evaluating model {model.name} on {len(dataset)} examples "
-            f"with config: {benchmark_config}"
+            f"with config: {parameters}"
         )
 
         # Simulate evaluation

@@ -59,7 +59,7 @@ class JobSpec(BaseModel):
         - benchmark_id: Benchmark to evaluate
         - benchmark_index: Index of this benchmark within the job
         - model: Model configuration (url and name)
-        - benchmark_config: Benchmark-specific parameters
+        - parameters: Benchmark-specific parameters
         - callback_url: URL for status and result callbacks
 
     Optional fields:
@@ -86,9 +86,7 @@ class JobSpec(BaseModel):
 
     # Benchmark-specific configuration (mandatory)
     # adapter-specific params go here
-    benchmark_config: dict[str, Any] = Field(
-        ..., description="Benchmark-specific parameters"
-    )
+    parameters: dict[str, Any] = Field(..., description="Benchmark-specific parameters")
 
     # Callback configuration (mandatory)
     callback_url: str = Field(

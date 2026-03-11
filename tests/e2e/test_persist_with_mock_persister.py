@@ -30,7 +30,7 @@ def mock_job_spec_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         "benchmark_index": 0,
         "model": {"url": "http://localhost:8000", "name": "test-model"},
         "num_examples": 10,
-        "benchmark_config": {"random_seed": 42},
+        "parameters": {"random_seed": 42},
         "callback_url": "http://localhost:8080",
     }
 
@@ -135,7 +135,7 @@ class TestOCIArtifactPersistenceE2E:
             benchmark_id="mmlu",
             benchmark_index=0,
             model=ModelConfig(url="http://localhost:8000", name="test-model"),
-            benchmark_config={},
+            parameters={},
             callback_url="http://localhost:8080",
             num_examples=10,
         )
