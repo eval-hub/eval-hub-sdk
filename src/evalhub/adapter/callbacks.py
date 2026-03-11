@@ -16,10 +16,97 @@ from .models import (
     OCIArtifactResult,
     OCIArtifactSpec,
 )
+from .mlflow import MlflowArtifact
 from .oci import OCIArtifactPersister
 from .oci.persister import OCIArtifactContext
 
 logger = logging.getLogger(__name__)
+
+
+class _MlflowOps:
+    """Single-method MLflow integration.
+
+    Usage from an adapter::
+
+        from evalhub.adapter.mlflow import MlflowArtifact
+
+        callbacks.mlflow.save(
+            results,
+            job_spec,
+            artifacts=[
+                MlflowArtifact("results.json", json_bytes, "application/json"),
+                MlflowArtifact("report.html", html_bytes, "text/html"),
+            ],
+        )
+
+    Metrics, params, and all artifacts are saved in a single MLflow run.
+    Does nothing if ``job_spec.experiment_name`` is not set.
+    """
+
+    def save(
+        self,
+        results: JobResults,
+        job_spec: JobSpec,
+        artifacts: list[MlflowArtifact] | None = None,
+    ) -> None:
+        if not job_spec.experiment_name:
+            logger.debug("No MLflow experiment configured, skipping")
+            return
+
+        from .mlflow import Metric, MlflowClient, Param
+
+        try:
+            with MlflowClient() as client:
+                experiment_id = client.get_or_create_experiment(
+                    job_spec.experiment_name
+                )
+                run_tags: dict[str, str] = {
+                    tag["key"]: tag["value"] for tag in (job_spec.tags or [])
+                }
+
+                with client.start_run(
+                    experiment_id, run_name=job_spec.id, tags=run_tags
+                ) as run_id:
+                    # -- metrics & params --
+                    params = [
+                        Param("benchmark_id", results.benchmark_id),
+                        Param("model_name", results.model_name),
+                        Param(
+                            "num_examples_evaluated",
+                            str(results.num_examples_evaluated),
+                        ),
+                        Param("duration_seconds", str(results.duration_seconds)),
+                    ]
+                    metrics: list[Metric] = [
+                        Metric(r.metric_name, float(r.metric_value))
+                        for r in results.results
+                        if isinstance(r.metric_value, int | float)
+                    ]
+                    if results.overall_score is not None:
+                        metrics.append(Metric("overall_score", results.overall_score))
+
+                    client.log_batch(run_id, metrics=metrics, params=params)
+
+                    # -- artifacts --
+                    for artifact in artifacts or []:
+                        client.upload_artifact(
+                            run_id,
+                            artifact.path,
+                            artifact.content,
+                            artifact.content_type,
+                        )
+
+            logger.info(
+                "Saved to MLflow experiment '%s' (run: %s) — "
+                "%d metric(s), %d artifact(s)",
+                job_spec.experiment_name,
+                job_spec.id,
+                len(metrics),
+                len(artifacts or []),
+            )
+        except Exception as e:
+            logger.error("Failed to save to MLflow: %s", e)
+            raise RuntimeError(f"MLflow save failed: {e}") from e
 
 
 class DefaultCallbacks(JobCallbacks):
@@ -124,6 +211,9 @@ class DefaultCallbacks(JobCallbacks):
             logger.warning("TLS verification disabled - skipping CA bundle detection")
         else:
             self._ca_bundle = self._resolve_ca_bundle(ca_bundle_path)
+
+        # MLflow integration (single-method API)
+        self.mlflow = _MlflowOps()
 
         # Try to import httpx for sidecar communication
         self._httpx_available = False
@@ -444,74 +534,6 @@ class DefaultCallbacks(JobCallbacks):
             f"Duration: {results.duration_seconds:.2f}s"
         )
 
-    def report_metrics_to_mlflow(self, results: JobResults, job_spec: JobSpec) -> None:
-        """Report evaluation metrics to MLflow if experiment is configured.
-
-        Uses the built-in lightweight MLflow REST client (no mlflow-skinny
-        dependency required).
-
-        Args:
-            results: Final job results containing metrics to log
-            job_spec: Job specification that may contain experiment configuration
-
-        Raises:
-            RuntimeError: If MLflow logging fails
-        """
-        if not job_spec.experiment_name:
-            logger.debug("No MLflow experiment configured, skipping MLflow logging")
-            return
-
-        from .mlflow import Metric, MlflowClient, Param
-
-        try:
-            with MlflowClient() as client:
-                experiment_id = client.get_or_create_experiment(
-                    job_spec.experiment_name
-                )
-
-                # Collect tags from job spec
-                run_tags: dict[str, str] = {}
-                if job_spec.tags:
-                    for tag in job_spec.tags:
-                        run_tags[tag["key"]] = tag["value"]
-
-                with client.start_run(
-                    experiment_id, run_name=results.id, tags=run_tags
-                ) as run_id:
-                    # Build params
-                    params = [
-                        Param("benchmark_id", results.benchmark_id),
-                        Param("model_name", results.model_name),
-                        Param(
-                            "num_examples_evaluated",
-                            str(results.num_examples_evaluated),
-                        ),
-                        Param("duration_seconds", str(results.duration_seconds)),
-                    ]
-
-                    # Build metrics (only numeric values)
-                    metrics: list[Metric] = []
-                    for result in results.results:
-                        if isinstance(result.metric_value, int | float):
-                            metrics.append(
-                                Metric(result.metric_name, float(result.metric_value))
-                            )
-                    if results.overall_score is not None:
-                        metrics.append(Metric("overall_score", results.overall_score))
-
-                    # Single batch call instead of N individual calls
-                    client.log_batch(
-                        run_id, metrics=metrics, params=params, tags=run_tags
-                    )
-
-                logger.info(
-                    f"Metrics logged to MLflow experiment "
-                    f"'{job_spec.experiment_name}' (run: {results.id})"
-                )
-
-        except Exception as e:
-            logger.error(f"Failed to log metrics to MLflow: {e}")
-            raise RuntimeError(f"MLflow logging failed: {e}") from e
 
     @staticmethod
     def from_adapter(adapter: FrameworkAdapter) -> DefaultCallbacks:
