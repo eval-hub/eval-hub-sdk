@@ -40,7 +40,7 @@ from .models import (
     ModelConfig,
 )
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 # Base exports - always available
 __all__ = [
