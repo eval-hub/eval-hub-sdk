@@ -13,11 +13,11 @@ import logging
 import mimetypes
 import os
 import time
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import IO, Any
+from typing import Any
 
 import httpx
 
@@ -501,7 +501,7 @@ class MlflowClient:
         return f"{_ARTIFACTS_API}/{run_root}/{artifact_path}"
 
     def _put_artifact(
-        self, path: str, content: bytes | IO[bytes], content_type: str
+        self, path: str, content: bytes | Iterable[bytes], content_type: str
     ) -> None:
         """Raw PUT to the MLflow Artifacts server."""
         url = f"{self._tracking_uri}{path}"
@@ -513,7 +513,7 @@ class MlflowClient:
         self,
         run_id: str,
         artifact_path: str,
-        content: bytes | IO[bytes],
+        content: bytes | Iterable[bytes],
         content_type: str = "application/octet-stream",
     ) -> None:
         """Upload content to the MLflow Artifacts server.
@@ -546,7 +546,12 @@ class MlflowClient:
         if not content_type:
             content_type = "application/octet-stream"
         with local_path.open("rb") as f:
-            self.upload_artifact(run_id, artifact_path, f, content_type)
+            self.upload_artifact(
+                run_id,
+                artifact_path,
+                iter(lambda: f.read(65536), b""),
+                content_type,
+            )
 
     def list_artifacts(self, run_id: str, path: str = "") -> list[ArtifactInfo]:
         """List artifacts for a run, optionally scoped to a sub-path."""
