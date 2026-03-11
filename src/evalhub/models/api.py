@@ -182,7 +182,7 @@ class EvaluationJobResource(BaseModel):
     """Resource information for an evaluation job."""
 
     id: str = Field(..., description="Unique job identifier")
-    tenant: str = Field(..., description="Tenant identifier")
+    tenant: str | None = Field(default=None, description="Tenant identifier")
     created_at: datetime = Field(..., description="When the job was created")
     updated_at: datetime | None = Field(
         default=None, description="When the job was last updated"
