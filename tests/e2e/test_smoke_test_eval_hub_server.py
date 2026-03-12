@@ -38,7 +38,9 @@ def test_jobs_endpoint(evalhub_server_with_real_config: str) -> None:
             id="toxicity", provider_id="garak", parameters={"myparam": 5}
         )
 
-        job_request = JobSubmissionRequest(model=model, benchmarks=[benchmark])
+        job_request = JobSubmissionRequest(
+            name="toxicity-eval", model=model, benchmarks=[benchmark]
+        )
 
         # Submit job and verify we get a response without errors
         job = client.jobs.submit(job_request)

@@ -125,6 +125,7 @@ class BenchmarkInfo(BaseModel):
 class EvaluationRequest(BaseModel):
     """Request to run an evaluation."""
 
+    name: str = Field(..., description="Name for the evaluation job")
     benchmark_id: str = Field(..., description="Benchmark to evaluate on")
     model: ModelConfig = Field(..., description="Model configuration")
 
@@ -133,9 +134,9 @@ class EvaluationRequest(BaseModel):
         default=None, description="Number of examples to evaluate (None = all)"
     )
 
-    # Custom benchmark configuration
-    benchmark_config: dict[str, Any] = Field(
-        default_factory=dict, description="Benchmark-specific configuration"
+    # Benchmark-specific parameters
+    parameters: dict[str, Any] = Field(
+        default_factory=dict, description="Benchmark-specific parameters"
     )
 
     # Job metadata
@@ -274,6 +275,7 @@ class BenchmarkConfig(BaseModel):
 class JobSubmissionRequest(BaseModel):
     """Request to submit an evaluation job."""
 
+    name: str = Field(..., description="Name for the evaluation job")
     model: ModelConfig = Field(..., description="Model configuration")
     benchmarks: list[BenchmarkConfig] = Field(
         ..., description="List of benchmarks to evaluate", min_length=1

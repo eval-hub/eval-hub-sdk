@@ -90,14 +90,15 @@ class TestEvaluationRequest:
         """Test basic EvaluationRequest creation."""
         model = ModelConfig(url="http://localhost:8000/v1", name="test-model")
         request = EvaluationRequest(
+            name="test-eval",
             benchmark_id="test_bench",
             model=model,
         )
+        assert request.name == "test-eval"
         assert request.benchmark_id == "test_bench"
         assert request.model.name == "test-model"
         assert request.num_examples is None
-        assert "num_few_shot" not in request.benchmark_config.keys()
-        assert request.benchmark_config == {}
+        assert request.parameters == {}
         assert request.experiment_name is None
 
     def test_full_evaluation_request(self) -> None:
@@ -108,17 +109,18 @@ class TestEvaluationRequest:
         }
         model = ModelConfig(**model_payload)
         request = EvaluationRequest(
+            name="mmlu-eval",
             benchmark_id="mmlu",
             model=model,
             num_examples=100,
-            benchmark_config={"subset": "college_math"},
+            parameters={"subset": "college_math"},
             experiment_name="test_run_1",
         )
+        assert request.name == "mmlu-eval"
         assert request.benchmark_id == "mmlu"
         assert request.model.name == "gpt-4"
         assert request.num_examples == 100
-        assert "num_few_shot" not in request.benchmark_config.keys()
-        assert request.benchmark_config == {"subset": "college_math"}
+        assert request.parameters == {"subset": "college_math"}
         assert request.experiment_name == "test_run_1"
 
 

@@ -67,22 +67,14 @@ __all__ = [
 try:
     from .client import (
         AsyncEvalHubClient,
-        AsyncEvaluationsClient,
-        AsyncProvidersClient,
         EvalHubClient,
         SyncEvalHubClient,
-        SyncEvaluationsClient,
-        SyncProvidersClient,
     )
 
     __all__.extend(
         [
             "AsyncEvalHubClient",
-            "AsyncProvidersClient",
-            "AsyncEvaluationsClient",
             "SyncEvalHubClient",
-            "SyncProvidersClient",
-            "SyncEvaluationsClient",
             "EvalHubClient",  # Alias for AsyncEvalHubClient
         ]
     )
