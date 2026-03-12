@@ -384,7 +384,7 @@ from evalhub.adapter import (
 ```python
 # Interacting with EvalHub REST API
 from evalhub.client import EvalHubClient
-from evalhub.models.api import ModelConfig, EvaluationRequest
+from evalhub.models.api import ModelConfig, JobSubmissionRequest, BenchmarkConfig
 ```
 
 ## Complete Example
