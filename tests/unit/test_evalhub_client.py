@@ -18,7 +18,6 @@ import os
 from typing import Any
 from unittest.mock import Mock, patch
 
-import httpx
 import pytest
 from evalhub import (
     AsyncEvalHubClient,
@@ -27,8 +26,6 @@ from evalhub import (
 from evalhub.client.base import (
     BaseAsyncClient,
     BaseSyncClient,
-    JobCanNotBeCancelledError,
-    JobNotFoundError,
 )
 from evalhub.models.api import (
     EvaluationJob,
