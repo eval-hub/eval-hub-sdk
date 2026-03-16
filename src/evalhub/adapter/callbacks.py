@@ -9,7 +9,7 @@ from typing import Any
 from evalhub.adapter.models.adapter import FrameworkAdapter
 
 from ..models.api import JobStatus
-from .config import MlflowBackend
+from .config import EvalHubMode, MlflowBackend
 from .mlflow import MlflowArtifact
 from .models import (
     JobCallbacks,
@@ -19,7 +19,7 @@ from .models import (
     OCIArtifactResult,
     OCIArtifactSpec,
 )
-from .oci import OCIArtifactPersister
+from .oci import DEFAULT_OCI_PROXY_HOST, OCIArtifactPersister
 from .oci.persister import OCIArtifactContext
 
 logger = logging.getLogger(__name__)
@@ -234,6 +234,7 @@ class DefaultCallbacks(JobCallbacks):
         events_path_template: str | None = None,
         oci_auth_config_path: Path | None = None,
         oci_insecure: bool = False,
+        oci_proxy_host: str | None = None,
         mlflow_backend: MlflowBackend = MlflowBackend.ODH,
     ):
         """Initialize default callbacks.
@@ -252,6 +253,12 @@ class DefaultCallbacks(JobCallbacks):
                            If not provided, auto-detects Kubernetes ServiceAccount token
             ca_bundle_path: Path to CA bundle for TLS verification
                           If not provided, auto-detects OpenShift/Kubernetes CA bundles
+            oci_proxy_host: OCI proxy host for k8s sidecar mode (e.g. "localhost:8443").
+                          When set, the OCI persister pushes to this host instead of the
+                          real registry and skips Python-side auth (the sidecar handles
+                          authentication). The returned artifact references still use the
+                          original registry host. Automatically set via from_adapter()
+                          when mode is K8S.
             mlflow_backend: MLflow client backend to use for artifact saving.
                            Use MlflowBackend.ODH (default) for the built-in client or
                            MlflowBackend.UPSTREAM for the official mlflow library.
@@ -279,6 +286,7 @@ class DefaultCallbacks(JobCallbacks):
             ),
             oci_auth_config_path=oci_auth_config_path,
             oci_insecure=oci_insecure,
+            oci_proxy_host=oci_proxy_host,
         )
 
         # Store insecure flag for evalhub communication
@@ -629,5 +637,10 @@ class DefaultCallbacks(JobCallbacks):
             insecure=adapter.settings.evalhub_insecure,
             oci_auth_config_path=adapter.settings.oci_auth_config_path,
             oci_insecure=adapter.settings.oci_insecure,
+            oci_proxy_host=(
+                DEFAULT_OCI_PROXY_HOST
+                if adapter.settings.mode == EvalHubMode.K8S
+                else None
+            ),
             mlflow_backend=adapter.settings.mlflow_backend,
         )
