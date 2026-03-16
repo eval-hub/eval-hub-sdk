@@ -128,7 +128,7 @@ class TestOCIPersisterAgainstRegistry:
     def test_persist_via_proxy(self, tmp_path: Path) -> None:
         """Test persisting via a proxy host (simulating k8s sidecar).
 
-        The spec targets quay.io/evalhub-test/single but the persister
+        The spec targets quay.io/evalhub-test/proxy but the persister
         pushes to localhost:5001 (our E2E registry acting as the proxy).
         The resulting reference uses the original quay.io host.
         """
@@ -150,8 +150,8 @@ class TestOCIPersisterAgainstRegistry:
             files_path=test_dir,
             coordinates=OCICoordinates(
                 oci_host="quay.io",
-                oci_repository="evalhub-test/single",
-                oci_tag="v1",
+                oci_repository="evalhub-test/proxy",
+                oci_tag="v1-proxy",
             ),
         )
 
@@ -160,12 +160,14 @@ class TestOCIPersisterAgainstRegistry:
         assert isinstance(result, OCIArtifactResult)
         assert result.digest.startswith("sha256:")
         # Reference uses the original host, not the proxy
-        assert result.reference.startswith("quay.io/evalhub-test/single:v1@sha256:")
+        assert result.reference.startswith(
+            "quay.io/evalhub-test/proxy:v1-proxy@sha256:"
+        )
 
         # Verify the artifact was actually pushed to the proxy (localhost:5001)
         registry = oras.provider.Registry(insecure=True)
         manifest = registry.get_manifest(
-            f"{OCI_HOST}/evalhub-test/single:v1",
+            f"{OCI_HOST}/evalhub-test/proxy:v1-proxy",
             allowed_media_type=["application/vnd.oci.image.manifest.v1+json"],
         )
 
