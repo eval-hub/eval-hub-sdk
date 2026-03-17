@@ -21,7 +21,7 @@ from evalhub.models.api import (
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_OCI_PROXY_HOST = "localhost:8443"
+DEFAULT_OCI_PROXY_HOST = "localhost:8080"
 
 
 @dataclass(frozen=True)

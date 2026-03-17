@@ -253,7 +253,7 @@ class DefaultCallbacks(JobCallbacks):
                            If not provided, auto-detects Kubernetes ServiceAccount token
             ca_bundle_path: Path to CA bundle for TLS verification
                           If not provided, auto-detects OpenShift/Kubernetes CA bundles
-            oci_proxy_host: OCI proxy host for k8s sidecar mode (e.g. "localhost:8443").
+            oci_proxy_host: OCI proxy host for k8s sidecar mode (e.g. "localhost:8080").
                           When set, the OCI persister pushes to this host instead of the
                           real registry and skips Python-side auth (the sidecar handles
                           authentication). The returned artifact references still use the
