@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -16,9 +16,7 @@ from evalhub.adapter.models.job import EvaluationResult
 
 def _make_callbacks(termination_file_path: str | None = None) -> DefaultCallbacks:
     """Create a minimal DefaultCallbacks for testing."""
-    with patch(
-        "evalhub.adapter.callbacks.OCIArtifactPersister"
-    ):
+    with patch("evalhub.adapter.callbacks.OCIArtifactPersister"):
         return DefaultCallbacks(
             job_id="job-1",
             benchmark_id="bench-1",
@@ -36,7 +34,7 @@ def _make_results() -> JobResults:
         results=[EvaluationResult(metric_name="accuracy", metric_value=0.95)],
         num_examples_evaluated=100,
         duration_seconds=10.0,
-        completed_at=datetime.now(tz=timezone.utc),
+        completed_at=datetime.now(tz=UTC),
         evaluation_metadata={},
     )
 
