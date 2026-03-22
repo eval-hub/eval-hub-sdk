@@ -1,6 +1,9 @@
 """EvalHub CLI - command-line interface for EvalHub."""
 
-__all__ = ["main"]
+from .client import create_client, get_client, handle_api_errors
+from .main import main
+
+__all__ = ["create_client", "get_client", "handle_api_errors", "main"]
 
 
 def main() -> None:

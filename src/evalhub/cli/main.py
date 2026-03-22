@@ -15,11 +15,30 @@ from . import config as cfg
     envvar="EVALHUB_PROFILE",
     help="Configuration profile to use (overrides active profile).",
 )
+@click.option(
+    "--base-url",
+    default=None,
+    envvar="EVALHUB_BASE_URL",
+    help="EvalHub server URL (overrides profile config).",
+)
+@click.option(
+    "--token",
+    default=None,
+    envvar="EVALHUB_TOKEN",
+    help="Authentication token (overrides profile config).",
+)
 @click.pass_context
-def main(ctx: click.Context, profile: str | None) -> None:
+def main(
+    ctx: click.Context,
+    profile: str | None,
+    base_url: str | None,
+    token: str | None,
+) -> None:
     """EvalHub CLI - manage evaluations, providers, collections, and configuration."""
     ctx.ensure_object(dict)
     ctx.obj["profile"] = profile
+    ctx.obj["base_url"] = base_url
+    ctx.obj["token"] = token
 
 
 @main.command()
