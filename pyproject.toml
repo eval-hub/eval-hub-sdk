@@ -49,6 +49,12 @@ client = [
     "eval-hub-sdk[core]",
 ]
 
+# CLI - command-line interface
+cli = [
+    "eval-hub-sdk[core]",
+    "click>=8.1.0",
+]
+
 # Development dependencies
 # NOTE: Versions should match .pre-commit-config.yaml and .github/workflows/pre-commit.yml
 dev = [
@@ -67,7 +73,10 @@ examples = [
 ]
 
 # All core functionality (excludes examples which are optional)
-all = ["eval-hub-sdk[core,adapter,client,dev]"]
+all = ["eval-hub-sdk[core,adapter,client,cli,dev]"]
+
+[project.scripts]
+evalhub = "evalhub.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/eval-hub"
