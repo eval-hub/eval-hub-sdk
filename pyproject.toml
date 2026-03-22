@@ -54,6 +54,7 @@ cli = [
     "eval-hub-sdk[core]",
     "click>=8.1.0",
     "pyyaml>=6.0",
+    "rich>=13.0.0",
 ]
 
 # Development dependencies

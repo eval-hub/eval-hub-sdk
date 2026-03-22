@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import click
@@ -16,7 +18,7 @@ from evalhub.client import ClientError, JobNotFoundError
 
 
 @pytest.fixture()
-def config_file(tmp_path):
+def config_file(tmp_path: Path) -> Iterator[Path]:
     """Provide a temporary config file path and set EVALHUB_CONFIG."""
     path = tmp_path / "config.yaml"
     os.environ["EVALHUB_CONFIG"] = str(path)
@@ -25,7 +27,7 @@ def config_file(tmp_path):
 
 
 @pytest.fixture()
-def runner():
+def runner() -> CliRunner:
     return CliRunner()
 
 
@@ -33,14 +35,14 @@ def runner():
 
 
 class TestCreateClient:
-    def test_defaults_when_no_config(self, config_file):
+    def test_defaults_when_no_config(self, config_file: Path) -> None:
         client = create_client()
         assert client.base_url == "http://localhost:8080"
         assert client.auth_token is None
         assert client.tenant is None
         client.close()
 
-    def test_reads_from_profile(self, config_file):
+    def test_reads_from_profile(self, config_file: Path) -> None:
         data = load_config()
         set_value(data, "base_url", "https://evalhub.example.com")
         set_value(data, "token", "profile-token")
@@ -53,7 +55,7 @@ class TestCreateClient:
         assert client.tenant == "my-namespace"
         client.close()
 
-    def test_explicit_flags_override_profile(self, config_file):
+    def test_explicit_flags_override_profile(self, config_file: Path) -> None:
         data = load_config()
         set_value(data, "base_url", "https://profile-url.example.com")
         set_value(data, "token", "profile-token")
@@ -66,7 +68,7 @@ class TestCreateClient:
         assert client.auth_token == "flag-token"
         client.close()
 
-    def test_named_profile(self, config_file):
+    def test_named_profile(self, config_file: Path) -> None:
         data = load_config()
         set_value(data, "base_url", "https://prod.example.com", profile="prod")
         set_value(data, "token", "prod-token", profile="prod")
@@ -79,7 +81,7 @@ class TestCreateClient:
         assert client.tenant == "prod-ns"
         client.close()
 
-    def test_insecure_flag(self, config_file):
+    def test_insecure_flag(self, config_file: Path) -> None:
         data = load_config()
         set_value(data, "insecure", "true")
         save_config(data)
@@ -89,7 +91,7 @@ class TestCreateClient:
         assert client.base_url == "http://localhost:8080"
         client.close()
 
-    def test_custom_timeout(self, config_file):
+    def test_custom_timeout(self, config_file: Path) -> None:
         data = load_config()
         set_value(data, "timeout", "60")
         save_config(data)
@@ -103,7 +105,7 @@ class TestCreateClient:
 
 
 class TestGetClient:
-    def test_creates_client_on_first_access(self, config_file):
+    def test_creates_client_on_first_access(self, config_file: Path) -> None:
         ctx = click.Context(
             click.Command("test"),
             obj={
@@ -117,7 +119,7 @@ class TestGetClient:
         assert "client" in ctx.obj
         client.close()
 
-    def test_returns_same_client_on_second_access(self, config_file):
+    def test_returns_same_client_on_second_access(self, config_file: Path) -> None:
         ctx = click.Context(
             click.Command("test"),
             obj={
@@ -131,7 +133,7 @@ class TestGetClient:
         assert client1 is client2
         client1.close()
 
-    def test_respects_base_url_override(self, config_file):
+    def test_respects_base_url_override(self, config_file: Path) -> None:
         ctx = click.Context(
             click.Command("test"),
             obj={
@@ -144,7 +146,7 @@ class TestGetClient:
         assert client.base_url == "https://override.example.com"
         client.close()
 
-    def test_respects_token_override(self, config_file):
+    def test_respects_token_override(self, config_file: Path) -> None:
         ctx = click.Context(
             click.Command("test"),
             obj={
@@ -162,30 +164,30 @@ class TestGetClient:
 
 
 class TestHandleApiErrors:
-    def test_passes_through_on_success(self):
+    def test_passes_through_on_success(self) -> None:
         @handle_api_errors
-        def ok():
+        def ok() -> str:
             return "success"
 
         assert ok() == "success"
 
-    def test_catches_client_error(self):
+    def test_catches_client_error(self) -> None:
         @handle_api_errors
-        def fail():
+        def fail() -> None:
             raise ClientError("something went wrong")
 
         with pytest.raises(click.ClickException, match="something went wrong"):
             fail()
 
-    def test_catches_job_not_found_error(self):
+    def test_catches_job_not_found_error(self) -> None:
         @handle_api_errors
-        def fail():
+        def fail() -> None:
             raise JobNotFoundError("job-123")
 
         with pytest.raises(click.ClickException, match="job-123"):
             fail()
 
-    def test_catches_http_status_error_with_json_detail(self):
+    def test_catches_http_status_error_with_json_detail(self) -> None:
         response = MagicMock()
         response.status_code = 404
         response.json.return_value = {"detail": "Job not found"}
@@ -193,7 +195,7 @@ class TestHandleApiErrors:
         request = MagicMock()
 
         @handle_api_errors
-        def fail():
+        def fail() -> None:
             raise httpx.HTTPStatusError("error", request=request, response=response)
 
         with pytest.raises(
@@ -201,7 +203,7 @@ class TestHandleApiErrors:
         ):
             fail()
 
-    def test_catches_http_status_error_with_plain_text(self):
+    def test_catches_http_status_error_with_plain_text(self) -> None:
         response = MagicMock()
         response.status_code = 500
         response.json.side_effect = ValueError("not json")
@@ -209,7 +211,7 @@ class TestHandleApiErrors:
         request = MagicMock()
 
         @handle_api_errors
-        def fail():
+        def fail() -> None:
             raise httpx.HTTPStatusError("error", request=request, response=response)
 
         with pytest.raises(
@@ -217,12 +219,12 @@ class TestHandleApiErrors:
         ):
             fail()
 
-    def test_catches_request_error(self):
+    def test_catches_request_error(self) -> None:
         request = MagicMock()
-        request.__str__ = lambda s: "GET http://localhost:8080"
+        request.__str__ = lambda s: "GET http://localhost:8080"  # type: ignore[method-assign,misc,assignment]
 
         @handle_api_errors
-        def fail():
+        def fail() -> None:
             raise httpx.ConnectError("Connection refused", request=request)
 
         with pytest.raises(click.ClickException, match="Connection error"):
@@ -233,19 +235,19 @@ class TestHandleApiErrors:
 
 
 class TestCliFlags:
-    def test_help_shows_base_url_and_token(self, runner):
+    def test_help_shows_base_url_and_token(self, runner: CliRunner) -> None:
         result = runner.invoke(main, ["--help"])
         assert "--base-url" in result.output
         assert "--token" in result.output
 
-    def test_base_url_env_var(self, runner, config_file):
+    def test_base_url_env_var(self, runner: CliRunner, config_file: Path) -> None:
         """EVALHUB_BASE_URL env var is accepted."""
         result = runner.invoke(
             main, ["version"], env={"EVALHUB_BASE_URL": "http://test:9090"}
         )
         assert result.exit_code == 0
 
-    def test_token_env_var(self, runner, config_file):
+    def test_token_env_var(self, runner: CliRunner, config_file: Path) -> None:
         """EVALHUB_TOKEN env var is accepted."""
         result = runner.invoke(main, ["version"], env={"EVALHUB_TOKEN": "test-token"})
         assert result.exit_code == 0
