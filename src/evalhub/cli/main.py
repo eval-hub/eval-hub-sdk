@@ -140,7 +140,11 @@ def config_use(profile: str) -> None:
 
 
 @main.command()
-@click.option("--base-url", default=None, help="Base URL for the EvalHub API (env: EVALHUB_BASE_URL).")
+@click.option(
+    "--base-url",
+    default=None,
+    help="Base URL for the EvalHub API (env: EVALHUB_BASE_URL).",
+)
 @click.option("--tenant", default=None, help="Tenant identifier (env: EVALHUB_TENANT).")
 @click.option("--host", default="0.0.0.0", help="Host to bind the server to.")
 @click.option("--port", default=3001, type=int, help="Port to listen on.")
@@ -148,4 +152,6 @@ def mcp(base_url: str | None, tenant: str | None, host: str, port: int) -> None:
     """Start the MCP server."""
     from evalhub.mcp.server import run_server
 
-    run_server(base_url=base_url, tenant=tenant, host=host, port=port, cors_allow_origins=["*"])
+    run_server(
+        base_url=base_url, tenant=tenant, host=host, port=port, cors_allow_origins=["*"]
+    )

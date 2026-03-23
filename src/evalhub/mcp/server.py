@@ -343,7 +343,9 @@ def run_server(
             ).strip()
             logger.info("Using auth token from `oc whoami -t`")
         except (subprocess.CalledProcessError, FileNotFoundError):
-            logger.warning("No auth token found (EVALHUB_AUTH_TOKEN not set, `oc whoami -t` failed)")
+            logger.warning(
+                "No auth token found (EVALHUB_AUTH_TOKEN not set, `oc whoami -t` failed)"
+            )
 
     client = AsyncEvalHubClient(base_url=base_url, tenant=tenant, auth_token=auth_token)
     set_client(client)
