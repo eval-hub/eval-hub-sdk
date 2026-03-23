@@ -8,10 +8,8 @@ import stat
 import pytest
 import yaml
 from click.testing import CliRunner
-
 from evalhub.cli.config import (
     DEFAULT_PROFILE,
-    KNOWN_KEYS,
     REQUIRED_KEYS,
     get_active_profile,
     get_profile,
@@ -155,7 +153,11 @@ class TestRequiredKeys:
         data = {
             "active_profile": "default",
             "profiles": {
-                "default": {"base_url": "http://localhost", "token": "t", "tenant": "ns"}
+                "default": {
+                    "base_url": "http://localhost",
+                    "token": "t",
+                    "tenant": "ns",
+                }
             },
         }
         assert missing_required_keys(data) == []
@@ -183,7 +185,9 @@ class TestRequiredKeys:
 
 class TestConfigSetCommand:
     def test_set_value(self, runner, config_file):
-        result = runner.invoke(main, ["config", "set", "base_url", "http://myhost:8080"])
+        result = runner.invoke(
+            main, ["config", "set", "base_url", "http://myhost:8080"]
+        )
         assert result.exit_code == 0
         assert "Set 'base_url' in profile 'default'" in result.output
         data = load_config()
@@ -226,7 +230,15 @@ class TestConfigGetCommand:
 
     def test_get_with_profile_flag(self, runner, config_file):
         runner.invoke(
-            main, ["--profile", "prod", "config", "set", "base_url", "https://prod.example.com"]
+            main,
+            [
+                "--profile",
+                "prod",
+                "config",
+                "set",
+                "base_url",
+                "https://prod.example.com",
+            ],
         )
         result = runner.invoke(main, ["--profile", "prod", "config", "get", "base_url"])
         assert result.exit_code == 0
@@ -273,7 +285,9 @@ class TestConfigUseCommand:
 
     def test_use_then_set_uses_new_profile(self, runner, config_file):
         runner.invoke(main, ["config", "use", "staging"])
-        runner.invoke(main, ["config", "set", "base_url", "https://staging.example.com"])
+        runner.invoke(
+            main, ["config", "set", "base_url", "https://staging.example.com"]
+        )
         data = load_config()
         assert data["profiles"]["staging"]["base_url"] == "https://staging.example.com"
 
@@ -295,7 +309,8 @@ class TestProfileOverride:
 
     def test_profile_env_var(self, runner, config_file):
         runner.invoke(
-            main, ["--profile", "env-test", "config", "set", "base_url", "http://env:8080"]
+            main,
+            ["--profile", "env-test", "config", "set", "base_url", "http://env:8080"],
         )
         result = runner.invoke(
             main, ["config", "get", "base_url"], env={"EVALHUB_PROFILE": "env-test"}

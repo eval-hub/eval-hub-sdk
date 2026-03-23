@@ -84,9 +84,7 @@ def set_value(
     return data
 
 
-def get_value(
-    data: dict[str, Any], key: str, profile: str | None = None
-) -> str | None:
+def get_value(data: dict[str, Any], key: str, profile: str | None = None) -> str | None:
     """Get a single value from a profile."""
     prof = get_profile(data, profile)
     return prof.get(key)
