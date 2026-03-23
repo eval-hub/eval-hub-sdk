@@ -61,6 +61,7 @@ async def client_session() -> AsyncGenerator[ClientSession, None]:
             created_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
             updated_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
         ),
+        name="test-eval-job",
         status=EvaluationJobStatus(
             state=JobStatus.PENDING,
         ),
