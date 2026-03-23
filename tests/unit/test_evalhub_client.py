@@ -237,6 +237,9 @@ class TestEvalHubClient:
                 "created_at": "2024-01-01T12:00:00Z",
                 "updated_at": "2024-01-01T12:00:00Z",
             },
+            "name": "gsm8k-eval",
+            "description": "Evaluate GSM8K benchmark",
+            "tags": ["math", "reasoning"],
             "status": {"state": JobStatus.PENDING.value},
             "model": {"url": "http://localhost:8000/v1", "name": "gpt-3.5-turbo"},
             "benchmarks": [
@@ -257,10 +260,17 @@ class TestEvalHubClient:
                 id="gsm8k", provider_id="lm_evaluation_harness", parameters={}
             )
             request = JobSubmissionRequest(
-                name="gsm8k-eval", model=model, benchmarks=[benchmark]
+                name="gsm8k-eval",
+                description="Evaluate GSM8K benchmark",
+                tags=["math", "reasoning"],
+                model=model,
+                benchmarks=[benchmark],
             )
             job = client.jobs.submit(request)
             assert isinstance(job, EvaluationJob)
+            assert job.name == "gsm8k-eval"
+            assert job.description == "Evaluate GSM8K benchmark"
+            assert job.tags == ["math", "reasoning"]
 
         with patch.object(client, "_request", return_value=mock_response):
             job_status = client.jobs.get("job_123")

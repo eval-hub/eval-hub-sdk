@@ -6,6 +6,7 @@ import os
 import stat
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -126,12 +127,12 @@ class TestProfileOperations:
         assert get_profile(data, "prod") == {"base_url": "https://prod.example.com"}
 
     def test_set_value_creates_profile(self) -> None:
-        data = {"active_profile": "default", "profiles": {}}
+        data: dict[str, Any] = {"active_profile": "default", "profiles": {}}
         set_value(data, "base_url", "http://localhost:8080")
         assert data["profiles"]["default"]["base_url"] == "http://localhost:8080"
 
     def test_set_value_explicit_profile(self) -> None:
-        data = {"active_profile": "default", "profiles": {}}
+        data: dict[str, Any] = {"active_profile": "default", "profiles": {}}
         set_value(data, "token", "secret", profile="staging")
         assert data["profiles"]["staging"]["token"] == "secret"
 

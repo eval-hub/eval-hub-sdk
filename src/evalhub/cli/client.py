@@ -54,7 +54,8 @@ def get_client(ctx: click.Context) -> SyncEvalHubClient:
             base_url=ctx.obj.get("base_url"),
             token=ctx.obj.get("token"),
         )
-    return ctx.obj["client"]
+    client: SyncEvalHubClient = ctx.obj["client"]
+    return client
 
 
 def handle_api_errors(f: F) -> F:

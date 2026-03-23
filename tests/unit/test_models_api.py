@@ -103,6 +103,9 @@ class TestEvaluationJob:
                 created_at=now,
                 updated_at=now,
             ),
+            name="test-eval",
+            description="A test evaluation",
+            tags=["unit-test"],
             status=EvaluationJobStatus(state=JobStatus.PENDING),
             model=model,
             benchmarks=[
@@ -111,6 +114,9 @@ class TestEvaluationJob:
         )
         assert job.id == "job_123"
         assert job.state == JobStatus.PENDING
+        assert job.name == "test-eval"
+        assert job.description == "A test evaluation"
+        assert job.tags == ["unit-test"]
         assert job.benchmarks[0].id == "test"
         assert job.resource.created_at == now
 
@@ -133,6 +139,7 @@ class TestEvaluationJob:
                 created_at=now,
                 updated_at=now,
             ),
+            name="completed-eval",
             status=EvaluationJobStatus(state=JobStatus.COMPLETED),
             model=model,
             benchmarks=[
@@ -164,6 +171,7 @@ class TestEvaluationJob:
                 created_at=now,
                 updated_at=now,
             ),
+            name="failed-eval",
             status=EvaluationJobStatus(
                 state=JobStatus.FAILED,
                 message=MessageInfo(
@@ -486,6 +494,7 @@ class TestListModelsServerCompatibility:
                         "created_at": "2026-01-27T12:00:00Z",
                         "updated_at": "2026-01-27T12:30:00Z",
                     },
+                    "name": "mmlu-eval",
                     "status": {"state": JobStatus.COMPLETED.value},
                     "model": {"name": "test-model", "url": "http://localhost:8000"},
                     "benchmarks": [
