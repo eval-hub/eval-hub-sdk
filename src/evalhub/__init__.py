@@ -29,7 +29,6 @@ from .models import (
     BenchmarkInfo,
     ErrorResponse,
     EvaluationJob,
-    EvaluationRequest,
     EvaluationResponse,
     EvaluationResult,
     EvaluationStatus,
@@ -40,7 +39,7 @@ from .models import (
     ModelConfig,
 )
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 # Base exports - always available
 __all__ = [
@@ -50,7 +49,6 @@ __all__ = [
     "BenchmarkInfo",
     "ErrorResponse",
     "EvaluationJob",
-    "EvaluationRequest",
     "EvaluationResponse",
     "EvaluationResult",
     "EvaluationStatus",
@@ -67,22 +65,14 @@ __all__ = [
 try:
     from .client import (
         AsyncEvalHubClient,
-        AsyncEvaluationsClient,
-        AsyncProvidersClient,
         EvalHubClient,
         SyncEvalHubClient,
-        SyncEvaluationsClient,
-        SyncProvidersClient,
     )
 
     __all__.extend(
         [
             "AsyncEvalHubClient",
-            "AsyncProvidersClient",
-            "AsyncEvaluationsClient",
             "SyncEvalHubClient",
-            "SyncProvidersClient",
-            "SyncEvaluationsClient",
             "EvalHubClient",  # Alias for AsyncEvalHubClient
         ]
     )

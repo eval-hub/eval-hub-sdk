@@ -59,7 +59,7 @@ class JobSpec(BaseModel):
         - benchmark_id: Benchmark to evaluate
         - benchmark_index: Index of this benchmark within the job
         - model: Model configuration (url and name)
-        - benchmark_config: Benchmark-specific parameters
+        - parameters: Benchmark-specific parameters
         - callback_url: URL for status and result callbacks
 
     Optional fields:
@@ -86,9 +86,7 @@ class JobSpec(BaseModel):
 
     # Benchmark-specific configuration (mandatory)
     # adapter-specific params go here
-    benchmark_config: dict[str, Any] = Field(
-        ..., description="Benchmark-specific parameters"
-    )
+    parameters: dict[str, Any] = Field(..., description="Benchmark-specific parameters")
 
     # Callback configuration (mandatory)
     callback_url: str = Field(
@@ -319,21 +317,3 @@ class JobCallbacks(ABC):
             RuntimeError: If results reporting fails
         """
         pass
-
-    def report_metrics_to_mlflow(self, results: JobResults, job_spec: JobSpec) -> None:
-        """Report evaluation metrics to MLflow if experiment is configured.
-
-        This logs metrics to MLflow if the job_spec contains experiment information.
-        If no experiment is configured, this method does nothing.
-
-        The default implementation is a no-op. Subclasses (e.g. DefaultCallbacks)
-        override this to perform actual MLflow logging.
-
-        Args:
-            results: Final job results containing metrics to log
-            job_spec: Job specification that may contain experiment configuration
-
-        Raises:
-            RuntimeError: If MLflow logging fails
-        """
-        return

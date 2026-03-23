@@ -136,12 +136,12 @@ class MyFrameworkAdapter(FrameworkAdapter):
             message=f"Evaluating on {config.num_examples} examples"
         ))
 
-        # Run evaluation (adapter-specific params come from benchmark_config)
+        # Run evaluation (adapter-specific params come from parameters)
         results = framework.evaluate(
             benchmark=benchmark,
             model=model,
             num_examples=config.num_examples,
-            num_few_shot=config.benchmark_config.get("num_few_shot", 0)
+            num_few_shot=config.parameters.get("num_few_shot", 0)
         )
 
         # Save and persist artifacts
@@ -384,7 +384,7 @@ from evalhub.adapter import (
 ```python
 # Interacting with EvalHub REST API
 from evalhub.client import EvalHubClient
-from evalhub.models.api import ModelConfig, EvaluationRequest
+from evalhub.models.api import ModelConfig, JobSubmissionRequest, BenchmarkConfig
 ```
 
 ## Complete Example
@@ -417,7 +417,7 @@ job_spec = JobSpec(
         url="http://vllm-service:8000",
         name="llama-2-7b"
     ),
-    benchmark_config={},
+    parameters={},
     callback_url="http://localhost:8080",
     num_examples=100
 )
@@ -466,7 +466,7 @@ class JobSpec(BaseModel):
     benchmark_id: str                 # Benchmark to evaluate
     benchmark_index: int              # Index of this benchmark within the job (included in all status/result events)
     model: ModelConfig                # Model configuration (url, name)
-    benchmark_config: Dict[str, Any]  # Adapter-specific parameters
+    parameters: Dict[str, Any]  # Adapter-specific parameters
     callback_url: str                  # Base URL for callbacks (SDK appends /status, /results)
 
     # Optional fields

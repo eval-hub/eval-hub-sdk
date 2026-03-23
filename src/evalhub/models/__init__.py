@@ -17,7 +17,6 @@ from .api import (
     EvaluationJobResults,
     EvaluationJobStatus,
     # Core API models
-    EvaluationRequest,
     EvaluationResponse,
     EvaluationResult,
     EvaluationStatus,
@@ -40,7 +39,6 @@ __all__ = [
     "JobStatus",
     "EvaluationStatus",
     "ModelConfig",
-    "EvaluationRequest",
     "EvaluationResult",
     "EvaluationJob",
     "EvaluationJobResource",

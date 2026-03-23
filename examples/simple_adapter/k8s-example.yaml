@@ -18,7 +18,7 @@ data:
         "name": "llama-2-7b-chat"
       },
       "num_examples": 1000,
-      "benchmark_config": {
+      "parameters": {
         "subject": "all",
         "num_few_shot": 5,
         "random_seed": 42

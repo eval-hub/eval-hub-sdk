@@ -76,6 +76,7 @@ with SyncEvalHubClient() as eval_client:  # type: SyncEvalHubClient
     )
 
     request = JobSubmissionRequest(
+        name="gsm8k-llama2-eval",
         model=model,
         benchmarks=[benchmark_config],
     )
@@ -84,11 +85,11 @@ with SyncEvalHubClient() as eval_client:  # type: SyncEvalHubClient
         # Submit job using nested resource
         job = eval_client.jobs.submit(request)
         print(f"✓ Job submitted: {job.id}")
-        print(f"  Status: {job.status}")
+        print(f"  Status: {job.state}")
 
         # Check status using nested resource
         updated_job = eval_client.jobs.get(job.id)
-        print(f"✓ Job status updated: {updated_job.status}")
+        print(f"✓ Job status updated: {updated_job.state}")
 
         # Wait for completion (polling)
         # final_job = eval_client.jobs.wait_for_completion(job.id, timeout=300)
@@ -125,21 +126,26 @@ async def async_example() -> None:
 
             # Example: Submit evaluation job (commented out to avoid actual job creation)
             # Uncomment below to submit a real evaluation job:
-            # request = EvaluationRequest(
-            #     benchmark_id="mmlu",
+            # request = JobSubmissionRequest(
+            #     name="mmlu-eval",
             #     model=ModelConfig(
             #         url="http://vllm-service.my-namespace.svc.cluster.local:8000/v1",
             #         name="meta-llama/Llama-2-7b-chat-hf",
             #     ),
+            #     benchmarks=[
+            #         BenchmarkConfig(
+            #             id="mmlu",
+            #             provider_id="lm_evaluation_harness",
+            #         ),
+            #     ],
             # )
             # job = await client.jobs.submit(request)
             # print(f"✓ Async job submitted: {job.id}")
             #
             # # You can also wait for completion asynchronously
             # final_job = await client.jobs.wait_for_completion(job.id, timeout=300)
-            # if final_job.status == "completed":
-            #     results = await client.jobs.results(job.id)
-            #     print(f"✓ Results: {len(results.results)} metrics")
+            # if final_job.state == JobStatus.COMPLETED:
+            #     print(f"✓ Job completed")
 
         except NotImplementedError:
             print("✗ Some async operations not yet implemented (skeleton only)")

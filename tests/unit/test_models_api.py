@@ -11,7 +11,6 @@ from evalhub.models.api import (
     ErrorInfo,
     ErrorResponse,
     EvaluationJob,
-    EvaluationRequest,
     EvaluationResponse,
     EvaluationResult,
     EvaluationStatus,
@@ -81,45 +80,6 @@ class TestBenchmarkInfo:
 
         with pytest.raises(ValidationError):
             BenchmarkInfo(benchmark_id="test", name="")  # Empty name should fail
-
-
-class TestEvaluationRequest:
-    """Test cases for EvaluationRequest model."""
-
-    def test_basic_evaluation_request(self) -> None:
-        """Test basic EvaluationRequest creation."""
-        model = ModelConfig(url="http://localhost:8000/v1", name="test-model")
-        request = EvaluationRequest(
-            benchmark_id="test_bench",
-            model=model,
-        )
-        assert request.benchmark_id == "test_bench"
-        assert request.model.name == "test-model"
-        assert request.num_examples is None
-        assert "num_few_shot" not in request.benchmark_config.keys()
-        assert request.benchmark_config == {}
-        assert request.experiment_name is None
-
-    def test_full_evaluation_request(self) -> None:
-        """Test EvaluationRequest with all fields."""
-        model_payload: dict[str, Any] = {
-            "url": "http://localhost:8000/v1",
-            "name": "gpt-4",
-        }
-        model = ModelConfig(**model_payload)
-        request = EvaluationRequest(
-            benchmark_id="mmlu",
-            model=model,
-            num_examples=100,
-            benchmark_config={"subset": "college_math"},
-            experiment_name="test_run_1",
-        )
-        assert request.benchmark_id == "mmlu"
-        assert request.model.name == "gpt-4"
-        assert request.num_examples == 100
-        assert "num_few_shot" not in request.benchmark_config.keys()
-        assert request.benchmark_config == {"subset": "college_math"}
-        assert request.experiment_name == "test_run_1"
 
 
 class TestEvaluationJob:

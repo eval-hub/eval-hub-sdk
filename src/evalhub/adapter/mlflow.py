@@ -10,9 +10,10 @@ Modelled after github.com/opendatahub-io/mlflow-go.
 from __future__ import annotations
 
 import logging
+import mimetypes
 import os
 import time
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -24,6 +25,8 @@ logger = logging.getLogger(__name__)
 
 # MLflow REST API base path
 _API = "/api/2.0/mlflow"
+# MLflow Artifacts server base path (separate from tracking API)
+_ARTIFACTS_API = "/api/2.0/mlflow-artifacts/artifacts"
 
 
 # ---------------------------------------------------------------------------
@@ -64,6 +67,22 @@ class Experiment:
     artifact_location: str = ""
     lifecycle_stage: str = ""
     tags: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class ArtifactInfo:
+    path: str
+    is_dir: bool = False
+    file_size: int = 0
+
+
+@dataclass
+class MlflowArtifact:
+    """An artifact to upload to MLflow alongside metrics."""
+
+    path: str
+    content: bytes
+    content_type: str = "application/octet-stream"
 
 
 # ---------------------------------------------------------------------------
@@ -436,6 +455,123 @@ class MlflowClient:
             "/runs/set-tag",
             {"run_id": run_id, "key": key, "value": value},
         )
+
+    # -- Run operations -----------------------------------------------------
+
+    def get_run(self, run_id: str) -> RunInfo:
+        """Fetch run metadata by run_id."""
+        data = self._get("/runs/get", {"run_id": run_id})
+        run = data.get("run", {}).get("info", {})
+        return RunInfo(
+            run_id=run.get("run_id", ""),
+            experiment_id=run.get("experiment_id", ""),
+            run_name=run.get("run_name", ""),
+            status=run.get("status", ""),
+            start_time=run.get("start_time", 0),
+            end_time=run.get("end_time", 0),
+            artifact_uri=run.get("artifact_uri", ""),
+            lifecycle_stage=run.get("lifecycle_stage", ""),
+        )
+
+    # -- Artifact operations ------------------------------------------------
+
+    @staticmethod
+    def _artifact_server_path(artifact_uri: str, artifact_path: str) -> str:
+        """Compute the PUT path for the MLflow Artifacts server from a run's artifact_uri.
+
+        The standard MLflow artifact server derives the storage path from a
+        ``?run_id=`` query parameter on artifact upload requests. The ODH fork
+        ignores that parameter and instead resolves paths from the ``artifact_uri``
+        embedded in the run record, which has the form::
+
+            mlflow-artifacts:/workspaces/{workspace}/{experiment_id}/{run_id}/artifacts
+
+        Stripping ``mlflow-artifacts:/workspaces/{workspace}/`` gives the path
+        within the workspace's artifact storage, which is what the ODH server
+        expects after ``/api/2.0/mlflow-artifacts/artifacts/`` — no ``?run_id=``
+        query string. The upstream library would send ``?run_id=``, which the ODH
+        server ignores for path resolution, potentially causing files to land in
+        the wrong location.
+        """
+        # Strip scheme
+        path = artifact_uri.removeprefix("mlflow-artifacts:/")
+        # path = "workspaces/{workspace}/{experiment_id}/{run_id}/artifacts"
+        # Strip "workspaces/{workspace}/" so the server doesn't double-prefix it
+        parts = path.split("/", 2)
+        if len(parts) == 3 and parts[0] == "workspaces":
+            run_root = parts[2]  # "{experiment_id}/{run_id}/artifacts"
+        else:
+            run_root = path  # fallback: use as-is
+        artifact_path = artifact_path.lstrip("/")
+        return f"{_ARTIFACTS_API}/{run_root}/{artifact_path}"
+
+    def _put_artifact(
+        self, path: str, content: bytes | Iterable[bytes], content_type: str
+    ) -> None:
+        """Raw PUT to the MLflow Artifacts server."""
+        url = f"{self._tracking_uri}{path}"
+        headers = {"Content-Type": content_type}
+        resp = self._client.put(url, content=content, headers=headers)
+        self._handle(resp)
+
+    def upload_artifact(
+        self,
+        run_id: str,
+        artifact_path: str,
+        content: bytes | Iterable[bytes],
+        content_type: str = "application/octet-stream",
+    ) -> None:
+        """Upload content to the MLflow Artifacts server.
+
+        ``artifact_path`` is the destination path relative to the run's
+        artifact root, e.g. ``"results/output.json"``.
+
+        The run's ``artifact_uri`` is resolved first so the file lands at the
+        correct path in the artifact store (the ODH fork ignores ``?run_id=``
+        for storage path resolution).
+        """
+        run_info = self.get_run(run_id)
+        path = self._artifact_server_path(run_info.artifact_uri, artifact_path)
+        self._put_artifact(path, content, content_type)
+        logger.debug("Uploaded artifact %s for run %s", artifact_path, run_id)
+
+    def upload_artifact_file(
+        self,
+        run_id: str,
+        artifact_path: str,
+        local_path: str | Path,
+    ) -> None:
+        """Upload a local file to the MLflow Artifacts server.
+
+        The Content-Type is guessed from the file extension; unknown types
+        fall back to ``application/octet-stream``.
+        """
+        local_path = Path(local_path)
+        content_type, _ = mimetypes.guess_type(str(local_path))
+        if not content_type:
+            content_type = "application/octet-stream"
+        with local_path.open("rb") as f:
+            self.upload_artifact(
+                run_id,
+                artifact_path,
+                iter(lambda: f.read(65536), b""),
+                content_type,
+            )
+
+    def list_artifacts(self, run_id: str, path: str = "") -> list[ArtifactInfo]:
+        """List artifacts for a run, optionally scoped to a sub-path."""
+        params: dict[str, str] = {"run_id": run_id}
+        if path:
+            params["path"] = path
+        data = self._get("/artifacts/list", params)
+        return [
+            ArtifactInfo(
+                path=f.get("path", ""),
+                is_dir=f.get("is_dir", False),
+                file_size=f.get("file_size", 0),
+            )
+            for f in data.get("files", [])
+        ]
 
 
 # ---------------------------------------------------------------------------

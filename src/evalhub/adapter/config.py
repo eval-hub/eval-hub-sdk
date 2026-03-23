@@ -15,6 +15,21 @@ class EvalHubMode(StrEnum):
     LOCAL = "local"
 
 
+class MlflowBackend(StrEnum):
+    """MLflow client backend for artifact saving.
+
+    - ODH: use the lightweight built-in MlflowClient (default).
+      Requires MLFLOW_TRACKING_URI and related env vars injected by the service.
+    - UPSTREAM: use the official ``mlflow`` Python library.
+      Requires ``mlflow`` (or ``mlflow-skinny``) to be installed in the container.
+      Auth is handled via MLFLOW_TRACKING_TOKEN / MLFLOW_TRACKING_AUTH=kubernetes
+      as per the upstream client conventions.
+    """
+
+    ODH = "odh"
+    UPSTREAM = "upstream"
+
+
 # Default job spec location.
 # - Kubernetes: /meta/job.json
 # - Local dev: meta/job.json (repo-relative) for convenience

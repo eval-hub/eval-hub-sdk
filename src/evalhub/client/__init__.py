@@ -54,8 +54,6 @@ from .base import (
     JobNotFoundError,
 )
 from .evalhub import AsyncEvalHubClient, EvalHubClient, SyncEvalHubClient
-from .evaluations import AsyncEvaluationsClient, SyncEvaluationsClient
-from .providers import AsyncProvidersClient, SyncProvidersClient
 
 __all__ = [
     # Base classes
@@ -68,9 +66,4 @@ __all__ = [
     "AsyncEvalHubClient",
     "SyncEvalHubClient",
     "EvalHubClient",  # Alias for AsyncEvalHubClient
-    # Legacy clients (for backward compatibility)
-    "AsyncProvidersClient",
-    "AsyncEvaluationsClient",
-    "SyncProvidersClient",
-    "SyncEvaluationsClient",
 ]

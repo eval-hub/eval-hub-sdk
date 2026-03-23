@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "eval-hub-sdk"
-version = "0.1.1"
+version = "0.1.2"
 description = "Python SDK for EvalHub: common models, REST API client, and framework adapter SDK"
 authors = [
     {name = "Rui Vieira", email = "rui@redhat.com"},
@@ -55,6 +55,11 @@ mcp = [
     "mcp>=1.0.0",
     "starlette>=0.20.0",
     "uvicorn>=0.20.0",
+
+# CLI - command-line interface
+cli = [
+    "eval-hub-sdk[core]",
+    "click>=8.1.0",
 ]
 
 # Development dependencies
@@ -76,7 +81,10 @@ examples = [
 ]
 
 # All core functionality (excludes examples which are optional)
-all = ["eval-hub-sdk[core,adapter,client,mcp,dev]"]
+all = ["eval-hub-sdk[core,adapter,client,mcp,cli,dev]"]
+
+[project.scripts]
+evalhub = "evalhub.cli.bootstrap:main"
 
 [project.urls]
 Homepage = "https://github.com/eval-hub"

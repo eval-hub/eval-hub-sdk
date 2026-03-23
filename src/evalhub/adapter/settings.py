@@ -23,6 +23,7 @@ from evalhub.adapter.config import (
     DEFAULT_JOB_SPEC_PATH_LOCAL,
     JOB_SPEC_PATH_ENV,
     EvalHubMode,
+    MlflowBackend,
 )
 
 
@@ -61,6 +62,12 @@ class AdapterSettings(BaseSettings):
     # Connection to evalhub
     # (separate of OCI, as local EH might be localhost but OCI registry a real one)
     evalhub_insecure: bool = Field(default=False, validation_alias="EVALHUB_INSECURE")
+
+    # MLflow backend selection
+    mlflow_backend: Annotated[
+        MlflowBackend,
+        BeforeValidator(lambda v: v.strip().lower() if isinstance(v, str) else v),
+    ] = Field(default=MlflowBackend.ODH, validation_alias="EVALHUB_MLFLOW_BACKEND")
 
     @classmethod
     def from_env(cls) -> Self:

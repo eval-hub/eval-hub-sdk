@@ -21,6 +21,8 @@ from evalhub.models.api import (
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_OCI_PROXY_HOST = "localhost:8080"
+
 
 @dataclass(frozen=True)
 class OCIArtifactContext:
@@ -51,11 +53,13 @@ class OCIArtifactPersister:
         oci_auth_config_path: Path | None = None,
         oci_insecure: bool = False,
         tag_hasher: Callable[[OCIArtifactContext], str] | None = None,
+        oci_proxy_host: str | None = None,
     ):
         self.context = context
         self.oci_auth_config_path = oci_auth_config_path
         self.oci_insecure = oci_insecure
         self.tag_hasher = tag_hasher or default_tag_hasher
+        self.oci_proxy_host = oci_proxy_host
 
     def persist(self, spec: OCIArtifactSpec) -> OCIArtifactResult:
         """Persist OCI artifact.
@@ -94,6 +98,11 @@ class OCIArtifactPersister:
             + tag
         )
 
+        # When a proxy is configured (k8s sidecar), push to the proxy host instead of the real registry.
+        # The proxy handles authentication by performing the bearer challenge flow on behalf.
+        push_host = self.oci_proxy_host or spec.coordinates.oci_host
+        push_ref = push_host + "/" + spec.coordinates.oci_repository + ":" + tag
+
         with tempfile.TemporaryDirectory(prefix="oci_layout_") as temp_dir:
             temp_path = Path(temp_dir)
             create_simple_oci_artifact(
@@ -112,31 +121,38 @@ class OCIArtifactPersister:
                         logger.debug("  Dir:  %s", item.relative_to(temp_path))
 
             provider = oras.provider.Registry(insecure=self.oci_insecure)
-            provider.auth.hostname = spec.coordinates.oci_host
-            if self.oci_auth_config_path:
-                custom_auth_path = str(self.oci_auth_config_path.absolute())
-                logger.debug("custom_auth_path: %s", custom_auth_path)
-                provider.auth.load_configs(
-                    spec.coordinates.oci_host, [custom_auth_path]
-                )
+            if not self.oci_proxy_host:
+                provider.auth.hostname = spec.coordinates.oci_host
+                if self.oci_auth_config_path:
+                    custom_auth_path = str(self.oci_auth_config_path.absolute())
+                    logger.debug("custom_auth_path: %s", custom_auth_path)
+                    provider.auth.load_configs(
+                        spec.coordinates.oci_host, [custom_auth_path]
+                    )
+                else:
+                    provider.auth.load_configs(spec.coordinates.oci_host)
             else:
-                provider.auth.load_configs(spec.coordinates.oci_host)
+                logger.debug(
+                    "Using OCI proxy host %s, skipping auth setup",
+                    self.oci_proxy_host,
+                )
             response = Layout(str(temp_path)).push_to_registry(
                 provider=provider,
-                target=oci_ref,
+                target=push_ref,
                 tag="latest",  # note this is oci-layout tag on disk, not destination tag
             )
         if response.status_code not in (200, 201):
             raise RuntimeError(
-                f"Failed to push OCI artifact to {oci_ref}: "
+                f"Failed to push OCI artifact to {push_ref}: "
                 f"status {response.status_code}, response: {response.text}"
             )
         artifact_digest = response.headers.get("Docker-Content-Digest")
         if not artifact_digest:
             raise RuntimeError(
-                f"Registry response for {oci_ref} did not include a "
+                f"Registry response for {push_ref} did not include a "
                 "Docker-Content-Digest header."
             )
+        # Always use the original oci_host in the reference, not the proxy
         artifact_reference = oci_ref + "@" + artifact_digest
 
         return OCIArtifactResult(digest=artifact_digest, reference=artifact_reference)
