@@ -60,6 +60,7 @@ cli = [
 # Development dependencies
 # NOTE: Versions should match .pre-commit-config.yaml and .github/workflows/pre-commit.yml
 dev = [
+    "eval-hub-sdk[cli]",
     "pytest>=7.4.0",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.1.0",
