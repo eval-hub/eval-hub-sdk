@@ -55,6 +55,7 @@ mcp = [
     "mcp>=1.0.0",
     "starlette>=0.20.0",
     "uvicorn>=0.20.0",
+]
 
 # CLI - command-line interface
 cli = [

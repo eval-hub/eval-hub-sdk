@@ -10,6 +10,7 @@ import contextlib
 import json
 import logging
 import os
+import subprocess
 from collections.abc import AsyncIterator, Sequence
 
 import mcp.types as types
@@ -106,6 +107,10 @@ async def list_tools() -> list[types.Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Name for the evaluation job",
+                    },
                     "model_url": {
                         "type": "string",
                         "description": "Model endpoint URL (e.g., vLLM or OpenAI-compatible endpoint)",
@@ -138,16 +143,8 @@ async def list_tools() -> list[types.Tool]:
                         },
                         "minItems": 1,
                     },
-                    "timeout_minutes": {
-                        "type": "integer",
-                        "description": "Job timeout in minutes (optional)",
-                    },
-                    "retry_attempts": {
-                        "type": "integer",
-                        "description": "Number of retry attempts on failure (optional)",
-                    },
                 },
-                "required": ["model_url", "model_name", "benchmarks"],
+                "required": ["name", "model_url", "model_name", "benchmarks"],
             },
         ),
     ]
@@ -173,6 +170,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
 
     if name == "create_evaluation_job":
         # Extract parameters
+        job_name = arguments["name"]
         model_url = arguments["model_url"]
         model_name = arguments["model_name"]
         benchmarks_data = arguments["benchmarks"]
@@ -189,6 +187,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         ]
 
         request = JobSubmissionRequest(
+            name=job_name,
             model=model,
             benchmarks=benchmarks,
         )
@@ -283,15 +282,16 @@ async def read_resource(uri: str) -> str:
 
     if uri_str == "evalhub://providers":
         providers = await _client.providers.list()
-        return json.dumps([p.model_dump() for p in providers])
+        logger.info("Returning Providers")
+        return json.dumps([p.model_dump(mode="json") for p in providers])
     elif uri_str == "evalhub://benchmarks":
         benchmarks = await _client.benchmarks.list()
-        return json.dumps([b.model_dump() for b in benchmarks])
+        logger.info("Returning Benchmarks")
+        return json.dumps([b.model_dump(mode="json") for b in benchmarks])
     elif uri_str.startswith("evalhub://providers/"):
         provider_id = uri_str.replace("evalhub://providers/", "")
-        # TODO: API seems doesn't support individual provider fetch, so filter from list
-        providers = await _client.providers.list()
-        provider = next((p for p in providers if p.resource.id == provider_id), None)
+        provider = await _client.providers.get(provider_id=provider_id)
+        logger.info("Returning single provider: %s", provider_id)
         if provider is None:
             raise ValueError(f"Provider not found: {provider_id}")
         return provider.model_dump_json()
@@ -301,6 +301,7 @@ async def read_resource(uri: str) -> str:
 
 def run_server(
     base_url: str | None = None,
+    tenant: str | None = None,
     host: str = "0.0.0.0",
     port: int = 3001,
     json_response: bool = True,
@@ -312,6 +313,8 @@ def run_server(
     Args:
         base_url: Base URL for the EvalHub API. If not provided, uses
                   EVALHUB_BASE_URL environment variable or default.
+        tenant: Tenant identifier. If not provided, uses EVALHUB_TENANT
+                environment variable or defaults to "team-a".
         host: Host to bind the server to (default: 0.0.0.0)
         port: Port to listen on (default: 3001)
         json_response: Enable JSON responses instead of SSE streams (default: True)
@@ -328,7 +331,21 @@ def run_server(
     if base_url is None:
         base_url = os.getenv("EVALHUB_BASE_URL", "http://localhost:8080")
 
-    client = AsyncEvalHubClient(base_url=base_url)
+    if tenant is None:
+        tenant = os.getenv("EVALHUB_TENANT")
+
+    # Resolve auth token: env var > `oc whoami -t` > None
+    auth_token = os.getenv("EVALHUB_AUTH_TOKEN")
+    if not auth_token:
+        try:
+            auth_token = subprocess.check_output(
+                ["oc", "whoami", "-t"], text=True, stderr=subprocess.DEVNULL
+            ).strip()
+            logger.info("Using auth token from `oc whoami -t`")
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            logger.warning("No auth token found (EVALHUB_AUTH_TOKEN not set, `oc whoami -t` failed)")
+
+    client = AsyncEvalHubClient(base_url=base_url, tenant=tenant, auth_token=auth_token)
     set_client(client)
 
     # Create the session manager with stateless mode
@@ -390,3 +407,6 @@ def run_server(
 
 if __name__ == "__main__":
     run_server(cors_allow_origins=["*"])  # local mode = all CORS Origins
+
+# npx @modelcontextprotocol/inspector
+# uv build && uv run evalhub mcp --base-url https://evalhub-opendatahub.apps.rosa.mmortari-rosa2.7bcr.p3.openshiftapps.com --tenant team-a

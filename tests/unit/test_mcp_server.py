@@ -136,6 +136,7 @@ async def test_create_evaluation_job_tool(client_session: ClientSession) -> None
     result = await client_session.call_tool(
         "create_evaluation_job",
         {
+            "name": "test-eval-job",
             "model_url": "http://test-model.com",
             "model_name": "test-model",
             "benchmarks": [
