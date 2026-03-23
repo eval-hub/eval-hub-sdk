@@ -15,7 +15,6 @@ Config is stored at ~/.config/evalhub/config.yaml with structure:
 from __future__ import annotations
 
 import os
-import stat
 from pathlib import Path
 from typing import Any
 
@@ -57,9 +56,9 @@ def save_config(data: dict[str, Any], path: Path | None = None) -> None:
     """Save config to disk with safe permissions (0600)."""
     p = path or _config_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("w") as f:
+    fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
         yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
-    p.chmod(stat.S_IRUSR | stat.S_IWUSR)
 
 
 def get_active_profile(data: dict[str, Any]) -> str:
