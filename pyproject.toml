@@ -61,6 +61,7 @@ mcp = [
 cli = [
     "eval-hub-sdk[core]",
     "click>=8.1.0",
+    "pyyaml>=6.0",
 ]
 
 # Development dependencies
