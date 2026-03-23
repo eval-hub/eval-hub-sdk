@@ -76,7 +76,7 @@ examples = [
 all = ["eval-hub-sdk[core,adapter,client,cli,dev]"]
 
 [project.scripts]
-evalhub = "evalhub.cli:main"
+evalhub = "evalhub.cli.bootstrap:main"
 
 [project.urls]
 Homepage = "https://github.com/eval-hub"
