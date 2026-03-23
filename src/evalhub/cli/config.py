@@ -64,13 +64,22 @@ def save_config(data: dict[str, Any], path: Path | None = None) -> None:
 
 def get_active_profile(data: dict[str, Any]) -> str:
     """Return the active profile name."""
-    return data.get("active_profile", DEFAULT_PROFILE)
+    active = data.get("active_profile", DEFAULT_PROFILE)
+    if not isinstance(active, str):
+        return DEFAULT_PROFILE
+    return active
 
 
 def get_profile(data: dict[str, Any], profile: str | None = None) -> dict[str, Any]:
     """Return the settings dict for a profile (empty dict if it doesn't exist yet)."""
     name = profile or get_active_profile(data)
-    return data.get("profiles", {}).get(name, {})
+    profiles = data.get("profiles", {})
+    if not isinstance(profiles, dict):
+        return {}
+    result = profiles.get(name, {})
+    if not isinstance(result, dict):
+        return {}
+    return result
 
 
 def set_value(
