@@ -109,8 +109,11 @@ def config_use(profile: str) -> None:
     data = cfg.load_config()
     profiles = data.get("profiles", {})
     if profile not in profiles:
-        click.echo(f"Profile '{profile}' does not exist. Available profiles: "
-                    f"{', '.join(profiles) or '(none)'}", err=True)
+        click.echo(
+            f"Profile '{profile}' does not exist. Available profiles: "
+            f"{', '.join(profiles) or '(none)'}",
+            err=True,
+        )
         raise SystemExit(1)
     cfg.set_active_profile(data, profile)
     cfg.save_config(data)

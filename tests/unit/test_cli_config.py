@@ -44,7 +44,9 @@ def runner() -> CliRunner:
 
 
 class TestLoadConfig:
-    def test_returns_default_structure_when_file_missing(self, config_file: Path) -> None:
+    def test_returns_default_structure_when_file_missing(
+        self, config_file: Path
+    ) -> None:
         data = load_config()
         assert data["active_profile"] == DEFAULT_PROFILE
         assert data["profiles"] == {}
@@ -212,7 +214,9 @@ class TestConfigSetCommand:
         data = load_config()
         assert data["profiles"]["default"]["foobar"] == "baz"
 
-    def test_set_known_key_no_warning(self, runner: CliRunner, config_file: Path) -> None:
+    def test_set_known_key_no_warning(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
         result = runner.invoke(main, ["config", "set", "base_url", "http://host:8080"])
         assert result.exit_code == 0
         assert "not a recognised" not in result.output
@@ -268,7 +272,9 @@ class TestConfigListCommand:
         assert "Missing required keys:" in result.output
         assert "tenant" in result.output
 
-    def test_list_complete_profile_no_missing(self, runner: CliRunner, config_file: Path) -> None:
+    def test_list_complete_profile_no_missing(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
         runner.invoke(main, ["config", "set", "base_url", "http://myhost:8080"])
         runner.invoke(main, ["config", "set", "token", "abc123"])
         runner.invoke(main, ["config", "set", "tenant", "my-namespace"])
@@ -278,23 +284,41 @@ class TestConfigListCommand:
 
 
 class TestConfigUseCommand:
-    def test_use_switches_active_profile(self, runner: CliRunner, config_file: Path) -> None:
+    def test_use_switches_active_profile(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
         # Create the profile first
-        runner.invoke(main, ["--profile", "prod", "config", "set", "base_url", "https://prod:443"])
+        runner.invoke(
+            main, ["--profile", "prod", "config", "set", "base_url", "https://prod:443"]
+        )
         result = runner.invoke(main, ["config", "use", "prod"])
         assert result.exit_code == 0
         assert "Active profile set to 'prod'" in result.output
         data = load_config()
         assert data["active_profile"] == "prod"
 
-    def test_use_nonexistent_profile_errors(self, runner: CliRunner, config_file: Path) -> None:
+    def test_use_nonexistent_profile_errors(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
         result = runner.invoke(main, ["config", "use", "nonexistent"])
         assert result.exit_code != 0
         assert "does not exist" in result.output
 
-    def test_use_then_set_uses_new_profile(self, runner: CliRunner, config_file: Path) -> None:
+    def test_use_then_set_uses_new_profile(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
         # Create the profile first, then switch to it
-        runner.invoke(main, ["--profile", "staging", "config", "set", "base_url", "https://staging.example.com"])
+        runner.invoke(
+            main,
+            [
+                "--profile",
+                "staging",
+                "config",
+                "set",
+                "base_url",
+                "https://staging.example.com",
+            ],
+        )
         runner.invoke(main, ["config", "use", "staging"])
         # Update a value in the now-active profile
         runner.invoke(main, ["config", "set", "token", "abc"])
@@ -304,7 +328,9 @@ class TestConfigUseCommand:
 
 
 class TestProfileOverride:
-    def test_profile_flag_overrides_active(self, runner: CliRunner, config_file: Path) -> None:
+    def test_profile_flag_overrides_active(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
         # Set in default profile
         runner.invoke(main, ["config", "set", "base_url", "http://default:8080"])
         # Set in prod profile
@@ -330,7 +356,9 @@ class TestProfileOverride:
 
 
 class TestFilePermissions:
-    def test_config_file_not_world_readable(self, runner: CliRunner, config_file: Path) -> None:
+    def test_config_file_not_world_readable(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
         runner.invoke(main, ["config", "set", "token", "secret"])
         mode = config_file.stat().st_mode
         # Should be 0600 (owner read/write only)
