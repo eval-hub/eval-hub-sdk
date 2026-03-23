@@ -689,11 +689,15 @@ core = [
     { name = "httpx" },
 ]
 dev = [
+    { name = "click" },
+    { name = "httpx" },
     { name = "mypy" },
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
+    { name = "pyyaml" },
+    { name = "rich" },
     { name = "ruff" },
 ]
 examples = [
@@ -722,6 +726,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "click", marker = "extra == 'cli'", specifier = ">=8.1.0" },
+    { name = "eval-hub-sdk", extras = ["cli"], marker = "extra == 'dev'" },
     { name = "eval-hub-sdk", extras = ["core"], marker = "extra == 'adapter'" },
     { name = "eval-hub-sdk", extras = ["core"], marker = "extra == 'cli'" },
     { name = "eval-hub-sdk", extras = ["core"], marker = "extra == 'client'" },
