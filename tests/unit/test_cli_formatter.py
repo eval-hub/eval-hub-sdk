@@ -26,16 +26,16 @@ SAMPLE_DATA = [
 
 
 class TestStripAnsi:
-    def test_strips_colour_codes(self):
+    def test_strips_colour_codes(self) -> None:
         assert _strip_ansi("\x1b[31mred\x1b[0m") == "red"
 
-    def test_strips_bold(self):
+    def test_strips_bold(self) -> None:
         assert _strip_ansi("\x1b[1mbold\x1b[0m") == "bold"
 
-    def test_noop_on_plain_text(self):
+    def test_noop_on_plain_text(self) -> None:
         assert _strip_ansi("hello world") == "hello world"
 
-    def test_strips_multiple_codes(self):
+    def test_strips_multiple_codes(self) -> None:
         text = "\x1b[32m\x1b[1mgreen bold\x1b[0m normal"
         assert _strip_ansi(text) == "green bold normal"
 
@@ -44,7 +44,7 @@ class TestStripAnsi:
 
 
 class TestFormatTable:
-    def test_renders_headers_and_rows(self):
+    def test_renders_headers_and_rows(self) -> None:
         result = _format_table(SAMPLE_DATA)
         lines = result.split("\n")
         assert len(lines) == 5  # header + separator + 3 rows
@@ -53,7 +53,7 @@ class TestFormatTable:
         assert "PROVIDER" in lines[0]
         assert "---" in lines[1]
 
-    def test_column_alignment(self):
+    def test_column_alignment(self) -> None:
         result = _format_table(SAMPLE_DATA)
         lines = result.split("\n")
         # Header and separator should have consistent column positions
@@ -62,23 +62,23 @@ class TestFormatTable:
         # Each column separator position in the header should align with dashes
         assert len(header) == len(separator)
 
-    def test_custom_columns(self):
+    def test_custom_columns(self) -> None:
         result = _format_table(SAMPLE_DATA, columns=["name", "value"])
         assert "PROVIDER" not in result
         assert "NAME" in result
         assert "VALUE" in result
 
-    def test_empty_data(self):
+    def test_empty_data(self) -> None:
         result = _format_table([])
         assert result == "(no data)"
 
-    def test_single_row(self):
+    def test_single_row(self) -> None:
         result = _format_table([{"key": "val"}])
         lines = result.split("\n")
         assert len(lines) == 3  # header + separator + 1 row
         assert "val" in lines[2]
 
-    def test_missing_key_in_row(self):
+    def test_missing_key_in_row(self) -> None:
         data = [{"a": 1, "b": 2}, {"a": 3}]
         result = _format_table(data)
         assert "3" in result
@@ -88,18 +88,18 @@ class TestFormatTable:
 
 
 class TestFormatJson:
-    def test_valid_json(self):
+    def test_valid_json(self) -> None:
         buf = io.StringIO()
-        buf.isatty = lambda: False
+        buf.isatty = lambda: False  # type: ignore[method-assign]
         output(SAMPLE_DATA, output_format="json", file=buf)
         buf.seek(0)
         parsed = json.loads(buf.getvalue())
         assert len(parsed) == 3
         assert parsed[0]["name"] == "accuracy"
 
-    def test_empty_data(self):
+    def test_empty_data(self) -> None:
         buf = io.StringIO()
-        buf.isatty = lambda: False
+        buf.isatty = lambda: False  # type: ignore[method-assign]
         output([], output_format="json", file=buf)
         buf.seek(0)
         parsed = json.loads(buf.getvalue())
@@ -110,18 +110,18 @@ class TestFormatJson:
 
 
 class TestFormatYaml:
-    def test_valid_yaml(self):
+    def test_valid_yaml(self) -> None:
         buf = io.StringIO()
-        buf.isatty = lambda: False
+        buf.isatty = lambda: False  # type: ignore[method-assign]
         output(SAMPLE_DATA, output_format="yaml", file=buf)
         buf.seek(0)
         parsed = yaml.safe_load(buf.getvalue())
         assert len(parsed) == 3
         assert parsed[0]["name"] == "accuracy"
 
-    def test_empty_data(self):
+    def test_empty_data(self) -> None:
         buf = io.StringIO()
-        buf.isatty = lambda: False
+        buf.isatty = lambda: False  # type: ignore[method-assign]
         output([], output_format="yaml", file=buf)
         buf.seek(0)
         # yaml.safe_load returns None for empty list serialised
@@ -134,24 +134,24 @@ class TestFormatYaml:
 
 
 class TestFormatCsv:
-    def test_valid_csv(self):
+    def test_valid_csv(self) -> None:
         result = _format_csv(SAMPLE_DATA)
         lines = result.strip().split("\n")
         assert len(lines) == 4  # header + 3 rows
         assert "name,value,provider" in lines[0]
         assert "accuracy,0.95,lm_eval" in lines[1]
 
-    def test_custom_columns(self):
+    def test_custom_columns(self) -> None:
         result = _format_csv(SAMPLE_DATA, columns=["name", "value"])
         lines = result.strip().split("\n")
         assert "provider" not in lines[0]
         assert "name,value" in lines[0]
 
-    def test_empty_data(self):
+    def test_empty_data(self) -> None:
         result = _format_csv([])
         assert result == ""
 
-    def test_missing_key_in_row(self):
+    def test_missing_key_in_row(self) -> None:
         data = [{"a": 1, "b": 2}, {"a": 3}]
         result = _format_csv(data)
         lines = result.strip().split("\n")
@@ -164,20 +164,20 @@ class TestFormatCsv:
 
 
 class TestTtyBehaviour:
-    def test_ansi_stripped_when_not_tty(self):
+    def test_ansi_stripped_when_not_tty(self) -> None:
         """When output is not a TTY, ANSI codes should be stripped."""
         buf = io.StringIO()
-        buf.isatty = lambda: False
+        buf.isatty = lambda: False  # type: ignore[method-assign]
         # Table format doesn't add ANSI by itself, but verify the path works
         output(SAMPLE_DATA, output_format="table", file=buf)
         buf.seek(0)
         text = buf.getvalue()
         assert "\x1b[" not in text
 
-    def test_output_works_with_tty(self):
+    def test_output_works_with_tty(self) -> None:
         """When output is a TTY, content should pass through."""
         buf = io.StringIO()
-        buf.isatty = lambda: True
+        buf.isatty = lambda: True  # type: ignore[method-assign]
         output(SAMPLE_DATA, output_format="table", file=buf)
         buf.seek(0)
         text = buf.getvalue()
@@ -188,30 +188,30 @@ class TestTtyBehaviour:
 
 
 class TestFormatOption:
-    def test_returns_callable(self):
+    def test_returns_callable(self) -> None:
         opt = format_option()
         assert callable(opt)
 
-    def test_default_is_table(self):
+    def test_default_is_table(self) -> None:
         import click
         from click.testing import CliRunner
 
         @click.command()
         @format_option()
-        def cmd(output_format):
+        def cmd(output_format: str) -> None:
             click.echo(output_format)
 
         runner = CliRunner()
         result = runner.invoke(cmd)
         assert result.output.strip() == "table"
 
-    def test_accepts_json(self):
+    def test_accepts_json(self) -> None:
         import click
         from click.testing import CliRunner
 
         @click.command()
         @format_option()
-        def cmd(output_format):
+        def cmd(output_format: str) -> None:
             click.echo(output_format)
 
         runner = CliRunner()
@@ -223,7 +223,7 @@ class TestFormatOption:
 
 
 class TestFormatsConstant:
-    def test_contains_all_formats(self):
+    def test_contains_all_formats(self) -> None:
         assert "table" in FORMATS
         assert "json" in FORMATS
         assert "yaml" in FORMATS
