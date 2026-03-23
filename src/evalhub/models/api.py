@@ -247,6 +247,10 @@ class JobSubmissionRequest(BaseModel):
     """Request to submit an evaluation job."""
 
     name: str = Field(..., description="Name for the evaluation job")
+    description: str | None = Field(
+        default=None, description="The evaluation job description"
+    )
+    tags: list[str] = Field(default_factory=list, description="The evaluation job tags")
     model: ModelConfig = Field(..., description="Model configuration")
     benchmarks: list[BenchmarkConfig] = Field(
         ..., description="List of benchmarks to evaluate", min_length=1
@@ -268,6 +272,11 @@ class EvaluationJob(BaseModel):
     )
 
     # Embedded EvaluationJobConfig fields
+    name: str = Field(..., description="The evaluation job name")
+    description: str | None = Field(
+        default=None, description="The evaluation job description"
+    )
+    tags: list[str] = Field(default_factory=list, description="The evaluation job tags")
     model: ModelConfig = Field(..., description="Model configuration")
     benchmarks: list[BenchmarkConfig] = Field(
         ..., description="Benchmark configurations"
