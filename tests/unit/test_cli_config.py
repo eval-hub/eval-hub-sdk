@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import stat
+from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 import yaml
@@ -25,7 +27,7 @@ from evalhub.cli.main import main
 
 
 @pytest.fixture()
-def config_file(tmp_path):
+def config_file(tmp_path: Path) -> Iterator[Path]:
     """Provide a temporary config file path and set EVALHUB_CONFIG."""
     path = tmp_path / "config.yaml"
     os.environ["EVALHUB_CONFIG"] = str(path)
@@ -34,7 +36,7 @@ def config_file(tmp_path):
 
 
 @pytest.fixture()
-def runner():
+def runner() -> CliRunner:
     return CliRunner()
 
 
@@ -42,12 +44,12 @@ def runner():
 
 
 class TestLoadConfig:
-    def test_returns_default_structure_when_file_missing(self, config_file):
+    def test_returns_default_structure_when_file_missing(self, config_file: Path) -> None:
         data = load_config()
         assert data["active_profile"] == DEFAULT_PROFILE
         assert data["profiles"] == {}
 
-    def test_loads_existing_config(self, config_file):
+    def test_loads_existing_config(self, config_file: Path) -> None:
         config_file.write_text(
             yaml.safe_dump(
                 {
@@ -60,7 +62,7 @@ class TestLoadConfig:
         assert data["active_profile"] == "prod"
         assert data["profiles"]["prod"]["base_url"] == "https://example.com"
 
-    def test_fills_missing_keys(self, config_file):
+    def test_fills_missing_keys(self, config_file: Path) -> None:
         config_file.write_text(yaml.safe_dump({}))
         data = load_config()
         assert data["active_profile"] == DEFAULT_PROFILE
@@ -68,12 +70,12 @@ class TestLoadConfig:
 
 
 class TestSaveConfig:
-    def test_creates_parent_dirs(self, tmp_path):
+    def test_creates_parent_dirs(self, tmp_path: Path) -> None:
         path = tmp_path / "a" / "b" / "config.yaml"
         save_config({"active_profile": "default", "profiles": {}}, path=path)
         assert path.exists()
 
-    def test_sets_safe_permissions(self, config_file):
+    def test_sets_safe_permissions(self, config_file: Path) -> None:
         save_config({"active_profile": "default", "profiles": {}})
         mode = config_file.stat().st_mode
         assert mode & stat.S_IRUSR
@@ -81,7 +83,7 @@ class TestSaveConfig:
         assert not (mode & stat.S_IRGRP)
         assert not (mode & stat.S_IROTH)
 
-    def test_roundtrip(self, config_file):
+    def test_roundtrip(self, config_file: Path) -> None:
         original = {
             "active_profile": "dev",
             "profiles": {"dev": {"base_url": "http://localhost:9090", "token": "abc"}},
@@ -92,64 +94,64 @@ class TestSaveConfig:
 
 
 class TestProfileOperations:
-    def test_get_active_profile_default(self):
+    def test_get_active_profile_default(self) -> None:
         assert get_active_profile({}) == DEFAULT_PROFILE
 
-    def test_get_active_profile_custom(self):
+    def test_get_active_profile_custom(self) -> None:
         assert get_active_profile({"active_profile": "staging"}) == "staging"
 
-    def test_set_active_profile(self):
+    def test_set_active_profile(self) -> None:
         data = {"active_profile": "default", "profiles": {}}
         set_active_profile(data, "prod")
         assert data["active_profile"] == "prod"
 
-    def test_get_profile_missing(self):
+    def test_get_profile_missing(self) -> None:
         data = {"active_profile": "default", "profiles": {}}
         assert get_profile(data) == {}
 
-    def test_get_profile_existing(self):
+    def test_get_profile_existing(self) -> None:
         data = {
             "active_profile": "default",
             "profiles": {"default": {"base_url": "http://localhost:8080"}},
         }
         assert get_profile(data) == {"base_url": "http://localhost:8080"}
 
-    def test_get_profile_explicit_name(self):
+    def test_get_profile_explicit_name(self) -> None:
         data = {
             "active_profile": "default",
             "profiles": {"prod": {"base_url": "https://prod.example.com"}},
         }
         assert get_profile(data, "prod") == {"base_url": "https://prod.example.com"}
 
-    def test_set_value_creates_profile(self):
+    def test_set_value_creates_profile(self) -> None:
         data = {"active_profile": "default", "profiles": {}}
         set_value(data, "base_url", "http://localhost:8080")
         assert data["profiles"]["default"]["base_url"] == "http://localhost:8080"
 
-    def test_set_value_explicit_profile(self):
+    def test_set_value_explicit_profile(self) -> None:
         data = {"active_profile": "default", "profiles": {}}
         set_value(data, "token", "secret", profile="staging")
         assert data["profiles"]["staging"]["token"] == "secret"
 
-    def test_get_value_existing(self):
+    def test_get_value_existing(self) -> None:
         data = {
             "active_profile": "default",
             "profiles": {"default": {"base_url": "http://localhost:8080"}},
         }
         assert get_value(data, "base_url") == "http://localhost:8080"
 
-    def test_get_value_missing(self):
+    def test_get_value_missing(self) -> None:
         data = {"active_profile": "default", "profiles": {}}
         assert get_value(data, "nonexistent") is None
 
 
 class TestRequiredKeys:
-    def test_all_missing_on_empty_profile(self):
+    def test_all_missing_on_empty_profile(self) -> None:
         data = {"active_profile": "default", "profiles": {}}
         missing = missing_required_keys(data)
         assert set(missing) == set(REQUIRED_KEYS)
 
-    def test_none_missing_when_all_set(self):
+    def test_none_missing_when_all_set(self) -> None:
         data = {
             "active_profile": "default",
             "profiles": {
@@ -162,7 +164,7 @@ class TestRequiredKeys:
         }
         assert missing_required_keys(data) == []
 
-    def test_partial_missing(self):
+    def test_partial_missing(self) -> None:
         data = {
             "active_profile": "default",
             "profiles": {"default": {"base_url": "http://localhost"}},
@@ -172,7 +174,7 @@ class TestRequiredKeys:
         assert "tenant" in missing
         assert "base_url" not in missing
 
-    def test_is_known_key(self):
+    def test_is_known_key(self) -> None:
         assert is_known_key("base_url")
         assert is_known_key("token")
         assert is_known_key("tenant")
@@ -184,7 +186,7 @@ class TestRequiredKeys:
 
 
 class TestConfigSetCommand:
-    def test_set_value(self, runner, config_file):
+    def test_set_value(self, runner: CliRunner, config_file: Path) -> None:
         result = runner.invoke(
             main, ["config", "set", "base_url", "http://myhost:8080"]
         )
@@ -193,7 +195,7 @@ class TestConfigSetCommand:
         data = load_config()
         assert data["profiles"]["default"]["base_url"] == "http://myhost:8080"
 
-    def test_set_with_profile_flag(self, runner, config_file):
+    def test_set_with_profile_flag(self, runner: CliRunner, config_file: Path) -> None:
         result = runner.invoke(
             main, ["--profile", "staging", "config", "set", "token", "mytoken"]
         )
@@ -202,7 +204,7 @@ class TestConfigSetCommand:
         data = load_config()
         assert data["profiles"]["staging"]["token"] == "mytoken"
 
-    def test_set_unknown_key_warns(self, runner, config_file):
+    def test_set_unknown_key_warns(self, runner: CliRunner, config_file: Path) -> None:
         result = runner.invoke(main, ["config", "set", "foobar", "baz"])
         assert result.exit_code == 0
         assert "not a recognised config key" in result.output
@@ -210,25 +212,25 @@ class TestConfigSetCommand:
         data = load_config()
         assert data["profiles"]["default"]["foobar"] == "baz"
 
-    def test_set_known_key_no_warning(self, runner, config_file):
+    def test_set_known_key_no_warning(self, runner: CliRunner, config_file: Path) -> None:
         result = runner.invoke(main, ["config", "set", "base_url", "http://host:8080"])
         assert result.exit_code == 0
         assert "not a recognised" not in result.output
 
 
 class TestConfigGetCommand:
-    def test_get_existing_value(self, runner, config_file):
+    def test_get_existing_value(self, runner: CliRunner, config_file: Path) -> None:
         runner.invoke(main, ["config", "set", "base_url", "http://myhost:8080"])
         result = runner.invoke(main, ["config", "get", "base_url"])
         assert result.exit_code == 0
         assert result.output.strip() == "http://myhost:8080"
 
-    def test_get_missing_key(self, runner, config_file):
+    def test_get_missing_key(self, runner: CliRunner, config_file: Path) -> None:
         result = runner.invoke(main, ["config", "get", "nonexistent"])
         assert result.exit_code != 0
         assert "not found" in result.output
 
-    def test_get_with_profile_flag(self, runner, config_file):
+    def test_get_with_profile_flag(self, runner: CliRunner, config_file: Path) -> None:
         runner.invoke(
             main,
             [
@@ -246,7 +248,7 @@ class TestConfigGetCommand:
 
 
 class TestConfigListCommand:
-    def test_list_empty_profile(self, runner, config_file):
+    def test_list_empty_profile(self, runner: CliRunner, config_file: Path) -> None:
         result = runner.invoke(main, ["config", "list"])
         assert result.exit_code == 0
         assert "no configuration values" in result.output
@@ -255,7 +257,7 @@ class TestConfigListCommand:
         assert "token" in result.output
         assert "tenant" in result.output
 
-    def test_list_populated_profile(self, runner, config_file):
+    def test_list_populated_profile(self, runner: CliRunner, config_file: Path) -> None:
         runner.invoke(main, ["config", "set", "base_url", "http://myhost:8080"])
         runner.invoke(main, ["config", "set", "token", "abc123"])
         result = runner.invoke(main, ["config", "list"])
@@ -266,7 +268,7 @@ class TestConfigListCommand:
         assert "Missing required keys:" in result.output
         assert "tenant" in result.output
 
-    def test_list_complete_profile_no_missing(self, runner, config_file):
+    def test_list_complete_profile_no_missing(self, runner: CliRunner, config_file: Path) -> None:
         runner.invoke(main, ["config", "set", "base_url", "http://myhost:8080"])
         runner.invoke(main, ["config", "set", "token", "abc123"])
         runner.invoke(main, ["config", "set", "tenant", "my-namespace"])
@@ -276,14 +278,14 @@ class TestConfigListCommand:
 
 
 class TestConfigUseCommand:
-    def test_use_switches_active_profile(self, runner, config_file):
+    def test_use_switches_active_profile(self, runner: CliRunner, config_file: Path) -> None:
         result = runner.invoke(main, ["config", "use", "prod"])
         assert result.exit_code == 0
         assert "Active profile set to 'prod'" in result.output
         data = load_config()
         assert data["active_profile"] == "prod"
 
-    def test_use_then_set_uses_new_profile(self, runner, config_file):
+    def test_use_then_set_uses_new_profile(self, runner: CliRunner, config_file: Path) -> None:
         runner.invoke(main, ["config", "use", "staging"])
         runner.invoke(
             main, ["config", "set", "base_url", "https://staging.example.com"]
@@ -293,7 +295,7 @@ class TestConfigUseCommand:
 
 
 class TestProfileOverride:
-    def test_profile_flag_overrides_active(self, runner, config_file):
+    def test_profile_flag_overrides_active(self, runner: CliRunner, config_file: Path) -> None:
         # Set in default profile
         runner.invoke(main, ["config", "set", "base_url", "http://default:8080"])
         # Set in prod profile
@@ -307,7 +309,7 @@ class TestProfileOverride:
         result = runner.invoke(main, ["config", "get", "base_url"])
         assert result.output.strip() == "http://default:8080"
 
-    def test_profile_env_var(self, runner, config_file):
+    def test_profile_env_var(self, runner: CliRunner, config_file: Path) -> None:
         runner.invoke(
             main,
             ["--profile", "env-test", "config", "set", "base_url", "http://env:8080"],
@@ -319,7 +321,7 @@ class TestProfileOverride:
 
 
 class TestFilePermissions:
-    def test_config_file_not_world_readable(self, runner, config_file):
+    def test_config_file_not_world_readable(self, runner: CliRunner, config_file: Path) -> None:
         runner.invoke(main, ["config", "set", "token", "secret"])
         mode = config_file.stat().st_mode
         # Should be 0600 (owner read/write only)
