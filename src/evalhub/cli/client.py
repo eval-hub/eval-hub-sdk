@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import functools
-from typing import Any, Callable, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 import click
 import httpx
@@ -71,12 +72,8 @@ def handle_api_errors(f: F) -> F:
                 detail = exc.response.json().get("detail", exc.response.text)
             except Exception:
                 detail = exc.response.text
-            raise click.ClickException(
-                f"Server error ({status}): {detail}"
-            ) from exc
+            raise click.ClickException(f"Server error ({status}): {detail}") from exc
         except httpx.RequestError as exc:
-            raise click.ClickException(
-                f"Connection error: {exc}"
-            ) from exc
+            raise click.ClickException(f"Connection error: {exc}") from exc
 
     return wrapper  # type: ignore[return-value]

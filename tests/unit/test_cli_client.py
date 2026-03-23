@@ -3,18 +3,16 @@
 from __future__ import annotations
 
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
+import click
 import httpx
 import pytest
 from click.testing import CliRunner
-
 from evalhub.cli.client import create_client, get_client, handle_api_errors
 from evalhub.cli.config import load_config, save_config, set_value
 from evalhub.cli.main import main
 from evalhub.client import ClientError, JobNotFoundError
-
-import click
 
 
 @pytest.fixture()
@@ -61,7 +59,9 @@ class TestCreateClient:
         set_value(data, "token", "profile-token")
         save_config(data)
 
-        client = create_client(base_url="https://flag-url.example.com", token="flag-token")
+        client = create_client(
+            base_url="https://flag-url.example.com", token="flag-token"
+        )
         assert client.base_url == "https://flag-url.example.com"
         assert client.auth_token == "flag-token"
         client.close()
@@ -104,43 +104,55 @@ class TestCreateClient:
 
 class TestGetClient:
     def test_creates_client_on_first_access(self, config_file):
-        ctx = click.Context(click.Command("test"), obj={
-            "profile": None,
-            "base_url": None,
-            "token": None,
-        })
+        ctx = click.Context(
+            click.Command("test"),
+            obj={
+                "profile": None,
+                "base_url": None,
+                "token": None,
+            },
+        )
         client = get_client(ctx)
         assert client is not None
         assert "client" in ctx.obj
         client.close()
 
     def test_returns_same_client_on_second_access(self, config_file):
-        ctx = click.Context(click.Command("test"), obj={
-            "profile": None,
-            "base_url": None,
-            "token": None,
-        })
+        ctx = click.Context(
+            click.Command("test"),
+            obj={
+                "profile": None,
+                "base_url": None,
+                "token": None,
+            },
+        )
         client1 = get_client(ctx)
         client2 = get_client(ctx)
         assert client1 is client2
         client1.close()
 
     def test_respects_base_url_override(self, config_file):
-        ctx = click.Context(click.Command("test"), obj={
-            "profile": None,
-            "base_url": "https://override.example.com",
-            "token": None,
-        })
+        ctx = click.Context(
+            click.Command("test"),
+            obj={
+                "profile": None,
+                "base_url": "https://override.example.com",
+                "token": None,
+            },
+        )
         client = get_client(ctx)
         assert client.base_url == "https://override.example.com"
         client.close()
 
     def test_respects_token_override(self, config_file):
-        ctx = click.Context(click.Command("test"), obj={
-            "profile": None,
-            "base_url": None,
-            "token": "override-token",
-        })
+        ctx = click.Context(
+            click.Command("test"),
+            obj={
+                "profile": None,
+                "base_url": None,
+                "token": "override-token",
+            },
+        )
         client = get_client(ctx)
         assert client.auth_token == "override-token"
         client.close()
@@ -184,7 +196,9 @@ class TestHandleApiErrors:
         def fail():
             raise httpx.HTTPStatusError("error", request=request, response=response)
 
-        with pytest.raises(click.ClickException, match="Server error \\(404\\): Job not found"):
+        with pytest.raises(
+            click.ClickException, match="Server error \\(404\\): Job not found"
+        ):
             fail()
 
     def test_catches_http_status_error_with_plain_text(self):
@@ -226,7 +240,9 @@ class TestCliFlags:
 
     def test_base_url_env_var(self, runner, config_file):
         """EVALHUB_BASE_URL env var is accepted."""
-        result = runner.invoke(main, ["version"], env={"EVALHUB_BASE_URL": "http://test:9090"})
+        result = runner.invoke(
+            main, ["version"], env={"EVALHUB_BASE_URL": "http://test:9090"}
+        )
         assert result.exit_code == 0
 
     def test_token_env_var(self, runner, config_file):

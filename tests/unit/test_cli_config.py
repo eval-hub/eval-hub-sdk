@@ -10,10 +10,8 @@ from pathlib import Path
 import pytest
 import yaml
 from click.testing import CliRunner
-
 from evalhub.cli.config import (
     DEFAULT_PROFILE,
-    KNOWN_KEYS,
     REQUIRED_KEYS,
     get_active_profile,
     get_profile,
