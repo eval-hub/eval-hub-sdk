@@ -279,19 +279,28 @@ class TestConfigListCommand:
 
 class TestConfigUseCommand:
     def test_use_switches_active_profile(self, runner: CliRunner, config_file: Path) -> None:
+        # Create the profile first
+        runner.invoke(main, ["--profile", "prod", "config", "set", "base_url", "https://prod:443"])
         result = runner.invoke(main, ["config", "use", "prod"])
         assert result.exit_code == 0
         assert "Active profile set to 'prod'" in result.output
         data = load_config()
         assert data["active_profile"] == "prod"
 
+    def test_use_nonexistent_profile_errors(self, runner: CliRunner, config_file: Path) -> None:
+        result = runner.invoke(main, ["config", "use", "nonexistent"])
+        assert result.exit_code != 0
+        assert "does not exist" in result.output
+
     def test_use_then_set_uses_new_profile(self, runner: CliRunner, config_file: Path) -> None:
+        # Create the profile first, then switch to it
+        runner.invoke(main, ["--profile", "staging", "config", "set", "base_url", "https://staging.example.com"])
         runner.invoke(main, ["config", "use", "staging"])
-        runner.invoke(
-            main, ["config", "set", "base_url", "https://staging.example.com"]
-        )
+        # Update a value in the now-active profile
+        runner.invoke(main, ["config", "set", "token", "abc"])
         data = load_config()
         assert data["profiles"]["staging"]["base_url"] == "https://staging.example.com"
+        assert data["profiles"]["staging"]["token"] == "abc"
 
 
 class TestProfileOverride:
