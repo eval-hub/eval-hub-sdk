@@ -691,10 +691,6 @@ all = [
 cli = [
     { name = "click" },
     { name = "httpx" },
-]
-cli = [
-    { name = "click" },
-    { name = "httpx" },
     { name = "pyyaml" },
 ]
 client = [
