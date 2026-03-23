@@ -221,7 +221,7 @@ class TestHandleApiErrors:
 
     def test_catches_request_error(self) -> None:
         request = MagicMock()
-        request.__str__ = lambda s: "GET http://localhost:8080"  # type: ignore[method-assign, assignment, misc]
+        request.__str__ = lambda s: "GET http://localhost:8080"  # type: ignore[method-assign,misc,assignment]
 
         @handle_api_errors
         def fail() -> None:

@@ -13,7 +13,7 @@ __all__ = [
 ]
 
 
-def main() -> None:
+def main() -> None:  # noqa: F811
     """Entry point that delegates to bootstrap."""
     from .bootstrap import main as _bootstrap_main
 
