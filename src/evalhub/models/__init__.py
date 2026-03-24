@@ -10,6 +10,7 @@ from .api import (
     BenchmarkStatus,
     Collection,
     CollectionList,
+    CollectionRef,
     ErrorInfo,
     ErrorResponse,
     EvaluationJob,
@@ -63,6 +64,7 @@ __all__ = [
     "Resource",
     "Collection",
     "CollectionList",
+    "CollectionRef",
     # Framework models
     "FrameworkInfo",
     # Response models

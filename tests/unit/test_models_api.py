@@ -5,9 +5,11 @@ from typing import Any
 
 import pytest
 from evalhub.models.api import (
+    BenchmarkConfig,
     BenchmarkInfo,
     BenchmarksList,
     CollectionList,
+    CollectionRef,
     ErrorInfo,
     ErrorResponse,
     EvaluationJob,
@@ -18,6 +20,7 @@ from evalhub.models.api import (
     HealthResponse,
     JobsList,
     JobStatus,
+    JobSubmissionRequest,
     ModelConfig,
     ProviderList,
 )
@@ -117,6 +120,7 @@ class TestEvaluationJob:
         assert job.name == "test-eval"
         assert job.description == "A test evaluation"
         assert job.tags == ["unit-test"]
+        assert job.benchmarks is not None
         assert job.benchmarks[0].id == "test"
         assert job.resource.created_at == now
 
@@ -188,6 +192,131 @@ class TestEvaluationJob:
         assert job.status.message is not None
         assert job.status.message.message == "Model not found"
         assert job.status.message.message_code == "model_not_found"
+
+    def test_evaluation_job_with_collection(self) -> None:
+        """Test EvaluationJob created via collection reference."""
+        from evalhub.models.api import (
+            EvaluationJobResource,
+            EvaluationJobStatus,
+        )
+
+        model = ModelConfig(url="http://localhost:8000/v1", name="test-model")
+        now = datetime.now(UTC)
+
+        job = EvaluationJob(
+            resource=EvaluationJobResource(
+                id="job_coll_1",
+                tenant="default",
+                created_at=now,
+                updated_at=now,
+            ),
+            name="collection-eval",
+            status=EvaluationJobStatus(state=JobStatus.PENDING),
+            model=model,
+            collection=CollectionRef(id="healthcare_v1"),
+        )
+        assert job.id == "job_coll_1"
+        assert job.benchmarks is None
+        assert job.collection is not None
+        assert job.collection.id == "healthcare_v1"
+
+
+class TestCollectionRef:
+    """Test cases for CollectionRef model."""
+
+    def test_basic_collection_ref(self) -> None:
+        """Test CollectionRef with id only."""
+        ref = CollectionRef(id="healthcare_v1")
+        assert ref.id == "healthcare_v1"
+        assert ref.benchmarks is None
+
+    def test_collection_ref_with_benchmarks(self) -> None:
+        """Test CollectionRef with optional benchmark subset."""
+        ref = CollectionRef(
+            id="healthcare_v1",
+            benchmarks=[
+                BenchmarkConfig(id="medqa", provider_id="lm_eval", parameters={}),
+            ],
+        )
+        assert ref.id == "healthcare_v1"
+        assert ref.benchmarks is not None
+        assert len(ref.benchmarks) == 1
+        assert ref.benchmarks[0].id == "medqa"
+
+
+class TestJobSubmissionRequest:
+    """Test cases for JobSubmissionRequest model."""
+
+    def test_submission_with_benchmarks(self) -> None:
+        """Test JobSubmissionRequest with direct benchmarks."""
+        request = JobSubmissionRequest(
+            name="test-eval",
+            model=ModelConfig(url="http://localhost:8000/v1", name="test-model"),
+            benchmarks=[
+                BenchmarkConfig(id="mmlu", provider_id="lm_eval", parameters={})
+            ],
+        )
+        assert request.benchmarks is not None
+        assert request.collection is None
+
+    def test_submission_with_collection(self) -> None:
+        """Test JobSubmissionRequest with collection reference."""
+        request = JobSubmissionRequest(
+            name="test-eval",
+            model=ModelConfig(url="http://localhost:8000/v1", name="test-model"),
+            collection=CollectionRef(id="healthcare_v1"),
+        )
+        assert request.benchmarks is None
+        assert request.collection is not None
+        assert request.collection.id == "healthcare_v1"
+
+    def test_submission_with_collection_and_benchmark_subset(self) -> None:
+        """Test JobSubmissionRequest with collection and benchmark subset."""
+        request = JobSubmissionRequest(
+            name="test-eval",
+            model=ModelConfig(url="http://localhost:8000/v1", name="test-model"),
+            collection=CollectionRef(
+                id="healthcare_v1",
+                benchmarks=[
+                    BenchmarkConfig(id="medqa", provider_id="lm_eval", parameters={}),
+                ],
+            ),
+        )
+        assert request.collection is not None
+        assert request.collection.benchmarks is not None
+        assert len(request.collection.benchmarks) == 1
+
+    def test_submission_rejects_both(self) -> None:
+        """Test that specifying both benchmarks and collection is rejected."""
+        with pytest.raises(ValidationError, match="Cannot specify both"):
+            JobSubmissionRequest(
+                name="test-eval",
+                model=ModelConfig(url="http://localhost:8000/v1", name="test-model"),
+                benchmarks=[
+                    BenchmarkConfig(id="mmlu", provider_id="lm_eval", parameters={})
+                ],
+                collection=CollectionRef(id="healthcare_v1"),
+            )
+
+    def test_submission_rejects_neither(self) -> None:
+        """Test that specifying neither benchmarks nor collection is rejected."""
+        with pytest.raises(ValidationError, match="Must specify either"):
+            JobSubmissionRequest(
+                name="test-eval",
+                model=ModelConfig(url="http://localhost:8000/v1", name="test-model"),
+            )
+
+    def test_submission_excludes_none_on_dump(self) -> None:
+        """Test that model_dump(exclude_none=True) produces clean payloads."""
+        request = JobSubmissionRequest(
+            name="test-eval",
+            model=ModelConfig(url="http://localhost:8000/v1", name="test-model"),
+            collection=CollectionRef(id="healthcare_v1"),
+        )
+        dumped = request.model_dump(exclude_none=True)
+        assert "benchmarks" not in dumped
+        assert "collection" in dumped
+        assert dumped["collection"]["id"] == "healthcare_v1"
 
 
 class TestEvaluationResult:
@@ -514,6 +643,46 @@ class TestListModelsServerCompatibility:
         assert len(jobs_list.items) == 1
         assert jobs_list.items[0].id == "job-123"
         assert jobs_list.items[0].state == JobStatus.COMPLETED
+
+    def test_jobs_list_with_collection_ref(self) -> None:
+        """Test JobsList parses server response with collection reference."""
+        server_response = {
+            "items": [
+                {
+                    "resource": {
+                        "id": "job-456",
+                        "tenant": "default",
+                        "created_at": "2026-01-27T12:00:00Z",
+                        "updated_at": "2026-01-27T12:30:00Z",
+                    },
+                    "name": "collection-eval",
+                    "status": {"state": JobStatus.PENDING.value},
+                    "model": {"name": "test-model", "url": "http://localhost:8000"},
+                    "collection": {
+                        "id": "healthcare_v1",
+                        "benchmarks": [
+                            {
+                                "id": "medqa",
+                                "provider_id": "lm_eval",
+                                "parameters": {},
+                            }
+                        ],
+                    },
+                }
+            ],
+            "total_count": 1,
+        }
+
+        jobs_list = JobsList.model_validate(server_response)
+        assert jobs_list.total_count == 1
+        assert len(jobs_list.items) == 1
+        job = jobs_list.items[0]
+        assert job.id == "job-456"
+        assert job.benchmarks is None
+        assert job.collection is not None
+        assert job.collection.id == "healthcare_v1"
+        assert job.collection.benchmarks is not None
+        assert len(job.collection.benchmarks) == 1
 
     def test_empty_provider_list(self) -> None:
         """Test ProviderList handles empty server response."""

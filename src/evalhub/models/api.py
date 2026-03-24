@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 OCI_ARTIFACT_TYPE = "application/vnd.eval-hub.github.io"
 
@@ -243,8 +243,21 @@ class BenchmarkConfig(BaseModel):
     )
 
 
+class CollectionRef(BaseModel):
+    """Reference to a collection for job submission."""
+
+    id: str = Field(..., description="The unique identifier of the collection")
+    benchmarks: list[BenchmarkConfig] | None = Field(
+        default=None,
+        description="Optional subset of benchmarks from the collection",
+    )
+
+
 class JobSubmissionRequest(BaseModel):
-    """Request to submit an evaluation job."""
+    """Request to submit an evaluation job.
+
+    Either ``benchmarks`` or ``collection`` must be provided, but not both.
+    """
 
     name: str = Field(..., description="Name for the evaluation job")
     description: str | None = Field(
@@ -252,9 +265,20 @@ class JobSubmissionRequest(BaseModel):
     )
     tags: list[str] = Field(default_factory=list, description="The evaluation job tags")
     model: ModelConfig = Field(..., description="Model configuration")
-    benchmarks: list[BenchmarkConfig] = Field(
-        ..., description="List of benchmarks to evaluate", min_length=1
+    benchmarks: list[BenchmarkConfig] | None = Field(
+        default=None, description="List of benchmarks to evaluate"
     )
+    collection: CollectionRef | None = Field(
+        default=None, description="Collection reference for the evaluation job"
+    )
+
+    @model_validator(mode="after")
+    def check_benchmarks_or_collection(self) -> "JobSubmissionRequest":
+        if self.benchmarks and self.collection:
+            raise ValueError("Cannot specify both 'benchmarks' and 'collection'")
+        if not self.benchmarks and not self.collection:
+            raise ValueError("Must specify either 'benchmarks' or 'collection'")
+        return self
 
 
 class EvaluationJob(BaseModel):
@@ -278,8 +302,11 @@ class EvaluationJob(BaseModel):
     )
     tags: list[str] = Field(default_factory=list, description="The evaluation job tags")
     model: ModelConfig = Field(..., description="Model configuration")
-    benchmarks: list[BenchmarkConfig] = Field(
-        ..., description="Benchmark configurations"
+    benchmarks: list[BenchmarkConfig] | None = Field(
+        default=None, description="Benchmark configurations"
+    )
+    collection: CollectionRef | None = Field(
+        default=None, description="Collection reference for the evaluation job"
     )
 
     # Convenience properties to access nested fields

@@ -28,6 +28,7 @@ from evalhub.client.base import (
     BaseSyncClient,
 )
 from evalhub.models.api import (
+    CollectionRef,
     EvaluationJob,
     JobStatus,
     ModelConfig,
@@ -275,6 +276,50 @@ class TestEvalHubClient:
         with patch.object(client, "_request", return_value=mock_response):
             job_status = client.jobs.get("job_123")
             assert isinstance(job_status, EvaluationJob)
+
+        client.close()
+
+    @pytest.mark.skipif(
+        EVALHUB_TEST_BASE_URL is not None,
+        reason="Skipping in real server mode - would create actual jobs",
+    )
+    def test_sync_client_submit_job_with_collection(self) -> None:
+        """Test that SyncEvalHubClient can submit jobs using a collection reference."""
+        from evalhub.models.api import JobSubmissionRequest
+
+        client = SyncEvalHubClient()
+        mock_job_data = {
+            "resource": {
+                "id": "job_coll_1",
+                "tenant": "default",
+                "created_at": "2024-01-01T12:00:00Z",
+                "updated_at": "2024-01-01T12:00:00Z",
+            },
+            "name": "collection-eval",
+            "description": "Evaluate via collection",
+            "tags": ["collection-test"],
+            "status": {"state": JobStatus.PENDING.value},
+            "model": {"url": "http://localhost:8000/v1", "name": "gpt-3.5-turbo"},
+            "collection": {"id": "healthcare_v1"},
+        }
+        mock_response = Mock()
+        mock_response.json.return_value = mock_job_data
+
+        with patch.object(client, "_request", return_value=mock_response):
+            model = ModelConfig(url="http://localhost:8000/v1", name="gpt-3.5-turbo")
+            request = JobSubmissionRequest(
+                name="collection-eval",
+                description="Evaluate via collection",
+                tags=["collection-test"],
+                model=model,
+                collection=CollectionRef(id="healthcare_v1"),
+            )
+            job = client.jobs.submit(request)
+            assert isinstance(job, EvaluationJob)
+            assert job.name == "collection-eval"
+            assert job.benchmarks is None
+            assert job.collection is not None
+            assert job.collection.id == "healthcare_v1"
 
         client.close()
 

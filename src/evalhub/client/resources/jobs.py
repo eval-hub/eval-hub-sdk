@@ -46,7 +46,9 @@ class AsyncJobsResource:
             httpx.HTTPError: If request fails or is invalid
         """
         response = await self._client._request_post(
-            "/evaluations/jobs", json=request.model_dump(), tenant=tenant
+            "/evaluations/jobs",
+            json=request.model_dump(exclude_none=True),
+            tenant=tenant,
         )
         return EvaluationJob(**response.json())
 
@@ -207,7 +209,9 @@ class SyncJobsResource:
             httpx.HTTPError: If request fails or is invalid
         """
         response = self._client._request_post(
-            "/evaluations/jobs", json=request.model_dump(), tenant=tenant
+            "/evaluations/jobs",
+            json=request.model_dump(exclude_none=True),
+            tenant=tenant,
         )
         return EvaluationJob(**response.json())
 

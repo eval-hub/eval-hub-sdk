@@ -27,6 +27,7 @@ Installation extras:
 from .models import (
     BenchmarkConfig,
     BenchmarkInfo,
+    CollectionRef,
     ErrorResponse,
     EvaluationJob,
     EvaluationResponse,
@@ -47,6 +48,7 @@ __all__ = [
     # Core data models
     "BenchmarkConfig",
     "BenchmarkInfo",
+    "CollectionRef",
     "ErrorResponse",
     "EvaluationJob",
     "EvaluationResponse",
