@@ -1,11 +1,23 @@
 """EvalHub CLI entry point and command groups."""
 
+from __future__ import annotations
+
+import json
 import logging
+import sys
 import time
+from typing import Any
 
 import click
+import yaml
 
 import evalhub
+from evalhub.models import (
+    BenchmarkConfig,
+    JobStatus,
+    JobSubmissionRequest,
+    ModelConfig,
+)
 
 from . import config as cfg
 from .client import get_client, handle_api_errors
@@ -66,6 +78,343 @@ def version() -> None:
 @main.group()
 def eval() -> None:
     """Submit and manage evaluation jobs."""
+
+
+def _load_config_file(path: str) -> dict[str, Any]:
+    """Load a YAML or JSON config file for eval run."""
+    with open(path) as f:
+        content = f.read()
+    if path.endswith((".yaml", ".yml")):
+        data = yaml.safe_load(content)
+    else:
+        data = json.loads(content)
+    if not isinstance(data, dict):
+        raise click.ClickException(
+            f"Config file must contain a mapping, got {type(data).__name__}"
+        )
+    return data
+
+
+def _build_request_from_flags(
+    name: str,
+    model_url: str,
+    model_name: str,
+    provider: str,
+    benchmark: tuple[str, ...],
+    description: str | None,
+) -> JobSubmissionRequest:
+    """Build a JobSubmissionRequest from CLI flags."""
+    benchmarks = [BenchmarkConfig(id=b, provider_id=provider) for b in benchmark]
+    return JobSubmissionRequest(
+        name=name,
+        description=description,
+        model=ModelConfig(url=model_url, name=model_name),
+        benchmarks=benchmarks,
+    )
+
+
+@eval.command("run")
+@click.option(
+    "--config",
+    "config_file",
+    type=click.Path(exists=True),
+    default=None,
+    help="YAML or JSON config file for the evaluation job.",
+)
+@click.option("--name", default=None, help="Job name (required if not using --config).")
+@click.option("--model-url", default=None, help="Model endpoint URL.")
+@click.option("--model-name", default=None, help="Model name or identifier.")
+@click.option("--provider", default=None, help="Evaluation provider ID.")
+@click.option("--benchmark", "-b", multiple=True, help="Benchmark ID (repeatable).")
+@click.option("--description", default=None, help="Job description.")
+@click.option(
+    "--wait", "wait_for", is_flag=True, default=False, help="Block until job completes."
+)
+@click.option(
+    "--timeout", type=float, default=None, help="Timeout in seconds when using --wait."
+)
+@click.option(
+    "--poll-interval",
+    type=float,
+    default=5.0,
+    show_default=True,
+    help="Poll interval in seconds when using --wait.",
+)
+@format_option()
+@click.pass_context
+@handle_api_errors
+def eval_run(
+    ctx: click.Context,
+    config_file: str | None,
+    name: str | None,
+    model_url: str | None,
+    model_name: str | None,
+    provider: str | None,
+    benchmark: tuple[str, ...],
+    description: str | None,
+    wait_for: bool,
+    timeout: float | None,
+    poll_interval: float,
+    output_format: str,
+) -> None:
+    """Submit an evaluation job.
+
+    Use --config to submit from a YAML/JSON file, or specify flags inline.
+
+    \b
+    Examples:
+      evalhub eval run --config eval.yaml
+      evalhub eval run --config eval.yaml --wait
+      evalhub eval run --name my-eval --model-url http://vllm:8000/v1 \\
+          --model-name llama3 --provider lm_evaluation_harness -b mmlu -b hellaswag
+    """
+    client = get_client(ctx)
+
+    if config_file:
+        data = _load_config_file(config_file)
+        request = JobSubmissionRequest(**data)
+    else:
+        if not all([name, model_url, model_name, provider, benchmark]):
+            raise click.ClickException(
+                "Either --config or all of --name, --model-url, --model-name, "
+                "--provider, and --benchmark are required."
+            )
+        # The None checks above guarantee these are not None
+        assert name is not None
+        assert model_url is not None
+        assert model_name is not None
+        assert provider is not None
+        request = _build_request_from_flags(
+            name=name,
+            model_url=model_url,
+            model_name=model_name,
+            provider=provider,
+            benchmark=benchmark,
+            description=description,
+        )
+
+    job = client.jobs.submit(request)
+    click.echo(f"Job submitted: {job.id}")
+
+    if wait_for:
+        click.echo(f"Waiting for job {job.id} to complete...")
+        job = client.jobs.wait_for_completion(
+            job.id, timeout=timeout, poll_interval=poll_interval
+        )
+        click.echo(f"Job {job.id} finished with state: {job.state.value}")
+        if job.state == JobStatus.FAILED:
+            ctx.exit(1)
+
+    if output_format in ("json", "yaml"):
+        output([job.model_dump(mode="json")], output_format=output_format)
+
+
+@eval.command("status")
+@click.argument("job_id", required=False, default=None)
+@click.option(
+    "--status",
+    "status_filter",
+    type=click.Choice([s.value for s in JobStatus], case_sensitive=False),
+    default=None,
+    help="Filter by job status.",
+)
+@click.option("--limit", type=int, default=None, help="Maximum number of jobs to list.")
+@click.option(
+    "--watch",
+    is_flag=True,
+    default=False,
+    help="Watch for status changes (single job only).",
+)
+@click.option(
+    "--poll-interval",
+    type=float,
+    default=5.0,
+    show_default=True,
+    help="Poll interval in seconds when using --watch.",
+)
+@format_option()
+@click.pass_context
+@handle_api_errors
+def eval_status(
+    ctx: click.Context,
+    job_id: str | None,
+    status_filter: str | None,
+    limit: int | None,
+    watch: bool,
+    poll_interval: float,
+    output_format: str,
+) -> None:
+    """Show job status or list all jobs.
+
+    \b
+    Examples:
+      evalhub eval status                     # list all jobs
+      evalhub eval status eval-123            # show single job
+      evalhub eval status --status running    # filter by status
+      evalhub eval status eval-123 --watch    # watch until complete
+    """
+    client = get_client(ctx)
+
+    if job_id is None:
+        # List mode
+        parsed_status = JobStatus(status_filter) if status_filter else None
+        jobs = client.jobs.list(status=parsed_status, limit=limit)
+        rows = [
+            {
+                "id": j.id,
+                "name": j.name,
+                "state": j.state.value,
+                "provider": j.benchmarks[0].provider_id if j.benchmarks else "",
+                "benchmarks": len(j.benchmarks),
+                "created": str(j.resource.created_at),
+            }
+            for j in jobs
+        ]
+        output(
+            rows,
+            output_format=output_format,
+            columns=["id", "name", "state", "provider", "benchmarks", "created"],
+        )
+        return
+
+    # Single job mode
+    job = client.jobs.get(job_id)
+
+    if watch:
+        _watch_job(client, job_id, poll_interval)
+        return
+
+    if output_format in ("json", "yaml"):
+        output([job.model_dump(mode="json")], output_format=output_format)
+        return
+
+    _print_job_detail(job)
+
+
+def _watch_job(client: Any, job_id: str, poll_interval: float) -> None:
+    """Poll a job until it reaches a terminal state."""
+    terminal = {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}
+    while True:
+        job = client.jobs.get(job_id)
+        benchmarks_status = ""
+        if job.status and job.status.benchmarks:
+            done = sum(1 for b in job.status.benchmarks if b.state in terminal)
+            benchmarks_status = f" [{done}/{len(job.status.benchmarks)} benchmarks]"
+        click.echo(f"\r{job.id}: {job.state.value}{benchmarks_status}", nl=False)
+        sys.stdout.flush()
+        if job.state in terminal:
+            click.echo()
+            _print_job_detail(job)
+            return
+        time.sleep(poll_interval)
+
+
+def _print_job_detail(job: Any) -> None:
+    """Print detailed job information in human-readable format."""
+    click.echo(f"Job:     {job.id}")
+    click.echo(f"Name:    {job.name}")
+    click.echo(f"State:   {job.state.value}")
+    if job.description:
+        click.echo(f"Desc:    {job.description}")
+    click.echo(f"Model:   {job.model.name} ({job.model.url})")
+    click.echo(f"Created: {job.resource.created_at}")
+
+    if job.status and job.status.benchmarks:
+        click.echo(f"\nBenchmarks ({len(job.status.benchmarks)}):")
+        for b in job.status.benchmarks:
+            line = f"  {b.id} ({b.provider_id}): {b.state.value}"
+            if b.error_message:
+                line += f" - {b.error_message.message}"
+            click.echo(line)
+
+    if job.status and job.status.message:
+        click.echo(f"\nMessage: {job.status.message.message}")
+
+
+@eval.command("results")
+@click.argument("job_id")
+@format_option()
+@click.pass_context
+@handle_api_errors
+def eval_results(ctx: click.Context, job_id: str, output_format: str) -> None:
+    """Retrieve and display evaluation results.
+
+    \b
+    Examples:
+      evalhub eval results eval-123
+      evalhub eval results eval-123 --format json > results.json
+      evalhub eval results eval-123 --format csv
+    """
+    client = get_client(ctx)
+    job = client.jobs.get(job_id)
+
+    if job.state != JobStatus.COMPLETED:
+        click.echo(
+            f"Warning: job {job_id} is in state '{job.state.value}', "
+            "results may be incomplete.",
+            err=True,
+        )
+
+    if not job.results or not job.results.benchmarks:
+        click.echo("No results available.")
+        ctx.exit(0)
+        return
+
+    if output_format in ("json", "yaml"):
+        data = [b.model_dump(mode="json") for b in job.results.benchmarks]
+        output(data, output_format=output_format)
+        return
+
+    # Table/CSV: flatten metrics into rows
+    rows: list[dict[str, Any]] = []
+    for b in job.results.benchmarks:
+        for metric_name, metric_value in b.metrics.items():
+            rows.append(
+                {
+                    "benchmark": b.id,
+                    "provider": b.provider_id,
+                    "metric": metric_name,
+                    "value": metric_value,
+                }
+            )
+
+    if not rows:
+        click.echo("No metric results available.")
+        return
+
+    output(
+        rows,
+        output_format=output_format,
+        columns=["benchmark", "provider", "metric", "value"],
+    )
+
+    if job.results.mlflow_experiment_url:
+        click.echo(f"\nMLflow experiment: {job.results.mlflow_experiment_url}")
+
+
+@eval.command("cancel")
+@click.argument("job_id")
+@click.option(
+    "--hard-delete",
+    is_flag=True,
+    default=False,
+    help="Permanently delete the job instead of cancelling.",
+)
+@click.confirmation_option(prompt="Are you sure you want to cancel this job?")
+@click.pass_context
+@handle_api_errors
+def eval_cancel(ctx: click.Context, job_id: str, hard_delete: bool) -> None:
+    """Cancel a running or queued evaluation job.
+
+    \b
+    Examples:
+      evalhub eval cancel eval-123
+      evalhub eval cancel eval-123 --hard-delete
+    """
+    client = get_client(ctx)
+    client.jobs.cancel(job_id, hard_delete=hard_delete)
+    action = "deleted" if hard_delete else "cancelled"
+    click.echo(f"Job {job_id} {action}.")
 
 
 @main.group()
