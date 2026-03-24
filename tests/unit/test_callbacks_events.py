@@ -17,9 +17,7 @@ def _results(mlflow_run_id: str | None = None) -> JobResults:
         benchmark_index=0,
         model_name="m",
         results=[
-            EvaluationResult(
-                metric_name="acc", metric_value=0.9, metric_type="float"
-            )
+            EvaluationResult(metric_name="acc", metric_value=0.9, metric_type="float")
         ],
         num_examples_evaluated=1,
         duration_seconds=1.0,
@@ -71,6 +69,7 @@ def test_report_results_omits_mlflow_run_id_when_not_set() -> None:
     body = mock_http.post.call_args.kwargs["json"]
     assert "mlflow_run_id" not in body["benchmark_status_event"]
 
+
 def test_mlflow_save_returns_run_id_from_odh_path() -> None:
     """Regression: save() must return _save_odh/_save_upstream result (not None)."""
     from evalhub.adapter.callbacks import _MlflowOps
@@ -94,9 +93,7 @@ def test_mlflow_save_returns_run_id_from_odh_path() -> None:
         benchmark_index=0,
         model_name="m",
         results=[
-            EvaluationResult(
-                metric_name="acc", metric_value=1.0, metric_type="float"
-            )
+            EvaluationResult(metric_name="acc", metric_value=1.0, metric_type="float")
         ],
         num_examples_evaluated=1,
         duration_seconds=1.0,
@@ -131,9 +128,7 @@ def test_mlflow_save_returns_run_id_from_upstream_path() -> None:
         benchmark_index=0,
         model_name="m",
         results=[
-            EvaluationResult(
-                metric_name="acc", metric_value=1.0, metric_type="float"
-            )
+            EvaluationResult(metric_name="acc", metric_value=1.0, metric_type="float")
         ],
         num_examples_evaluated=1,
         duration_seconds=1.0,
