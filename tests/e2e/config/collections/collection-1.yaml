@@ -1,0 +1,17 @@
+id: collection-1
+name: collection-1
+category: leaderboard
+description: collection-1 for testing
+tags:
+  - leaderboard
+pass_criteria:
+  threshold: 1.0
+benchmarks:
+  - id: arc_easy
+    provider_id: lm_evaluation_harness
+    weight: 1
+    primary_score:
+      metric: accuracy
+      lower_is_better: false
+    pass_criteria:
+      threshold: 1.0

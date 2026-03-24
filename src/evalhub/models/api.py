@@ -528,8 +528,8 @@ class ProviderList(BaseModel):
 class BenchmarkReference(BaseModel):
     """Reference to a benchmark within a collection."""
 
+    id: str = Field(..., description="Benchmark identifier")
     provider_id: str = Field(..., description="Provider identifier")
-    benchmark_id: str = Field(..., description="Benchmark identifier")
     weight: float = Field(default=1.0, description="Benchmark weight in collection")
     parameters: dict[str, Any] = Field(
         default_factory=dict, description="Benchmark-specific parameters"

@@ -598,8 +598,8 @@ class TestListModelsServerCompatibility:
                     "name": "Healthcare Safety v1",
                     "description": "Healthcare benchmarks",
                     "benchmarks": [
-                        {"benchmark_id": "medqa", "provider_id": "lm_eval"},
-                        {"benchmark_id": "pubmedqa", "provider_id": "lm_eval"},
+                        {"id": "medqa", "provider_id": "lm_eval"},
+                        {"id": "pubmedqa", "provider_id": "lm_eval"},
                     ],
                 }
             ],
