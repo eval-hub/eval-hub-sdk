@@ -319,6 +319,136 @@ class TestJobSubmissionRequest:
         assert dumped["collection"]["id"] == "healthcare_v1"
 
 
+class TestExperimentConfig:
+    """Test cases for ExperimentConfig and ExperimentTag models."""
+
+    def test_basic_experiment_config(self) -> None:
+        """Test basic ExperimentConfig creation."""
+        from evalhub.models.api import ExperimentConfig, ExperimentTag
+
+        config = ExperimentConfig(
+            name="my-experiment",
+            tags=[ExperimentTag(key="team", value="ml-platform")],
+            artifact_location="s3://my-bucket/artifacts",
+        )
+        assert config.name == "my-experiment"
+        assert len(config.tags) == 1
+        assert config.tags[0].key == "team"
+        assert config.tags[0].value == "ml-platform"
+        assert config.artifact_location == "s3://my-bucket/artifacts"
+
+    def test_experiment_config_defaults(self) -> None:
+        """Test ExperimentConfig with all defaults."""
+        from evalhub.models.api import ExperimentConfig
+
+        config = ExperimentConfig()
+        assert config.name is None
+        assert config.tags == []
+        assert config.artifact_location is None
+
+    def test_experiment_tag_validation(self) -> None:
+        """Test ExperimentTag field constraints."""
+        from evalhub.models.api import ExperimentTag
+
+        tag = ExperimentTag(key="k", value="v")
+        assert tag.key == "k"
+        assert tag.value == "v"
+
+        with pytest.raises(ValidationError):
+            ExperimentTag(key="a" * 251, value="v")  # key too long
+
+        with pytest.raises(ValidationError):
+            ExperimentTag(key="k", value="v" * 5001)  # value too long
+
+    def test_job_submission_with_experiment(self) -> None:
+        """Test JobSubmissionRequest includes experiment field."""
+        from evalhub.models.api import (
+            BenchmarkConfig,
+            ExperimentConfig,
+            ExperimentTag,
+            JobSubmissionRequest,
+        )
+
+        request = JobSubmissionRequest(
+            name="eval-with-experiment",
+            model=ModelConfig(url="http://localhost:8000/v1", name="test-model"),
+            benchmarks=[
+                BenchmarkConfig(id="mmlu", provider_id="lm_eval", parameters={})
+            ],
+            experiment=ExperimentConfig(
+                name="tracking-experiment",
+                tags=[ExperimentTag(key="version", value="1.0")],
+            ),
+        )
+        assert request.experiment is not None
+        assert request.experiment.name == "tracking-experiment"
+        assert len(request.experiment.tags) == 1
+
+    def test_job_submission_without_experiment(self) -> None:
+        """Test JobSubmissionRequest defaults experiment to None."""
+        from evalhub.models.api import BenchmarkConfig, JobSubmissionRequest
+
+        request = JobSubmissionRequest(
+            name="eval-no-experiment",
+            model=ModelConfig(url="http://localhost:8000/v1", name="test-model"),
+            benchmarks=[
+                BenchmarkConfig(id="mmlu", provider_id="lm_eval", parameters={})
+            ],
+        )
+        assert request.experiment is None
+
+    def test_evaluation_job_with_experiment(self) -> None:
+        """Test EvaluationJob includes experiment from API response."""
+        from evalhub.models.api import (
+            BenchmarkConfig,
+            EvaluationJobResource,
+            EvaluationJobStatus,
+            ExperimentConfig,
+            ExperimentTag,
+        )
+
+        now = datetime.now(UTC)
+        job = EvaluationJob(
+            resource=EvaluationJobResource(
+                id="job_exp",
+                tenant="default",
+                created_at=now,
+                updated_at=now,
+            ),
+            name="experiment-eval",
+            status=EvaluationJobStatus(state=JobStatus.RUNNING),
+            model=ModelConfig(url="http://localhost:8000/v1", name="test-model"),
+            benchmarks=[
+                BenchmarkConfig(id="mmlu", provider_id="lm_eval", parameters={})
+            ],
+            experiment=ExperimentConfig(
+                name="my-exp",
+                tags=[ExperimentTag(key="env", value="staging")],
+                artifact_location="s3://bucket/path",
+            ),
+        )
+        assert job.experiment is not None
+        assert job.experiment.name == "my-exp"
+        assert job.experiment.artifact_location == "s3://bucket/path"
+
+    def test_experiment_serialization_roundtrip(self) -> None:
+        """Test ExperimentConfig serializes and deserializes correctly."""
+        from evalhub.models.api import ExperimentConfig, ExperimentTag
+
+        config = ExperimentConfig(
+            name="roundtrip",
+            tags=[
+                ExperimentTag(key="k1", value="v1"),
+                ExperimentTag(key="k2", value="v2"),
+            ],
+        )
+        data = config.model_dump()
+        restored = ExperimentConfig.model_validate(data)
+        assert restored.name == "roundtrip"
+        assert len(restored.tags) == 2
+        assert restored.tags[0].key == "k1"
+
+
 class TestEvaluationResult:
     """Test cases for EvaluationResult model."""
 

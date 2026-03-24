@@ -253,6 +253,34 @@ class CollectionRef(BaseModel):
     )
 
 
+class ExperimentTag(BaseModel):
+    """Tag on an experiment (e.g. MLFlow).
+
+    Matches the ExperimentTag schema from the eval-hub API.
+    """
+
+    key: str = Field(..., description="Tag key", max_length=250)
+    value: str = Field(..., description="Tag value", max_length=5000)
+
+
+class ExperimentConfig(BaseModel):
+    """Configuration for MLFlow experiment tracking.
+
+    When provided on a job submission, the evaluation job will be
+    tracked in MLFlow.
+
+    Matches the ExperimentConfig schema from the eval-hub API.
+    """
+
+    name: str | None = Field(default=None, description="Experiment name")
+    tags: list[ExperimentTag] = Field(
+        default_factory=list, description="Experiment tags", max_length=20
+    )
+    artifact_location: str | None = Field(
+        default=None, description="Artifact storage location"
+    )
+
+
 class JobSubmissionRequest(BaseModel):
     """Request to submit an evaluation job.
 
@@ -270,6 +298,10 @@ class JobSubmissionRequest(BaseModel):
     )
     collection: CollectionRef | None = Field(
         default=None, description="Collection reference for the evaluation job"
+    )
+    experiment: ExperimentConfig | None = Field(
+        default=None,
+        description="MLFlow experiment configuration. When provided, the evaluation job will be tracked in MLFlow.",
     )
 
     @model_validator(mode="after")
@@ -307,6 +339,10 @@ class EvaluationJob(BaseModel):
     )
     collection: CollectionRef | None = Field(
         default=None, description="Collection reference for the evaluation job"
+    )
+    experiment: ExperimentConfig | None = Field(
+        default=None,
+        description="MLFlow experiment configuration",
     )
 
     # Convenience properties to access nested fields

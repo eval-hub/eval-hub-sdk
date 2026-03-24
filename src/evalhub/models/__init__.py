@@ -21,6 +21,8 @@ from .api import (
     EvaluationResponse,
     EvaluationResult,
     EvaluationStatus,
+    ExperimentConfig,
+    ExperimentTag,
     FrameworkInfo,
     HealthResponse,
     # Status and metadata
@@ -48,6 +50,9 @@ __all__ = [
     "JobsList",
     "JobSubmissionRequest",
     "EvaluationResponse",
+    # Experiment models
+    "ExperimentTag",
+    "ExperimentConfig",
     # Provider & Benchmark models
     "Provider",
     "ProviderList",
