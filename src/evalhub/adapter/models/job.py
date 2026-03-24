@@ -260,6 +260,11 @@ class JobResults(BaseModel):
         default=None, description="OCI artifact info if persisted"
     )
 
+    mlflow_run_id: str | None = Field(
+        default=None,
+        description="Optional MLflow run id included on the terminal results event when set",
+    )
+
 
 class JobCallbacks(ABC):
     """Abstract interface for job callbacks.

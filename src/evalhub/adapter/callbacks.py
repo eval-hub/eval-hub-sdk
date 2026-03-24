@@ -32,7 +32,7 @@ class _MlflowOps:
 
         from evalhub.adapter.mlflow import MlflowArtifact
 
-        callbacks.mlflow.save(
+        rid = callbacks.mlflow.save(
             results,
             job_spec,
             artifacts=[
@@ -40,9 +40,15 @@ class _MlflowOps:
                 MlflowArtifact("report.html", html_bytes, "text/html"),
             ],
         )
+        if rid:
+            results.mlflow_run_id = rid
 
     Metrics, params, and all artifacts are saved in a single MLflow run.
-    Does nothing if ``job_spec.experiment_name`` is not set.
+    Does nothing if ``job_spec.experiment_name`` is not set (returns ``None``).
+
+    Returns the MLflow run id when a run is created. Assign it to
+    ``results.mlflow_run_id`` before ``callbacks.report_results(results)`` so
+    Eval Hub stores the link.
 
     The backend is controlled by the ``backend`` constructor argument or the
     ``EVALHUB_MLFLOW_BACKEND`` environment variable:
@@ -60,16 +66,15 @@ class _MlflowOps:
         results: JobResults,
         job_spec: JobSpec,
         artifacts: list[MlflowArtifact] | None = None,
-    ) -> None:
+    ) -> str | None:
         if not job_spec.experiment_name:
             logger.debug("No MLflow experiment configured, skipping")
-            return
+            return None
 
         try:
             if self._backend == MlflowBackend.UPSTREAM:
-                self._save_upstream(results, job_spec, artifacts)
-            else:
-                self._save_odh(results, job_spec, artifacts)
+                return self._save_upstream(results, job_spec, artifacts)
+            return self._save_odh(results, job_spec, artifacts)
         except Exception as e:
             logger.error("Failed to save to MLflow: %s", e)
             raise RuntimeError(f"MLflow save failed: {e}") from e
@@ -82,7 +87,7 @@ class _MlflowOps:
     def _build_params_metrics(
         results: JobResults,
     ) -> tuple[list, list]:
-        from .mlflow import Metric, Param
+        from .mlflow import Metric, Param, sanitize_metric_key_for_api
 
         params = [
             Param("benchmark_id", results.benchmark_id),
@@ -90,8 +95,9 @@ class _MlflowOps:
             Param("num_examples_evaluated", str(results.num_examples_evaluated)),
             Param("duration_seconds", str(results.duration_seconds)),
         ]
+        # MLflow rejects commas etc. in metric keys; Eval Hub keeps r.metric_name as-is.
         metrics: list[Metric] = [
-            Metric(r.metric_name, float(r.metric_value))
+            Metric(sanitize_metric_key_for_api(r.metric_name), float(r.metric_value))
             for r in results.results
             if isinstance(r.metric_value, int | float)
         ]
@@ -104,7 +110,7 @@ class _MlflowOps:
         results: JobResults,
         job_spec: JobSpec,
         artifacts: list[MlflowArtifact] | None,
-    ) -> None:
+    ) -> str:
         from .mlflow import MlflowClient
 
         params, metrics = self._build_params_metrics(results)
@@ -112,13 +118,15 @@ class _MlflowOps:
             tag["key"]: tag["value"] for tag in (job_spec.tags or [])
         }
 
+        run_id: str = ""
         with MlflowClient() as client:
             experiment_id = client.get_or_create_experiment(
                 job_spec.experiment_name or ""
             )
             with client.start_run(
                 experiment_id, run_name=job_spec.id, tags=run_tags
-            ) as run_id:
+            ) as rid:
+                run_id = rid
                 client.log_batch(run_id, metrics=metrics, params=params)
                 for artifact in artifacts or []:
                     client.upload_artifact(
@@ -129,20 +137,21 @@ class _MlflowOps:
                     )
 
         logger.info(
-            "Saved to MLflow (odh) experiment '%s' (run: %s) — "
+            "Saved to MLflow (odh) experiment '%s' (run_id: %s) — "
             "%d metric(s), %d artifact(s)",
             job_spec.experiment_name,
-            job_spec.id,
+            run_id,
             len(metrics),
             len(artifacts or []),
         )
+        return run_id
 
     def _save_upstream(
         self,
         results: JobResults,
         job_spec: JobSpec,
         artifacts: list[MlflowArtifact] | None,
-    ) -> None:
+    ) -> str:
         import tempfile
         from pathlib import Path as _Path
 
@@ -160,7 +169,9 @@ class _MlflowOps:
         }
 
         mlflow.set_experiment(job_spec.experiment_name)
-        with mlflow.start_run(run_name=job_spec.id, tags=run_tags):
+        run_id = ""
+        with mlflow.start_run(run_name=job_spec.id, tags=run_tags) as active_run:
+            run_id = active_run.info.run_id
             mlflow.log_params({p.key: p.value for p in params})
             mlflow.log_metrics({m.key: m.value for m in metrics})
 
@@ -177,13 +188,14 @@ class _MlflowOps:
                     mlflow.log_artifact(str(tmp_file), artifact_path=artifact_dir)
 
         logger.info(
-            "Saved to MLflow (upstream) experiment '%s' (run: %s) — "
+            "Saved to MLflow (upstream) experiment '%s' (run_id: %s) — "
             "%d metric(s), %d artifact(s)",
             job_spec.experiment_name,
-            job_spec.id,
+            run_id,
             len(metrics),
             len(artifacts or []),
         )
+        return run_id
 
 
 class DefaultCallbacks(JobCallbacks):
@@ -192,6 +204,16 @@ class DefaultCallbacks(JobCallbacks):
     This implementation:
     - Reports status updates to sidecar (if available) or logs them
     - Pushes OCI artifacts directly using OCIArtifactPersister
+    - ``report_results(results)``: POSTs final results to Eval Hub; if
+      ``results.mlflow_run_id`` is set (for example from ``save()``), that id
+      is included (if unset, the field is left out).
+
+    Example::
+
+        rid = callbacks.mlflow.save(results, job_spec)
+        if rid:
+            results.mlflow_run_id = rid
+        callbacks.report_results(results)
 
     This is the recommended callback implementation for both production and development.
 
@@ -581,6 +603,9 @@ class DefaultCallbacks(JobCallbacks):
                 # Include provider_id if available
                 if self.provider_id:
                     status_event["provider_id"] = self.provider_id
+
+                if results.mlflow_run_id:
+                    status_event["mlflow_run_id"] = results.mlflow_run_id
 
                 # Include OCI artifact reference if available
                 if results.oci_artifact:

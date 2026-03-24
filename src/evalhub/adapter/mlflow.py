@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import mimetypes
 import os
+import re
 import time
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
@@ -40,6 +41,19 @@ class Metric:
     value: float
     timestamp: int = 0  # unix ms; 0 = auto-fill
     step: int = 0
+
+
+# Tracking REST /runs/log-batch rejects keys outside [A-Za-z0-9_\-.\s:/]
+_BAD_MLFLOW_METRIC_KEY_CHARS = re.compile(r"[^a-zA-Z0-9_\-.\s:/]+")
+
+
+def sanitize_metric_key_for_api(name: str) -> str:
+    """Map metric names to MLflow-safe keys (e.g. lm-eval ``acc,none`` → ``acc_none``).
+
+    Used only when logging to MLflow; ``JobResults`` metric names are unchanged.
+    """
+    s = _BAD_MLFLOW_METRIC_KEY_CHARS.sub("_", name).strip().strip("_")
+    return s or "metric"
 
 
 @dataclass
