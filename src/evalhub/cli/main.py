@@ -266,7 +266,7 @@ def eval_status(
                 "name": j.name,
                 "state": j.state.value,
                 "provider": j.benchmarks[0].provider_id if j.benchmarks else "",
-                "benchmarks": len(j.benchmarks),
+                "benchmarks": len(j.benchmarks) if j.benchmarks else 0,
                 "created": str(j.resource.created_at),
             }
             for j in jobs
@@ -428,7 +428,9 @@ def collections() -> None:
 @format_option()
 @click.pass_context
 @handle_api_errors
-def collections_list(ctx: click.Context, tag_filter: str | None, output_format: str) -> None:
+def collections_list(
+    ctx: click.Context, tag_filter: str | None, output_format: str
+) -> None:
     """List all available benchmark collections.
 
     \b
@@ -491,13 +493,15 @@ def collections_describe(
     if collection.benchmarks:
         rows = [
             {
-                "benchmark_id": b.benchmark_id,
+                "id": b.id,
                 "provider_id": b.provider_id,
                 "weight": b.weight,
             }
             for b in collection.benchmarks
         ]
-        output(rows, output_format=output_format, columns=["benchmark_id", "provider_id", "weight"])
+        output(
+            rows, output_format=output_format, columns=["id", "provider_id", "weight"]
+        )
     else:
         click.echo("  (none)")
 
@@ -596,7 +600,7 @@ def collections_run(
     job_name = name or f"{collection.name} ({collection_id})"
     benchmarks = [
         BenchmarkConfig(
-            id=b.benchmark_id,
+            id=b.id,
             provider_id=b.provider_id,
         )
         for b in collection.benchmarks

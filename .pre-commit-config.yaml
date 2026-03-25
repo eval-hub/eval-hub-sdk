@@ -35,6 +35,7 @@ repos:
           typer>=0.9.0,
           rich>=13.0.0,
           types-requests,
+          attrs,
         ]
         args: [--config-file=pyproject.toml]
 

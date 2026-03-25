@@ -580,10 +580,10 @@ class BenchmarkReference(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _normalize_id(cls, data: Any) -> Any:
-        """Accept 'id' from the server API as an alias for 'benchmark_id'."""
-        if isinstance(data, dict) and "id" in data and "benchmark_id" not in data:
+        """Accept 'benchmark_id' as an alias for 'id' for backwards compatibility."""
+        if isinstance(data, dict) and "benchmark_id" in data and "id" not in data:
             data = dict(data)
-            data["benchmark_id"] = data.pop("id")
+            data["id"] = data.pop("benchmark_id")
         return data
 
 

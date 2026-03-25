@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Iterator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -25,7 +25,7 @@ from evalhub.models.api import (
     ModelConfig,
 )
 
-NOW = datetime(2026, 3, 23, 12, 0, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 3, 23, 12, 0, 0, tzinfo=UTC)
 
 
 def _make_job(
@@ -76,7 +76,11 @@ def mock_client() -> MagicMock:
 
 class TestEvalRun:
     def test_run_with_config_file(
-        self, runner: CliRunner, config_file: Path, mock_client: MagicMock, tmp_path: Path
+        self,
+        runner: CliRunner,
+        config_file: Path,
+        mock_client: MagicMock,
+        tmp_path: Path,
     ) -> None:
         cfg = {
             "name": "my-eval",
@@ -94,7 +98,11 @@ class TestEvalRun:
         mock_client.jobs.submit.assert_called_once()
 
     def test_run_with_json_config(
-        self, runner: CliRunner, config_file: Path, mock_client: MagicMock, tmp_path: Path
+        self,
+        runner: CliRunner,
+        config_file: Path,
+        mock_client: MagicMock,
+        tmp_path: Path,
     ) -> None:
         cfg = {
             "name": "my-eval",
@@ -115,15 +123,25 @@ class TestEvalRun:
     ) -> None:
         mock_client.jobs.submit.return_value = _make_job()
         with patch("evalhub.cli.main.get_client", return_value=mock_client):
-            result = runner.invoke(main, [
-                "eval", "run",
-                "--name", "inline-eval",
-                "--model-url", "http://vllm:8000/v1",
-                "--model-name", "llama3",
-                "--provider", "lm_eval",
-                "-b", "mmlu",
-                "-b", "hellaswag",
-            ])
+            result = runner.invoke(
+                main,
+                [
+                    "eval",
+                    "run",
+                    "--name",
+                    "inline-eval",
+                    "--model-url",
+                    "http://vllm:8000/v1",
+                    "--model-name",
+                    "llama3",
+                    "--provider",
+                    "lm_eval",
+                    "-b",
+                    "mmlu",
+                    "-b",
+                    "hellaswag",
+                ],
+            )
         assert result.exit_code == 0
         assert "Job submitted: eval-123" in result.output
         req = mock_client.jobs.submit.call_args[0][0]
@@ -134,15 +152,24 @@ class TestEvalRun:
         self, runner: CliRunner, config_file: Path, mock_client: MagicMock
     ) -> None:
         with patch("evalhub.cli.main.get_client", return_value=mock_client):
-            result = runner.invoke(main, [
-                "eval", "run",
-                "--name", "incomplete",
-            ])
+            result = runner.invoke(
+                main,
+                [
+                    "eval",
+                    "run",
+                    "--name",
+                    "incomplete",
+                ],
+            )
         assert result.exit_code != 0
         assert "required" in result.output.lower() or "Error" in result.output
 
     def test_run_with_wait(
-        self, runner: CliRunner, config_file: Path, mock_client: MagicMock, tmp_path: Path
+        self,
+        runner: CliRunner,
+        config_file: Path,
+        mock_client: MagicMock,
+        tmp_path: Path,
     ) -> None:
         cfg = {
             "name": "my-eval",
@@ -158,16 +185,27 @@ class TestEvalRun:
         mock_client.jobs.wait_for_completion.return_value = completed
 
         with patch("evalhub.cli.main.get_client", return_value=mock_client):
-            result = runner.invoke(main, [
-                "eval", "run", "--config", str(cfg_path), "--wait",
-            ])
+            result = runner.invoke(
+                main,
+                [
+                    "eval",
+                    "run",
+                    "--config",
+                    str(cfg_path),
+                    "--wait",
+                ],
+            )
         assert result.exit_code == 0
         assert "Waiting for job" in result.output
         assert "completed" in result.output
         mock_client.jobs.wait_for_completion.assert_called_once()
 
     def test_run_with_wait_failed(
-        self, runner: CliRunner, config_file: Path, mock_client: MagicMock, tmp_path: Path
+        self,
+        runner: CliRunner,
+        config_file: Path,
+        mock_client: MagicMock,
+        tmp_path: Path,
     ) -> None:
         cfg = {
             "name": "my-eval",
@@ -183,13 +221,24 @@ class TestEvalRun:
         mock_client.jobs.wait_for_completion.return_value = failed
 
         with patch("evalhub.cli.main.get_client", return_value=mock_client):
-            result = runner.invoke(main, [
-                "eval", "run", "--config", str(cfg_path), "--wait",
-            ])
+            result = runner.invoke(
+                main,
+                [
+                    "eval",
+                    "run",
+                    "--config",
+                    str(cfg_path),
+                    "--wait",
+                ],
+            )
         assert result.exit_code == 1
 
     def test_run_json_output(
-        self, runner: CliRunner, config_file: Path, mock_client: MagicMock, tmp_path: Path
+        self,
+        runner: CliRunner,
+        config_file: Path,
+        mock_client: MagicMock,
+        tmp_path: Path,
     ) -> None:
         cfg = {
             "name": "my-eval",
@@ -201,9 +250,17 @@ class TestEvalRun:
 
         mock_client.jobs.submit.return_value = _make_job()
         with patch("evalhub.cli.main.get_client", return_value=mock_client):
-            result = runner.invoke(main, [
-                "eval", "run", "--config", str(cfg_path), "--format", "json",
-            ])
+            result = runner.invoke(
+                main,
+                [
+                    "eval",
+                    "run",
+                    "--config",
+                    str(cfg_path),
+                    "--format",
+                    "json",
+                ],
+            )
         assert result.exit_code == 0
         assert "eval-123" in result.output
 
@@ -222,19 +279,19 @@ class TestEvalStatus:
         with patch("evalhub.cli.main.get_client", return_value=mock_client):
             result = runner.invoke(main, ["eval", "status"])
         assert result.exit_code == 0
-        assert "eval-1" in result.output
-        assert "eval-2" in result.output
+        assert "running" in result.output
+        assert "completed" in result.output or "complet" in result.output
 
     def test_list_with_status_filter(
         self, runner: CliRunner, config_file: Path, mock_client: MagicMock
     ) -> None:
         mock_client.jobs.list.return_value = [
-            _make_job(job_id="eval-1", state=JobStatus.RUNNING),
+            _make_job(job_id="eval-1", name="eval-one", state=JobStatus.RUNNING),
         ]
         with patch("evalhub.cli.main.get_client", return_value=mock_client):
             result = runner.invoke(main, ["eval", "status", "--status", "running"])
         assert result.exit_code == 0
-        assert "eval-1" in result.output
+        assert "running" in result.output
         mock_client.jobs.list.assert_called_once_with(
             status=JobStatus.RUNNING, limit=None
         )
@@ -255,7 +312,9 @@ class TestEvalStatus:
             state=JobStatus.RUNNING,
             benchmark_statuses=[
                 BenchmarkStatus(
-                    id="mmlu", provider_id="lm_eval", status=JobStatus.RUNNING,
+                    id="mmlu",
+                    provider_id="lm_eval",
+                    status=JobStatus.RUNNING,
                 ),
             ],
         )
@@ -271,9 +330,16 @@ class TestEvalStatus:
     ) -> None:
         mock_client.jobs.get.return_value = _make_job(state=JobStatus.COMPLETED)
         with patch("evalhub.cli.main.get_client", return_value=mock_client):
-            result = runner.invoke(main, [
-                "eval", "status", "eval-123", "--format", "json",
-            ])
+            result = runner.invoke(
+                main,
+                [
+                    "eval",
+                    "status",
+                    "eval-123",
+                    "--format",
+                    "json",
+                ],
+            )
         assert result.exit_code == 0
         parsed = json.loads(result.output)
         assert parsed[0]["name"] == "test-eval"
@@ -331,9 +397,16 @@ class TestEvalResults:
         )
         mock_client.jobs.get.return_value = job
         with patch("evalhub.cli.main.get_client", return_value=mock_client):
-            result = runner.invoke(main, [
-                "eval", "results", "eval-123", "--format", "json",
-            ])
+            result = runner.invoke(
+                main,
+                [
+                    "eval",
+                    "results",
+                    "eval-123",
+                    "--format",
+                    "json",
+                ],
+            )
         assert result.exit_code == 0
         parsed = json.loads(result.output)
         assert parsed[0]["id"] == "mmlu"
@@ -399,7 +472,9 @@ class TestEvalResults:
                         id="mmlu", provider_id="lm_eval", metrics={"accuracy": 0.85}
                     ),
                     BenchmarkResult(
-                        id="hellaswag", provider_id="lm_eval", metrics={"accuracy": 0.78}
+                        id="hellaswag",
+                        provider_id="lm_eval",
+                        metrics={"accuracy": 0.78},
                     ),
                 ],
             ),

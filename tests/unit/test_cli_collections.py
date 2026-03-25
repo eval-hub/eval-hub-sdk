@@ -21,12 +21,12 @@ from evalhub.models.api import (
 
 
 def _make_benchmark_ref(
-    benchmark_id: str = "mmlu",
+    id: str = "mmlu",
     provider_id: str = "lm_evaluation_harness",
     weight: float = 1.0,
 ) -> BenchmarkReference:
     return BenchmarkReference(
-        benchmark_id=benchmark_id,
+        id=id,
         provider_id=provider_id,
         weight=weight,
     )
@@ -143,7 +143,7 @@ class TestCollectionsList:
     def test_list_shows_benchmark_count(
         self, runner: CliRunner, config_file: Path, mock_client: MagicMock
     ) -> None:
-        benchmarks = [_make_benchmark_ref(benchmark_id=f"b{i}") for i in range(3)]
+        benchmarks = [_make_benchmark_ref(id=f"b{i}") for i in range(3)]
         mock_client.collections.list.return_value = [
             _make_collection(id="rag-safety", benchmarks=benchmarks),
         ]
@@ -247,9 +247,7 @@ class TestCollectionsDescribe:
     def test_describe_shows_tags(
         self, runner: CliRunner, config_file: Path, mock_client: MagicMock
     ) -> None:
-        collection = _make_collection(
-            id="rag-safety", tags=["safety", "rag"]
-        )
+        collection = _make_collection(id="rag-safety", tags=["safety", "rag"])
         mock_client.collections.get.return_value = collection
         with patch("evalhub.cli.main.get_client", return_value=mock_client):
             result = runner.invoke(main, ["collections", "describe", "rag-safety"])
@@ -278,12 +276,18 @@ class TestCollectionsDescribe:
 
 class TestCollectionsCreate:
     def test_create_from_yaml(
-        self, runner: CliRunner, config_file: Path, mock_client: MagicMock, tmp_path: Path
+        self,
+        runner: CliRunner,
+        config_file: Path,
+        mock_client: MagicMock,
+        tmp_path: Path,
     ) -> None:
         spec = {
             "name": "New Collection",
             "description": "Created via CLI",
-            "benchmarks": [{"benchmark_id": "mmlu", "provider_id": "lm_evaluation_harness"}],
+            "benchmarks": [
+                {"benchmark_id": "mmlu", "provider_id": "lm_evaluation_harness"}
+            ],
         }
         spec_file = tmp_path / "collection.yaml"
         spec_file.write_text(yaml.dump(spec))
@@ -300,11 +304,17 @@ class TestCollectionsCreate:
         mock_client.collections.create.assert_called_once()
 
     def test_create_from_json(
-        self, runner: CliRunner, config_file: Path, mock_client: MagicMock, tmp_path: Path
+        self,
+        runner: CliRunner,
+        config_file: Path,
+        mock_client: MagicMock,
+        tmp_path: Path,
     ) -> None:
         spec = {
             "name": "JSON Collection",
-            "benchmarks": [{"benchmark_id": "arc_easy", "provider_id": "lm_evaluation_harness"}],
+            "benchmarks": [
+                {"benchmark_id": "arc_easy", "provider_id": "lm_evaluation_harness"}
+            ],
         }
         spec_file = tmp_path / "collection.json"
         spec_file.write_text(json.dumps(spec))
@@ -320,7 +330,11 @@ class TestCollectionsCreate:
         assert "json-col-456" in result.output
 
     def test_create_json_output(
-        self, runner: CliRunner, config_file: Path, mock_client: MagicMock, tmp_path: Path
+        self,
+        runner: CliRunner,
+        config_file: Path,
+        mock_client: MagicMock,
+        tmp_path: Path,
     ) -> None:
         spec = {"name": "My Collection", "benchmarks": []}
         spec_file = tmp_path / "collection.yaml"
@@ -353,10 +367,14 @@ class TestCollectionsCreate:
         mock_client.collections.create.assert_not_called()
 
     def test_create_invalid_spec(
-        self, runner: CliRunner, config_file: Path, mock_client: MagicMock, tmp_path: Path
+        self,
+        runner: CliRunner,
+        config_file: Path,
+        mock_client: MagicMock,
+        tmp_path: Path,
     ) -> None:
         # Missing required 'name' field
-        spec = {"benchmarks": []}
+        spec: dict = {"benchmarks": []}
         spec_file = tmp_path / "bad.yaml"
         spec_file.write_text(yaml.dump(spec))
 
@@ -390,9 +408,7 @@ class TestCollectionsDelete:
         self, runner: CliRunner, config_file: Path, mock_client: MagicMock
     ) -> None:
         with patch("evalhub.cli.main.get_client", return_value=mock_client):
-            result = runner.invoke(
-                main, ["collections", "delete", "rag-safety"], input="n\n"
-            )
+            runner.invoke(main, ["collections", "delete", "rag-safety"], input="n\n")
         mock_client.collections.delete.assert_not_called()
 
     def test_delete_yes_flag(
@@ -435,9 +451,13 @@ class TestCollectionsRun:
             result = runner.invoke(
                 main,
                 [
-                    "collections", "run", "rag-safety",
-                    "--model-url", "http://vllm:8000/v1",
-                    "--model-name", "llama3",
+                    "collections",
+                    "run",
+                    "rag-safety",
+                    "--model-url",
+                    "http://vllm:8000/v1",
+                    "--model-name",
+                    "llama3",
                 ],
             )
         assert result.exit_code == 0
@@ -462,10 +482,15 @@ class TestCollectionsRun:
             result = runner.invoke(
                 main,
                 [
-                    "collections", "run", "rag-safety",
-                    "--model-url", "http://vllm:8000/v1",
-                    "--model-name", "llama3",
-                    "--name", "my-custom-run",
+                    "collections",
+                    "run",
+                    "rag-safety",
+                    "--model-url",
+                    "http://vllm:8000/v1",
+                    "--model-name",
+                    "llama3",
+                    "--name",
+                    "my-custom-run",
                 ],
             )
         assert result.exit_code == 0
@@ -482,9 +507,13 @@ class TestCollectionsRun:
             result = runner.invoke(
                 main,
                 [
-                    "collections", "run", "empty",
-                    "--model-url", "http://vllm:8000/v1",
-                    "--model-name", "llama3",
+                    "collections",
+                    "run",
+                    "empty",
+                    "--model-url",
+                    "http://vllm:8000/v1",
+                    "--model-name",
+                    "llama3",
                 ],
             )
         assert result.exit_code != 0
@@ -520,10 +549,15 @@ class TestCollectionsRun:
             result = runner.invoke(
                 main,
                 [
-                    "collections", "run", "rag-safety",
-                    "--model-url", "http://vllm:8000/v1",
-                    "--model-name", "llama3",
-                    "--format", "json",
+                    "collections",
+                    "run",
+                    "rag-safety",
+                    "--model-url",
+                    "http://vllm:8000/v1",
+                    "--model-name",
+                    "llama3",
+                    "--format",
+                    "json",
                 ],
             )
         assert result.exit_code == 0
