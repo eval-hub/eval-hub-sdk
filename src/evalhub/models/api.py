@@ -284,31 +284,17 @@ class ExperimentConfig(BaseModel):
 class OCICoordinates(BaseModel):
     """OCI artifact coordinates for persistence."""
 
-    oci_host: str = Field(
-        ..., description="OCI registry host (e.g., 'quay.io')", examples=["quay.io"]
-    )
+    oci_host: str = Field(..., description="OCI registry host (e.g., 'quay.io')")
     oci_repository: str = Field(
-        ...,
-        description="OCI repository (e.g., 'my-org/my-repo')",
-        examples=["my-org/my-repo"],
+        ..., description="OCI repository (e.g., 'my-org/my-repo')"
     )
-    oci_tag: str | None = Field(
-        default=None, description="OCI tag (e.g., 'eval-123')", examples=["eval-123"]
-    )
+    oci_tag: str | None = Field(default=None, description="OCI tag (e.g., 'eval-123')")
     oci_subject: str | None = Field(
         default=None,
         description="Optional OCI subject identifier (in same registry and repo)",
-        examples=["quay.io/my-org/my-repo:model"],
     )
     annotations: dict[str, str] = Field(
-        default_factory=dict,
-        description="Custom annotations",
-        examples=[
-            {
-                "model": "quay.io/my-org/my-repo:model",
-                "some": "value",
-            }
-        ],
+        default_factory=dict, description="Custom annotations"
     )
 
 
