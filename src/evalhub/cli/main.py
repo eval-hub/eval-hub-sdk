@@ -8,7 +8,7 @@ import re
 import sys
 import time
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 import click
 import yaml
@@ -198,16 +198,11 @@ def eval_run(
                 "Either --config or all of --name, --model-url, --model-name, "
                 "--provider, and --benchmark are required."
             )
-        # The None checks above guarantee these are not None
-        assert name is not None
-        assert model_url is not None
-        assert model_name is not None
-        assert provider is not None
         request = _build_request_from_flags(
-            name=name,
-            model_url=model_url,
-            model_name=model_name,
-            provider=provider,
+            name=cast(str, name),
+            model_url=cast(str, model_url),
+            model_name=cast(str, model_name),
+            provider=cast(str, provider),
             benchmark=benchmark,
             description=description,
             metrics=metrics,
