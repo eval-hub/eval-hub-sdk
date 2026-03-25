@@ -1,0 +1,445 @@
+"""Unit tests for the EvalHub MCP Server.
+
+Tests mock the AsyncEvalHubClient and verify that MCP resources and tools
+correctly delegate to the client methods.
+"""
+
+import json
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from mcp.types import CompletionArgument, ResourceTemplateReference
+
+from evalhub.mcp.server import (
+    _serialize_list,
+    _serialize_model,
+    cancel_job,
+    get_collection,
+    get_job,
+    get_provider,
+    handle_completion,
+    list_benchmarks,
+    list_collections,
+    list_jobs,
+    list_jobs_by_status,
+    list_provider_benchmarks,
+    list_providers,
+    mcp,
+    set_client,
+    submit_evaluation,
+)
+from evalhub.models.api import (
+    Benchmark,
+    BenchmarkConfig,
+    BenchmarkReference,
+    Collection,
+    EvaluationJob,
+    EvaluationJobResource,
+    EvaluationJobStatus,
+    JobStatus,
+    ModelConfig,
+    Provider,
+    Resource,
+)
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+
+def _make_resource(id: str = "test-id") -> Resource:
+    return Resource(
+        id=id,
+        tenant="test-tenant",
+        created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+    )
+
+
+def _make_provider(id: str = "lm_eval") -> Provider:
+    return Provider(
+        resource=_make_resource(id),
+        name="LM Eval",
+        description="LM Evaluation Harness provider",
+        benchmarks=[
+            Benchmark(
+                id="gsm8k",
+                name="GSM8K",
+                description="Grade school math",
+                category="math",
+                metrics=["accuracy"],
+            )
+        ],
+    )
+
+
+def _make_benchmark(id: str = "gsm8k") -> Benchmark:
+    return Benchmark(
+        id=id,
+        name="GSM8K",
+        description="Grade school math",
+        category="math",
+        metrics=["accuracy"],
+    )
+
+
+def _make_collection(id: str = "standard") -> Collection:
+    return Collection(
+        resource=_make_resource(id),
+        name="Standard Collection",
+        description="A standard benchmark collection",
+        benchmarks=[
+            BenchmarkReference(id="gsm8k", provider_id="lm_eval"),
+        ],
+    )
+
+
+def _make_job(id: str = "job-123", status: JobStatus = JobStatus.PENDING) -> EvaluationJob:
+    return EvaluationJob(
+        resource=EvaluationJobResource(
+            id=id,
+            tenant="test-tenant",
+            created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        ),
+        status=EvaluationJobStatus(state=status),
+        name="test-eval",
+        model=ModelConfig(url="http://model:8000", name="llama3"),
+        benchmarks=[BenchmarkConfig(id="gsm8k", provider_id="lm_eval")],
+    )
+
+
+@pytest.fixture
+def mock_client():
+    """Create a mock AsyncEvalHubClient and set it on the MCP server."""
+    client = MagicMock()
+
+    client.providers = MagicMock()
+    client.providers.list = AsyncMock(return_value=[_make_provider()])
+    client.providers.get = AsyncMock(return_value=_make_provider())
+
+    client.benchmarks = MagicMock()
+    client.benchmarks.list = AsyncMock(return_value=[_make_benchmark()])
+
+    client.collections = MagicMock()
+    client.collections.list = AsyncMock(return_value=[_make_collection()])
+    client.collections.get = AsyncMock(return_value=_make_collection())
+
+    client.jobs = MagicMock()
+    client.jobs.list = AsyncMock(return_value=[_make_job()])
+    client.jobs.get = AsyncMock(return_value=_make_job())
+    client.jobs.submit = AsyncMock(return_value=_make_job())
+    client.jobs.cancel = AsyncMock(return_value=True)
+
+    set_client(client)
+    return client
+
+
+# ---------------------------------------------------------------------------
+# Resource listing tests
+# ---------------------------------------------------------------------------
+
+
+async def test_list_resources():
+    """Verify static resources are registered."""
+    resources = await mcp.list_resources()
+    uris = [str(r.uri) for r in resources]
+    assert "evalhub://providers" in uris
+    assert "evalhub://benchmarks" in uris
+    assert "evalhub://collections" in uris
+    assert "evalhub://jobs" in uris
+
+
+async def test_list_resource_templates():
+    """Verify resource templates are registered."""
+    templates = await mcp.list_resource_templates()
+    uri_templates = [t.uriTemplate for t in templates]
+    assert "evalhub://providers/{provider_id}" in uri_templates
+    assert "evalhub://providers/{provider_id}/benchmarks" in uri_templates
+    assert "evalhub://collections/{collection_id}" in uri_templates
+    assert "evalhub://jobs/{job_id}" in uri_templates
+    assert "evalhub://jobs?status={status}" in uri_templates
+
+
+# ---------------------------------------------------------------------------
+# Resource read tests
+# ---------------------------------------------------------------------------
+
+
+async def test_read_providers(mock_client):
+    result = await list_providers()
+    data = json.loads(result)
+    assert data["count"] == 1
+    assert data["items"][0]["name"] == "LM Eval"
+    mock_client.providers.list.assert_awaited_once()
+
+
+async def test_read_provider_by_id(mock_client):
+    result = await get_provider("lm_eval")
+    data = json.loads(result)
+    assert data["name"] == "LM Eval"
+    assert data["resource"]["id"] == "lm_eval"
+    mock_client.providers.get.assert_awaited_once_with("lm_eval")
+
+
+async def test_read_benchmarks(mock_client):
+    result = await list_benchmarks()
+    data = json.loads(result)
+    assert data["count"] == 1
+    assert data["items"][0]["id"] == "gsm8k"
+    mock_client.benchmarks.list.assert_awaited_once()
+
+
+async def test_read_benchmarks_by_provider(mock_client):
+    result = await list_provider_benchmarks("lm_eval")
+    data = json.loads(result)
+    assert data["count"] == 1
+    mock_client.benchmarks.list.assert_awaited_once_with(provider_id="lm_eval")
+
+
+async def test_read_collections(mock_client):
+    result = await list_collections()
+    data = json.loads(result)
+    assert data["count"] == 1
+    assert data["items"][0]["name"] == "Standard Collection"
+    mock_client.collections.list.assert_awaited_once()
+
+
+async def test_read_collection_by_id(mock_client):
+    result = await get_collection("standard")
+    data = json.loads(result)
+    assert data["name"] == "Standard Collection"
+    mock_client.collections.get.assert_awaited_once_with("standard")
+
+
+async def test_read_jobs(mock_client):
+    result = await list_jobs()
+    data = json.loads(result)
+    assert data["count"] == 1
+    assert data["items"][0]["name"] == "test-eval"
+    mock_client.jobs.list.assert_awaited_once()
+
+
+async def test_read_job_by_id(mock_client):
+    result = await get_job("job-123")
+    data = json.loads(result)
+    assert data["name"] == "test-eval"
+    mock_client.jobs.get.assert_awaited_once_with("job-123")
+
+
+async def test_read_jobs_by_status(mock_client):
+    mock_client.jobs.list = AsyncMock(
+        return_value=[_make_job(status=JobStatus.RUNNING)]
+    )
+    result = await list_jobs_by_status("running")
+    data = json.loads(result)
+    assert data["count"] == 1
+    mock_client.jobs.list.assert_awaited_once_with(status=JobStatus.RUNNING)
+
+
+# ---------------------------------------------------------------------------
+# Tool listing tests
+# ---------------------------------------------------------------------------
+
+
+async def test_list_tools():
+    """Verify tools are registered."""
+    tools = await mcp.list_tools()
+    tool_names = [t.name for t in tools]
+    assert "submit_evaluation" in tool_names
+    assert "cancel_job" in tool_names
+    assert len(tool_names) == 2
+
+
+# ---------------------------------------------------------------------------
+# Tool call tests
+# ---------------------------------------------------------------------------
+
+
+async def test_submit_evaluation(mock_client):
+    result = await submit_evaluation(
+        name="my-eval",
+        model={"url": "http://model:8000", "name": "llama3"},
+        benchmarks=[{"id": "gsm8k", "provider_id": "lm_eval"}],
+    )
+    data = json.loads(result)
+    assert data["name"] == "test-eval"
+
+    mock_client.jobs.submit.assert_awaited_once()
+    call_args = mock_client.jobs.submit.call_args
+    request = call_args[0][0]
+    assert request.name == "my-eval"
+    assert request.model.url == "http://model:8000"
+    assert request.model.name == "llama3"
+    assert len(request.benchmarks) == 1
+    assert request.benchmarks[0].id == "gsm8k"
+    assert request.benchmarks[0].provider_id == "lm_eval"
+
+
+async def test_submit_evaluation_with_collection(mock_client):
+    result = await submit_evaluation(
+        name="collection-eval",
+        model={"url": "http://model:8000", "name": "llama3"},
+        collection={"id": "standard"},
+    )
+    data = json.loads(result)
+
+    call_args = mock_client.jobs.submit.call_args
+    request = call_args[0][0]
+    assert request.name == "collection-eval"
+    assert request.benchmarks is None
+    assert request.collection.id == "standard"
+
+
+async def test_submit_evaluation_with_model_auth(mock_client):
+    await submit_evaluation(
+        name="auth-eval",
+        model={
+            "url": "http://model:8000",
+            "name": "llama3",
+            "auth": {"secret_ref": "my-secret"},
+        },
+        benchmarks=[{"id": "gsm8k", "provider_id": "lm_eval"}],
+    )
+
+    call_args = mock_client.jobs.submit.call_args
+    request = call_args[0][0]
+    assert request.model.auth is not None
+    assert request.model.auth.secret_ref == "my-secret"
+
+
+async def test_submit_evaluation_with_experiment(mock_client):
+    await submit_evaluation(
+        name="exp-eval",
+        model={"url": "http://model:8000", "name": "llama3"},
+        benchmarks=[{"id": "gsm8k", "provider_id": "lm_eval"}],
+        experiment={"name": "my-experiment"},
+    )
+
+    call_args = mock_client.jobs.submit.call_args
+    request = call_args[0][0]
+    assert request.experiment is not None
+    assert request.experiment.name == "my-experiment"
+
+
+async def test_cancel_job_tool(mock_client):
+    result = await cancel_job("job-123")
+    data = json.loads(result)
+    assert data["job_id"] == "job-123"
+    assert data["cancelled"] is True
+    mock_client.jobs.cancel.assert_awaited_once_with("job-123", hard_delete=False)
+
+
+async def test_cancel_job_hard_delete(mock_client):
+    result = await cancel_job("job-123", hard_delete=True)
+    data = json.loads(result)
+    assert data["cancelled"] is True
+    mock_client.jobs.cancel.assert_awaited_once_with("job-123", hard_delete=True)
+
+
+# ---------------------------------------------------------------------------
+# Completion tests
+# ---------------------------------------------------------------------------
+
+
+def _template_ref(uri: str) -> ResourceTemplateReference:
+    return ResourceTemplateReference(type="ref/resource", uri=uri)
+
+
+def _arg(name: str, value: str = "") -> CompletionArgument:
+    return CompletionArgument(name=name, value=value)
+
+
+async def test_completion_provider_id(mock_client):
+    mock_client.providers.list = AsyncMock(
+        return_value=[_make_provider("lm_eval"), _make_provider("ragas")]
+    )
+    result = await handle_completion(
+        _template_ref("evalhub://providers/{provider_id}"),
+        _arg("provider_id"),
+        None,
+    )
+    assert result is not None
+    assert "lm_eval" in result.values
+    assert "ragas" in result.values
+
+
+async def test_completion_provider_id_partial(mock_client):
+    mock_client.providers.list = AsyncMock(
+        return_value=[_make_provider("lm_eval"), _make_provider("ragas")]
+    )
+    result = await handle_completion(
+        _template_ref("evalhub://providers/{provider_id}"),
+        _arg("provider_id", "lm"),
+        None,
+    )
+    assert result is not None
+    assert result.values == ["lm_eval"]
+
+
+async def test_completion_collection_id(mock_client):
+    mock_client.collections.list = AsyncMock(
+        return_value=[_make_collection("standard"), _make_collection("safety")]
+    )
+    result = await handle_completion(
+        _template_ref("evalhub://collections/{collection_id}"),
+        _arg("collection_id"),
+        None,
+    )
+    assert result is not None
+    assert "standard" in result.values
+    assert "safety" in result.values
+
+
+async def test_completion_job_id(mock_client):
+    mock_client.jobs.list = AsyncMock(
+        return_value=[_make_job("job-1"), _make_job("job-2")]
+    )
+    result = await handle_completion(
+        _template_ref("evalhub://jobs/{job_id}"),
+        _arg("job_id"),
+        None,
+    )
+    assert result is not None
+    assert "job-1" in result.values
+    assert "job-2" in result.values
+
+
+async def test_completion_status(mock_client):
+    result = await handle_completion(
+        _template_ref("evalhub://jobs?status={status}"),
+        _arg("status", "run"),
+        None,
+    )
+    assert result is not None
+    assert result.values == ["running"]
+
+
+async def test_completion_returns_none_for_prompts(mock_client):
+    from mcp.types import PromptReference
+
+    result = await handle_completion(
+        PromptReference(type="ref/prompt", name="something"),
+        _arg("arg"),
+        None,
+    )
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Serialization tests
+# ---------------------------------------------------------------------------
+
+
+def test_serialize_model():
+    provider = _make_provider()
+    result = json.loads(_serialize_model(provider))
+    assert result["name"] == "LM Eval"
+    assert result["resource"]["id"] == "lm_eval"
+
+
+def test_serialize_list():
+    providers = [_make_provider("p1"), _make_provider("p2")]
+    result = json.loads(_serialize_list(providers))
+    assert result["count"] == 2
+    assert len(result["items"]) == 2
