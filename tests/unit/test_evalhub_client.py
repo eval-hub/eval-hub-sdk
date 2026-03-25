@@ -28,10 +28,16 @@ from evalhub.client.base import (
     BaseSyncClient,
 )
 from evalhub.models.api import (
+    BenchmarkConfig,
     CollectionRef,
+    EvaluationExports,
+    EvaluationExportsOCI,
     EvaluationJob,
     JobStatus,
+    JobSubmissionRequest,
     ModelConfig,
+    OCIConnectionConfig,
+    OCICoordinates,
 )
 
 # Environment variable to enable real server testing
@@ -320,6 +326,67 @@ class TestEvalHubClient:
             assert job.benchmarks is None
             assert job.collection is not None
             assert job.collection.id == "healthcare_v1"
+
+        client.close()
+
+    @pytest.mark.skipif(
+        EVALHUB_TEST_BASE_URL is not None,
+        reason="Skipping in real server mode - would create actual jobs",
+    )
+    def test_sync_client_submit_job_with_exports_oci(self) -> None:
+        """Test that SyncEvalHubClient can submit jobs with OCI exports configuration."""
+        client = SyncEvalHubClient()
+        mock_job_data = {
+            "resource": {
+                "id": "job_oci_1",
+                "tenant": "default",
+                "created_at": "2024-01-01T12:00:00Z",
+                "updated_at": "2024-01-01T12:00:00Z",
+            },
+            "name": "oci-export-eval",
+            "description": "Evaluate with OCI exports",
+            "tags": [],
+            "status": {"state": JobStatus.PENDING.value},
+            "model": {"url": "http://localhost:8000/v1", "name": "test-model"},
+            "benchmarks": [
+                {"id": "mmlu", "provider_id": "lm_eval", "parameters": {}}
+            ],
+            "exports": {
+                "oci": {
+                    "coordinates": {
+                        "oci_host": "quay.io",
+                        "oci_repository": "my-org/my-repo",
+                        "oci_tag": "eval-123",
+                    },
+                    "k8s": {"connection": "my-pull-secret"},
+                }
+            },
+        }
+        mock_response = Mock()
+        mock_response.json.return_value = mock_job_data
+
+        with patch.object(client, "_request", return_value=mock_response):
+            request = JobSubmissionRequest(
+                name="oci-export-eval",
+                description="Evaluate with OCI exports",
+                model=ModelConfig(url="http://localhost:8000/v1", name="test-model"),
+                benchmarks=[
+                    BenchmarkConfig(id="mmlu", provider_id="lm_eval", parameters={})
+                ],
+                exports=EvaluationExports(
+                    oci=EvaluationExportsOCI(
+                        coordinates=OCICoordinates(
+                            oci_host="quay.io",
+                            oci_repository="my-org/my-repo",
+                            oci_tag="eval-123",
+                        ),
+                        k8s=OCIConnectionConfig(connection="my-pull-secret"),
+                    ),
+                ),
+            )
+            job = client.jobs.submit(request)
+            assert isinstance(job, EvaluationJob)
+            assert job.name == "oci-export-eval"
 
         client.close()
 

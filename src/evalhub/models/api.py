@@ -281,6 +281,63 @@ class ExperimentConfig(BaseModel):
     )
 
 
+class OCICoordinates(BaseModel):
+    """OCI artifact coordinates for persistence."""
+
+    oci_host: str = Field(
+        ..., description="OCI registry host (e.g., 'quay.io')", examples=["quay.io"]
+    )
+    oci_repository: str = Field(
+        ...,
+        description="OCI repository (e.g., 'my-org/my-repo')",
+        examples=["my-org/my-repo"],
+    )
+    oci_tag: str | None = Field(
+        default=None, description="OCI tag (e.g., 'eval-123')", examples=["eval-123"]
+    )
+    oci_subject: str | None = Field(
+        default=None,
+        description="Optional OCI subject identifier (in same registry and repo)",
+        examples=["quay.io/my-org/my-repo:model"],
+    )
+    annotations: dict[str, str] = Field(
+        default_factory=dict,
+        description="Custom annotations",
+        examples=[
+            {
+                "model": "quay.io/my-org/my-repo:model",
+                "some": "value",
+            }
+        ],
+    )
+
+
+class OCIConnectionConfig(BaseModel):
+    """K8s connection configuration for OCI registry authentication."""
+
+    connection: str = Field(
+        ...,
+        description="Name of a K8s Secret (type kubernetes.io/dockerconfigjson) for OCI registry auth",
+    )
+
+
+class EvaluationExportsOCI(BaseModel):
+    """OCI export configuration for an evaluation job."""
+
+    coordinates: OCICoordinates = Field(..., description="OCI artifact coordinates")
+    k8s: OCIConnectionConfig | None = Field(
+        default=None, description="K8s connection for OCI registry auth"
+    )
+
+
+class EvaluationExports(BaseModel):
+    """Optional exports configuration for an evaluation job."""
+
+    oci: EvaluationExportsOCI | None = Field(
+        default=None, description="OCI export configuration"
+    )
+
+
 class JobSubmissionRequest(BaseModel):
     """Request to submit an evaluation job.
 
@@ -302,6 +359,10 @@ class JobSubmissionRequest(BaseModel):
     experiment: ExperimentConfig | None = Field(
         default=None,
         description="MLFlow experiment configuration. When provided, the evaluation job will be tracked in MLFlow.",
+    )
+    exports: EvaluationExports | None = Field(
+        default=None,
+        description="Optional exports configuration (e.g., OCI artifact persistence)",
     )
 
     @model_validator(mode="after")
@@ -343,6 +404,10 @@ class EvaluationJob(BaseModel):
     experiment: ExperimentConfig | None = Field(
         default=None,
         description="MLFlow experiment configuration",
+    )
+    exports: EvaluationExports | None = Field(
+        default=None,
+        description="Optional exports configuration",
     )
 
     # Convenience properties to access nested fields
@@ -396,37 +461,6 @@ class EvaluationResponse(BaseModel):
     )
     completed_at: datetime = Field(..., description="When evaluation was completed")
     duration_seconds: float = Field(..., description="Total evaluation time")
-
-
-class OCICoordinates(BaseModel):
-    """OCI artifact coordinates for persistence."""
-
-    oci_host: str = Field(
-        ..., description="OCI registry host (e.g., 'quay.io')", examples=["quay.io"]
-    )
-    oci_repository: str = Field(
-        ...,
-        description="OCI repository (e.g., 'my-org/my-repo')",
-        examples=["my-org/my-repo"],
-    )
-    oci_tag: str | None = Field(
-        default=None, description="OCI tag (e.g., 'eval-123')", examples=["eval-123"]
-    )
-    oci_subject: str | None = Field(
-        default=None,
-        description="Optional OCI subject identifier (in same registry and repo)",
-        examples=["quay.io/my-org/my-repo:model"],
-    )
-    annotations: dict[str, str] = Field(
-        default_factory=dict,
-        description="Custom annotations",
-        examples=[
-            {
-                "model": "quay.io/my-org/my-repo:model",
-                "some": "value",
-            }
-        ],
-    )
 
 
 class EvaluationJobFilesLocation(BaseModel):

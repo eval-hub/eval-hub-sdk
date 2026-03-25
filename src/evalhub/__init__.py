@@ -29,6 +29,8 @@ from .models import (
     BenchmarkInfo,
     CollectionRef,
     ErrorResponse,
+    EvaluationExports,
+    EvaluationExportsOCI,
     EvaluationJob,
     EvaluationResponse,
     EvaluationResult,
@@ -40,6 +42,8 @@ from .models import (
     JobStatus,
     JobSubmissionRequest,
     ModelConfig,
+    OCIConnectionConfig,
+    OCICoordinates,
 )
 
 __version__ = "0.1.4"
@@ -52,6 +56,8 @@ __all__ = [
     "BenchmarkInfo",
     "CollectionRef",
     "ErrorResponse",
+    "EvaluationExports",
+    "EvaluationExportsOCI",
     "EvaluationJob",
     "EvaluationResponse",
     "EvaluationResult",
@@ -63,6 +69,8 @@ __all__ = [
     "JobStatus",
     "JobSubmissionRequest",
     "ModelConfig",
+    "OCIConnectionConfig",
+    "OCICoordinates",
 ]
 
 # Conditional imports based on available extras

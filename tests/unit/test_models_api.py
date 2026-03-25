@@ -12,6 +12,8 @@ from evalhub.models.api import (
     CollectionRef,
     ErrorInfo,
     ErrorResponse,
+    EvaluationExports,
+    EvaluationExportsOCI,
     EvaluationJob,
     EvaluationResponse,
     EvaluationResult,
@@ -22,6 +24,8 @@ from evalhub.models.api import (
     JobStatus,
     JobSubmissionRequest,
     ModelConfig,
+    OCIConnectionConfig,
+    OCICoordinates,
     ProviderList,
 )
 from pydantic import ValidationError
@@ -317,6 +321,101 @@ class TestJobSubmissionRequest:
         assert "benchmarks" not in dumped
         assert "collection" in dumped
         assert dumped["collection"]["id"] == "healthcare_v1"
+
+    def test_submission_with_exports_oci(self) -> None:
+        """Test JobSubmissionRequest with full OCI exports configuration."""
+        request = JobSubmissionRequest(
+            name="test-eval",
+            model=ModelConfig(url="http://localhost:8000/v1", name="test-model"),
+            benchmarks=[
+                BenchmarkConfig(id="mmlu", provider_id="lm_eval", parameters={})
+            ],
+            exports=EvaluationExports(
+                oci=EvaluationExportsOCI(
+                    coordinates=OCICoordinates(
+                        oci_host="quay.io",
+                        oci_repository="my-org/my-repo",
+                        oci_tag="eval-123",
+                        oci_subject="quay.io/my-org/my-repo:model",
+                        annotations={"model": "llama2"},
+                    ),
+                    k8s=OCIConnectionConfig(connection="my-pull-secret"),
+                ),
+            ),
+        )
+        assert request.exports is not None
+        assert request.exports.oci is not None
+        assert request.exports.oci.coordinates.oci_host == "quay.io"
+        assert request.exports.oci.coordinates.oci_repository == "my-org/my-repo"
+        assert request.exports.oci.coordinates.oci_tag == "eval-123"
+        assert request.exports.oci.k8s is not None
+        assert request.exports.oci.k8s.connection == "my-pull-secret"
+
+    def test_submission_with_exports_oci_minimal(self) -> None:
+        """Test JobSubmissionRequest with minimal OCI exports (required fields only)."""
+        request = JobSubmissionRequest(
+            name="test-eval",
+            model=ModelConfig(url="http://localhost:8000/v1", name="test-model"),
+            benchmarks=[
+                BenchmarkConfig(id="mmlu", provider_id="lm_eval", parameters={})
+            ],
+            exports=EvaluationExports(
+                oci=EvaluationExportsOCI(
+                    coordinates=OCICoordinates(
+                        oci_host="quay.io",
+                        oci_repository="my-org/my-repo",
+                    ),
+                ),
+            ),
+        )
+        assert request.exports is not None
+        assert request.exports.oci is not None
+        assert request.exports.oci.coordinates.oci_tag is None
+        assert request.exports.oci.k8s is None
+
+    def test_submission_exports_excluded_when_none_on_dump(self) -> None:
+        """Test that exports is excluded from dump when not set."""
+        request = JobSubmissionRequest(
+            name="test-eval",
+            model=ModelConfig(url="http://localhost:8000/v1", name="test-model"),
+            benchmarks=[
+                BenchmarkConfig(id="mmlu", provider_id="lm_eval", parameters={})
+            ],
+        )
+        dumped = request.model_dump(exclude_none=True)
+        assert "exports" not in dumped
+
+    def test_submission_exports_oci_dump_matches_server_schema(self) -> None:
+        """Test that serialized exports matches the server's expected JSON structure."""
+        request = JobSubmissionRequest(
+            name="test-eval",
+            model=ModelConfig(url="http://localhost:8000/v1", name="test-model"),
+            benchmarks=[
+                BenchmarkConfig(id="mmlu", provider_id="lm_eval", parameters={})
+            ],
+            exports=EvaluationExports(
+                oci=EvaluationExportsOCI(
+                    coordinates=OCICoordinates(
+                        oci_host="quay.io",
+                        oci_repository="my-org/my-repo",
+                        oci_tag="eval-123",
+                    ),
+                    k8s=OCIConnectionConfig(connection="my-pull-secret"),
+                ),
+            ),
+        )
+        dumped = request.model_dump(exclude_none=True)
+        assert dumped["exports"] == {
+            "oci": {
+                "coordinates": {
+                    "oci_host": "quay.io",
+                    "oci_repository": "my-org/my-repo",
+                    "oci_tag": "eval-123",
+                    "annotations": {},
+                },
+                "k8s": {"connection": "my-pull-secret"},
+            }
+        }
 
 
 class TestExperimentConfig:
