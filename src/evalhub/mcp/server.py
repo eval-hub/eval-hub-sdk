@@ -211,7 +211,8 @@ async def handle_completion(
     name="submit_evaluation",
     description=(
         "Submit a new evaluation job to EvalHub. "
-        "Provide either 'benchmarks' or 'collection', not both."
+        "Provide either 'benchmarks' or 'collection', not both. "
+        "Use the providers and benchmarks resources to discover available provider_id and benchmark id values."
     ),
 )
 async def submit_evaluation(
@@ -224,16 +225,33 @@ async def submit_evaluation(
     experiment: dict[str, Any] | None = None,
 ) -> str:
     """Submit a new evaluation job.
+
     Evaluation Job fields have been separated for easier fill by AI agents.
 
     Args:
         name: Job name.
-        model: Model configuration {"url": "...", "name": "...", "auth": {"secret_ref": "..."} | null}.
-        benchmarks: List of benchmarks [{"id": "...", "provider_id": "...", "parameters": {...}}].
-        collection: Collection reference {"id": "...", "benchmarks": [...] | null}.
+        model: Model to evaluate. Keys: "url" (model endpoint), "name" (model identifier),
+            optional "auth" with "secret_ref" (Kubernetes Secret name for model credentials).
+            Examples:
+              Remote vLLM:  {"url": "http://vllm-server.models.svc.cluster.local:8000/v1", "name": "meta-llama/Llama-3.2-1B-Instruct"}
+              With auth:    {"url": "http://model:8000/v1", "name": "my-model", "auth": {"secret_ref": "model-api-key"}}
+        benchmarks: List of benchmarks to run. Each entry has "id", "provider_id", and optional "parameters".
+            Mutually exclusive with 'collection'.
+            Examples:
+              Simple:     [{"id": "demo_benchmark", "provider_id": "demo"}]
+              With params: [{"id": "quick_perf_test", "provider_id": "guidellm", "parameters": {"profile": "constant", "rate": 5, "max_seconds": 10, "max_requests": 20}}]
+              Multiple:   [{"id": "gsm8k", "provider_id": "lm_eval"}, {"id": "mmlu", "provider_id": "lm_eval"}]
+        collection: Collection reference to run all benchmarks in a predefined collection.
+            Mutually exclusive with 'benchmarks'. Keys: "id" (collection identifier),
+            optional "benchmarks" to run only a subset.
+            Examples:
+              Full collection: {"id": "standard"}
+              Subset:          {"id": "standard", "benchmarks": [{"id": "gsm8k", "provider_id": "lm_eval"}]}
         description: Optional job description.
-        tags: Optional list of tags.
-        experiment: Optional experiment config {"name": "...", "tags": [...], "artifact_location": "..."}.
+        tags: Optional list of tags for organizing jobs, e.g. ["nightly", "regression"].
+        experiment: Optional MLflow experiment config. Keys: "name", optional "tags" (list of {"key": ..., "value": ...}),
+            optional "artifact_location".
+            Example: {"name": "llama3-eval-experiment", "tags": [{"key": "team", "value": "nlp"}]}
     """
     client = _get_client()
 
