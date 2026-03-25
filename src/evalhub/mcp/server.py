@@ -24,7 +24,6 @@ from ..models import (
     JobSubmissionRequest,
     ModelConfig,
 )
-from ..models.api import ModelAuth
 
 logger = logging.getLogger(__name__)
 
@@ -278,28 +277,25 @@ async def submit_evaluation(
             optional "artifact_location".
             Example: {"name": "llama3-eval-experiment", "tags": [{"key": "team", "value": "nlp"}]}
     """
+    has_benchmarks = bool(benchmarks)
+    has_collection = collection is not None
+    if has_benchmarks == has_collection:
+        raise ValueError("Provide exactly one of 'benchmarks' or 'collection'.")
+
     client = _get_client()
 
-    model_auth = None
-    if model.get("auth"):
-        model_auth = ModelAuth(**model["auth"])
-
-    model_config = ModelConfig(
-        url=model["url"],
-        name=model["name"],
-        auth=model_auth,
-    )
+    model_config = ModelConfig(**model)
 
     benchmark_configs = None
-    if benchmarks:
+    if benchmarks is not None:
         benchmark_configs = [BenchmarkConfig(**b) for b in benchmarks]
 
     collection_ref = None
-    if collection:
+    if collection is not None:
         collection_ref = CollectionRef(**collection)
 
     experiment_config = None
-    if experiment:
+    if experiment is not None:
         experiment_config = ExperimentConfig(**experiment)
 
     request = JobSubmissionRequest(

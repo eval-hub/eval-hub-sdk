@@ -340,6 +340,28 @@ async def test_submit_evaluation_with_experiment(mock_client: MagicMock) -> None
     assert request.experiment.name == "my-experiment"
 
 
+async def test_submit_evaluation_both_benchmarks_and_collection(
+    mock_client: MagicMock
+) -> None:
+    with pytest.raises(ValueError, match="exactly one"):
+        await submit_evaluation(
+            name="bad-eval",
+            model={"url": "http://model:8000", "name": "llama3"},
+            benchmarks=[{"id": "gsm8k", "provider_id": "lm_eval"}],
+            collection={"id": "standard"},
+        )
+
+
+async def test_submit_evaluation_neither_benchmarks_nor_collection(
+    mock_client: MagicMock
+) -> None:
+    with pytest.raises(ValueError, match="exactly one"):
+        await submit_evaluation(
+            name="bad-eval",
+            model={"url": "http://model:8000", "name": "llama3"},
+        )
+
+
 async def test_cancel_job_tool(mock_client: MagicMock) -> None:
     result = await cancel_job("job-123")
     data = json.loads(result)
