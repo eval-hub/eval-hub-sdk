@@ -49,17 +49,17 @@ from evalhub.models.api import (
 # ---------------------------------------------------------------------------
 
 
-def _make_resource(id: str = "test-id") -> Resource:
+def _make_resource(resource_id: str = "test-id") -> Resource:
     return Resource(
-        id=id,
+        id=resource_id,
         tenant="test-tenant",
         created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
     )
 
 
-def _make_provider(id: str = "lm_eval") -> Provider:
+def _make_provider(provider_id: str = "lm_eval") -> Provider:
     return Provider(
-        resource=_make_resource(id),
+        resource=_make_resource(provider_id),
         name="LM Eval",
         description="LM Evaluation Harness provider",
         benchmarks=[
@@ -69,24 +69,32 @@ def _make_provider(id: str = "lm_eval") -> Provider:
                 description="Grade school math",
                 category="math",
                 metrics=["accuracy"],
+                num_few_shot=None,
+                dataset_size=None,
+                primary_score=None,
+                pass_criteria=None,
             )
         ],
     )
 
 
-def _make_benchmark(id: str = "gsm8k") -> Benchmark:
+def _make_benchmark(benchmark_id: str = "gsm8k") -> Benchmark:
     return Benchmark(
-        id=id,
+        id=benchmark_id,
         name="GSM8K",
         description="Grade school math",
         category="math",
         metrics=["accuracy"],
+        num_few_shot=None,
+        dataset_size=None,
+        primary_score=None,
+        pass_criteria=None,
     )
 
 
-def _make_collection(id: str = "standard") -> Collection:
+def _make_collection(collection_id: str = "standard") -> Collection:
     return Collection(
-        resource=_make_resource(id),
+        resource=_make_resource(collection_id),
         name="Standard Collection",
         description="A standard benchmark collection",
         benchmarks=[
@@ -95,10 +103,12 @@ def _make_collection(id: str = "standard") -> Collection:
     )
 
 
-def _make_job(id: str = "job-123", status: JobStatus = JobStatus.PENDING) -> EvaluationJob:
+def _make_job(
+    job_id: str = "job-123", status: JobStatus = JobStatus.PENDING
+) -> EvaluationJob:
     return EvaluationJob(
         resource=EvaluationJobResource(
-            id=id,
+            id=job_id,
             tenant="test-tenant",
             created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
         ),
@@ -110,7 +120,7 @@ def _make_job(id: str = "job-123", status: JobStatus = JobStatus.PENDING) -> Eva
 
 
 @pytest.fixture
-def mock_client():
+def mock_client() -> MagicMock:
     """Create a mock AsyncEvalHubClient and set it on the MCP server."""
     client = MagicMock()
 
@@ -140,7 +150,7 @@ def mock_client():
 # ---------------------------------------------------------------------------
 
 
-async def test_list_resources():
+async def test_list_resources() -> None:
     """Verify static resources are registered."""
     resources = await mcp.list_resources()
     uris = [str(r.uri) for r in resources]
@@ -150,7 +160,7 @@ async def test_list_resources():
     assert "evalhub://jobs" in uris
 
 
-async def test_list_resource_templates():
+async def test_list_resource_templates() -> None:
     """Verify resource templates are registered."""
     templates = await mcp.list_resource_templates()
     uri_templates = [t.uriTemplate for t in templates]
@@ -166,7 +176,7 @@ async def test_list_resource_templates():
 # ---------------------------------------------------------------------------
 
 
-async def test_read_providers(mock_client):
+async def test_read_providers(mock_client: MagicMock) -> None:
     result = await list_providers()
     data = json.loads(result)
     assert data["count"] == 1
@@ -174,7 +184,7 @@ async def test_read_providers(mock_client):
     mock_client.providers.list.assert_awaited_once()
 
 
-async def test_read_provider_by_id(mock_client):
+async def test_read_provider_by_id(mock_client: MagicMock) -> None:
     result = await get_provider("lm_eval")
     data = json.loads(result)
     assert data["name"] == "LM Eval"
@@ -182,7 +192,7 @@ async def test_read_provider_by_id(mock_client):
     mock_client.providers.get.assert_awaited_once_with("lm_eval")
 
 
-async def test_read_benchmarks(mock_client):
+async def test_read_benchmarks(mock_client: MagicMock) -> None:
     result = await list_benchmarks()
     data = json.loads(result)
     assert data["count"] == 1
@@ -190,14 +200,14 @@ async def test_read_benchmarks(mock_client):
     mock_client.benchmarks.list.assert_awaited_once()
 
 
-async def test_read_benchmarks_by_provider(mock_client):
+async def test_read_benchmarks_by_provider(mock_client: MagicMock) -> None:
     result = await list_provider_benchmarks("lm_eval")
     data = json.loads(result)
     assert data["count"] == 1
     mock_client.benchmarks.list.assert_awaited_once_with(provider_id="lm_eval")
 
 
-async def test_read_collections(mock_client):
+async def test_read_collections(mock_client: MagicMock) -> None:
     result = await list_collections()
     data = json.loads(result)
     assert data["count"] == 1
@@ -205,14 +215,14 @@ async def test_read_collections(mock_client):
     mock_client.collections.list.assert_awaited_once()
 
 
-async def test_read_collection_by_id(mock_client):
+async def test_read_collection_by_id(mock_client: MagicMock) -> None:
     result = await get_collection("standard")
     data = json.loads(result)
     assert data["name"] == "Standard Collection"
     mock_client.collections.get.assert_awaited_once_with("standard")
 
 
-async def test_read_jobs(mock_client):
+async def test_read_jobs(mock_client: MagicMock) -> None:
     result = await list_jobs()
     data = json.loads(result)
     assert data["count"] == 1
@@ -220,14 +230,14 @@ async def test_read_jobs(mock_client):
     mock_client.jobs.list.assert_awaited_once()
 
 
-async def test_read_job_by_id(mock_client):
+async def test_read_job_by_id(mock_client: MagicMock) -> None:
     result = await get_job("job-123")
     data = json.loads(result)
     assert data["name"] == "test-eval"
     mock_client.jobs.get.assert_awaited_once_with("job-123")
 
 
-async def test_read_jobs_by_status(mock_client):
+async def test_read_jobs_by_status(mock_client: MagicMock) -> None:
     mock_client.jobs.list = AsyncMock(
         return_value=[_make_job(status=JobStatus.RUNNING)]
     )
@@ -242,7 +252,7 @@ async def test_read_jobs_by_status(mock_client):
 # ---------------------------------------------------------------------------
 
 
-async def test_list_tools():
+async def test_list_tools() -> None:
     """Verify tools are registered."""
     tools = await mcp.list_tools()
     tool_names = [t.name for t in tools]
@@ -256,7 +266,7 @@ async def test_list_tools():
 # ---------------------------------------------------------------------------
 
 
-async def test_submit_evaluation(mock_client):
+async def test_submit_evaluation(mock_client: MagicMock) -> None:
     result = await submit_evaluation(
         name="my-eval",
         model={"url": "http://model:8000", "name": "llama3"},
@@ -276,7 +286,7 @@ async def test_submit_evaluation(mock_client):
     assert request.benchmarks[0].provider_id == "lm_eval"
 
 
-async def test_submit_evaluation_with_collection(mock_client):
+async def test_submit_evaluation_with_collection(mock_client: MagicMock) -> None:
     result = await submit_evaluation(
         name="collection-eval",
         model={"url": "http://model:8000", "name": "llama3"},
@@ -291,7 +301,7 @@ async def test_submit_evaluation_with_collection(mock_client):
     assert request.collection.id == "standard"
 
 
-async def test_submit_evaluation_with_model_auth(mock_client):
+async def test_submit_evaluation_with_model_auth(mock_client: MagicMock) -> None:
     await submit_evaluation(
         name="auth-eval",
         model={
@@ -308,7 +318,7 @@ async def test_submit_evaluation_with_model_auth(mock_client):
     assert request.model.auth.secret_ref == "my-secret"
 
 
-async def test_submit_evaluation_with_experiment(mock_client):
+async def test_submit_evaluation_with_experiment(mock_client: MagicMock) -> None:
     await submit_evaluation(
         name="exp-eval",
         model={"url": "http://model:8000", "name": "llama3"},
@@ -322,7 +332,7 @@ async def test_submit_evaluation_with_experiment(mock_client):
     assert request.experiment.name == "my-experiment"
 
 
-async def test_cancel_job_tool(mock_client):
+async def test_cancel_job_tool(mock_client: MagicMock) -> None:
     result = await cancel_job("job-123")
     data = json.loads(result)
     assert data["job_id"] == "job-123"
@@ -330,7 +340,7 @@ async def test_cancel_job_tool(mock_client):
     mock_client.jobs.cancel.assert_awaited_once_with("job-123", hard_delete=False)
 
 
-async def test_cancel_job_hard_delete(mock_client):
+async def test_cancel_job_hard_delete(mock_client: MagicMock) -> None:
     result = await cancel_job("job-123", hard_delete=True)
     data = json.loads(result)
     assert data["cancelled"] is True
@@ -350,7 +360,7 @@ def _arg(name: str, value: str = "") -> CompletionArgument:
     return CompletionArgument(name=name, value=value)
 
 
-async def test_completion_provider_id(mock_client):
+async def test_completion_provider_id(mock_client: MagicMock) -> None:
     mock_client.providers.list = AsyncMock(
         return_value=[_make_provider("lm_eval"), _make_provider("ragas")]
     )
@@ -364,7 +374,7 @@ async def test_completion_provider_id(mock_client):
     assert "ragas" in result.values
 
 
-async def test_completion_provider_id_partial(mock_client):
+async def test_completion_provider_id_partial(mock_client: MagicMock) -> None:
     mock_client.providers.list = AsyncMock(
         return_value=[_make_provider("lm_eval"), _make_provider("ragas")]
     )
@@ -377,7 +387,7 @@ async def test_completion_provider_id_partial(mock_client):
     assert result.values == ["lm_eval"]
 
 
-async def test_completion_collection_id(mock_client):
+async def test_completion_collection_id(mock_client: MagicMock) -> None:
     mock_client.collections.list = AsyncMock(
         return_value=[_make_collection("standard"), _make_collection("safety")]
     )
@@ -391,7 +401,7 @@ async def test_completion_collection_id(mock_client):
     assert "safety" in result.values
 
 
-async def test_completion_job_id(mock_client):
+async def test_completion_job_id(mock_client: MagicMock) -> None:
     mock_client.jobs.list = AsyncMock(
         return_value=[_make_job("job-1"), _make_job("job-2")]
     )
@@ -405,7 +415,7 @@ async def test_completion_job_id(mock_client):
     assert "job-2" in result.values
 
 
-async def test_completion_status(mock_client):
+async def test_completion_status(mock_client: MagicMock) -> None:
     result = await handle_completion(
         _template_ref("evalhub://jobs?status={status}"),
         _arg("status", "run"),
@@ -415,7 +425,7 @@ async def test_completion_status(mock_client):
     assert result.values == ["running"]
 
 
-async def test_completion_returns_none_for_prompts(mock_client):
+async def test_completion_returns_none_for_prompts(mock_client: MagicMock) -> None:
     from mcp.types import PromptReference
 
     result = await handle_completion(
@@ -431,14 +441,14 @@ async def test_completion_returns_none_for_prompts(mock_client):
 # ---------------------------------------------------------------------------
 
 
-def test_serialize_model():
+def test_serialize_model() -> None:
     provider = _make_provider()
     result = json.loads(_serialize_model(provider))
     assert result["name"] == "LM Eval"
     assert result["resource"]["id"] == "lm_eval"
 
 
-def test_serialize_list():
+def test_serialize_list() -> None:
     providers = [_make_provider("p1"), _make_provider("p2")]
     result = json.loads(_serialize_list(providers))
     assert result["count"] == 2

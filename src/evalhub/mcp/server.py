@@ -55,7 +55,10 @@ def _get_client() -> AsyncEvalHubClient:
 def _serialize_list(items: list[Any]) -> str:
     """Serialize a list of Pydantic models to JSON."""
     return json.dumps(
-        {"items": [item.model_dump(mode="json") for item in items], "count": len(items)},
+        {
+            "items": [item.model_dump(mode="json") for item in items],
+            "count": len(items),
+        },
         indent=2,
     )
 
@@ -70,7 +73,11 @@ def _serialize_model(model: Any) -> str:
 # ---------------------------------------------------------------------------
 
 
-@mcp.resource("evalhub://providers", name="providers", description="List all registered evaluation providers")
+@mcp.resource(
+    "evalhub://providers",
+    name="providers",
+    description="List all registered evaluation providers",
+)
 async def list_providers() -> str:
     client = _get_client()
     providers = await client.providers.list()
@@ -99,14 +106,22 @@ async def list_provider_benchmarks(provider_id: str) -> str:
     return _serialize_list(benchmarks)
 
 
-@mcp.resource("evalhub://benchmarks", name="benchmarks", description="List all available benchmarks")
+@mcp.resource(
+    "evalhub://benchmarks",
+    name="benchmarks",
+    description="List all available benchmarks",
+)
 async def list_benchmarks() -> str:
     client = _get_client()
     benchmarks = await client.benchmarks.list()
     return _serialize_list(benchmarks)
 
 
-@mcp.resource("evalhub://collections", name="collections", description="List all benchmark collections")
+@mcp.resource(
+    "evalhub://collections",
+    name="collections",
+    description="List all benchmark collections",
+)
 async def list_collections() -> str:
     client = _get_client()
     collections = await client.collections.list()
