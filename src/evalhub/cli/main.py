@@ -665,6 +665,7 @@ def collections_run(
         BenchmarkConfig(
             id=b.id,
             provider_id=b.provider_id,
+            parameters=b.parameters,
         )
         for b in collection.benchmarks
     ]
