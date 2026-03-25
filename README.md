@@ -383,8 +383,16 @@ from evalhub.adapter import (
 **EvalHub Service User:**
 ```python
 # Interacting with EvalHub REST API
-from evalhub.client import EvalHubClient
-from evalhub.models.api import ModelConfig, JobSubmissionRequest, BenchmarkConfig
+from evalhub import (
+    EvalHubClient,
+    BenchmarkConfig,
+    EvaluationExports,
+    EvaluationExportsOCI,
+    JobSubmissionRequest,
+    ModelConfig,
+    OCIConnectionConfig,
+    OCICoordinates,
+)
 ```
 
 ## Complete Example
