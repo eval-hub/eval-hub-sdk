@@ -14,6 +14,7 @@ import yaml
 import evalhub
 from evalhub.models import (
     BenchmarkConfig,
+    CollectionCreateRequest,
     JobStatus,
     JobSubmissionRequest,
     ModelConfig,
@@ -420,6 +421,210 @@ def eval_cancel(ctx: click.Context, job_id: str, hard_delete: bool) -> None:
 @main.group()
 def collections() -> None:
     """Browse and manage benchmark collections."""
+
+
+@collections.command("list")
+@click.option("--tag", "tag_filter", default=None, help="Filter by tag (client-side).")
+@format_option()
+@click.pass_context
+@handle_api_errors
+def collections_list(ctx: click.Context, tag_filter: str | None, output_format: str) -> None:
+    """List all available benchmark collections.
+
+    \b
+    Examples:
+      evalhub collections list
+      evalhub collections list --tag safety
+      evalhub collections list --format json
+    """
+    client = get_client(ctx)
+    items = client.collections.list()
+    if tag_filter:
+        items = [c for c in items if tag_filter in c.tags]
+    rows = [
+        {
+            "id": c.resource.id,
+            "name": c.name,
+            "description": c.description,
+            "tags": ", ".join(c.tags),
+            "benchmarks": len(c.benchmarks),
+        }
+        for c in items
+    ]
+    output(
+        rows,
+        output_format=output_format,
+        columns=["id", "name", "description", "tags", "benchmarks"],
+    )
+
+
+@collections.command("describe")
+@click.argument("collection_id")
+@format_option()
+@click.pass_context
+@handle_api_errors
+def collections_describe(
+    ctx: click.Context, collection_id: str, output_format: str
+) -> None:
+    """Show detailed information about a collection.
+
+    \b
+    Examples:
+      evalhub collections describe rag-safety
+      evalhub collections describe rag-safety --format json
+    """
+    client = get_client(ctx)
+    collection = client.collections.get(collection_id)
+
+    if output_format in ("json", "yaml"):
+        output([collection.model_dump(mode="json")], output_format=output_format)
+        return
+
+    click.echo(f"Collection: {collection.name}")
+    click.echo(f"ID:          {collection.resource.id}")
+    click.echo(f"Description: {collection.description}")
+    if collection.tags:
+        click.echo(f"Tags:        {', '.join(collection.tags)}")
+    if collection.pass_criteria:
+        click.echo(f"Pass threshold: {collection.pass_criteria.threshold}")
+    click.echo(f"\nBenchmarks ({len(collection.benchmarks)}):")
+    if collection.benchmarks:
+        rows = [
+            {
+                "benchmark_id": b.benchmark_id,
+                "provider_id": b.provider_id,
+                "weight": b.weight,
+            }
+            for b in collection.benchmarks
+        ]
+        output(rows, output_format=output_format, columns=["benchmark_id", "provider_id", "weight"])
+    else:
+        click.echo("  (none)")
+
+
+@collections.command("create")
+@click.option(
+    "--file",
+    "spec_file",
+    type=click.Path(exists=True),
+    required=True,
+    help="YAML or JSON file describing the collection.",
+)
+@format_option()
+@click.pass_context
+@handle_api_errors
+def collections_create(ctx: click.Context, spec_file: str, output_format: str) -> None:
+    """Create a new benchmark collection from a spec file.
+
+    \b
+    Examples:
+      evalhub collections create --file bias-fairness-collection.yaml
+      evalhub collections create --file collection.json --format json
+    """
+    data = _load_config_file(spec_file)
+    # Validate the input against the model before sending
+    CollectionCreateRequest(**data)
+    client = get_client(ctx)
+    collection = client.collections.create(data)
+    click.echo(f"Collection created: {collection.resource.id}")
+    if output_format in ("json", "yaml"):
+        output([collection.model_dump(mode="json")], output_format=output_format)
+
+
+@collections.command("delete")
+@click.argument("collection_id")
+@click.confirmation_option(prompt="Are you sure you want to delete this collection?")
+@click.pass_context
+@handle_api_errors
+def collections_delete(ctx: click.Context, collection_id: str) -> None:
+    """Delete a benchmark collection.
+
+    \b
+    Examples:
+      evalhub collections delete rag-safety
+    """
+    client = get_client(ctx)
+    client.collections.delete(collection_id)
+    click.echo(f"Collection {collection_id} deleted.")
+
+
+@collections.command("run")
+@click.argument("collection_id")
+@click.option("--model-url", required=True, help="Model endpoint URL.")
+@click.option("--model-name", required=True, help="Model name or identifier.")
+@click.option("--name", default=None, help="Job name (defaults to collection name).")
+@click.option(
+    "--wait", "wait_for", is_flag=True, default=False, help="Block until job completes."
+)
+@click.option(
+    "--timeout", type=float, default=None, help="Timeout in seconds when using --wait."
+)
+@click.option(
+    "--poll-interval",
+    type=float,
+    default=5.0,
+    show_default=True,
+    help="Poll interval in seconds when using --wait.",
+)
+@format_option()
+@click.pass_context
+@handle_api_errors
+def collections_run(
+    ctx: click.Context,
+    collection_id: str,
+    model_url: str,
+    model_name: str,
+    name: str | None,
+    wait_for: bool,
+    timeout: float | None,
+    poll_interval: float,
+    output_format: str,
+) -> None:
+    """Run an evaluation collection against a model.
+
+    Fetches the collection, expands its benchmarks into a job submission,
+    and submits it to eval-hub.
+
+    \b
+    Examples:
+      evalhub collections run rag-safety --model-url http://vllm:8000/v1 --model-name llama3
+      evalhub collections run rag-safety --model-url http://vllm:8000/v1 --model-name llama3 --wait
+    """
+    client = get_client(ctx)
+    collection = client.collections.get(collection_id)
+
+    job_name = name or f"{collection.name} ({collection_id})"
+    benchmarks = [
+        BenchmarkConfig(
+            id=b.benchmark_id,
+            provider_id=b.provider_id,
+        )
+        for b in collection.benchmarks
+    ]
+    if not benchmarks:
+        raise click.ClickException(
+            f"Collection '{collection_id}' has no benchmarks to run."
+        )
+
+    request = JobSubmissionRequest(
+        name=job_name,
+        model=ModelConfig(url=model_url, name=model_name),
+        benchmarks=benchmarks,
+    )
+    job = client.jobs.submit(request)
+    click.echo(f"Job submitted: {job.id}")
+
+    if wait_for:
+        click.echo(f"Waiting for job {job.id} to complete...")
+        job = client.jobs.wait_for_completion(
+            job.id, timeout=timeout, poll_interval=poll_interval
+        )
+        click.echo(f"Job {job.id} finished with state: {job.state.value}")
+        if job.state == JobStatus.FAILED:
+            ctx.exit(1)
+
+    if output_format in ("json", "yaml"):
+        output([job.model_dump(mode="json")], output_format=output_format)
 
 
 @main.group()

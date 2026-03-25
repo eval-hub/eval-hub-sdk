@@ -9,6 +9,7 @@ from .api import (
     BenchmarksList,
     BenchmarkStatus,
     Collection,
+    CollectionCreateRequest,
     CollectionList,
     CollectionRef,
     ErrorInfo,
@@ -66,6 +67,8 @@ __all__ = [
     "PrimaryScore",
     "PassCriteria",
     # Collection models
+    "CollectionCreateRequest",
+    "CollectionList",
     "Resource",
     "Collection",
     "CollectionList",

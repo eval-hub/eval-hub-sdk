@@ -53,6 +53,38 @@ class AsyncCollectionsResource:
         )
         return Collection(**response.json())
 
+    async def create(self, data: dict, *, tenant: str | None = None) -> Collection:
+        """Create a new benchmark collection.
+
+        Args:
+            data: Collection specification as a dict (name, description, benchmarks, ...)
+            tenant: Tenant override for this request (default: client-level tenant)
+
+        Returns:
+            Collection: The newly created collection
+
+        Raises:
+            httpx.HTTPError: If the request fails
+        """
+        response = await self._client._request_post(
+            "/evaluations/collections", json=data, tenant=tenant
+        )
+        return Collection(**response.json())
+
+    async def delete(self, collection_id: str, *, tenant: str | None = None) -> None:
+        """Delete a benchmark collection.
+
+        Args:
+            collection_id: The collection identifier
+            tenant: Tenant override for this request (default: client-level tenant)
+
+        Raises:
+            httpx.HTTPError: If the collection is not found or request fails
+        """
+        await self._client._request_delete(
+            f"/evaluations/collections/{collection_id}", tenant=tenant
+        )
+
 
 class SyncCollectionsResource:
     """Synchronous resource for collection operations."""
@@ -94,3 +126,35 @@ class SyncCollectionsResource:
             f"/evaluations/collections/{collection_id}", tenant=tenant
         )
         return Collection(**response.json())
+
+    def create(self, data: dict, *, tenant: str | None = None) -> Collection:
+        """Create a new benchmark collection.
+
+        Args:
+            data: Collection specification as a dict (name, description, benchmarks, ...)
+            tenant: Tenant override for this request (default: client-level tenant)
+
+        Returns:
+            Collection: The newly created collection
+
+        Raises:
+            httpx.HTTPError: If the request fails
+        """
+        response = self._client._request_post(
+            "/evaluations/collections", json=data, tenant=tenant
+        )
+        return Collection(**response.json())
+
+    def delete(self, collection_id: str, *, tenant: str | None = None) -> None:
+        """Delete a benchmark collection.
+
+        Args:
+            collection_id: The collection identifier
+            tenant: Tenant override for this request (default: client-level tenant)
+
+        Raises:
+            httpx.HTTPError: If the collection is not found or request fails
+        """
+        self._client._request_delete(
+            f"/evaluations/collections/{collection_id}", tenant=tenant
+        )
