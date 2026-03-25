@@ -589,10 +589,9 @@ def collections_create(ctx: click.Context, spec_file: str, output_format: str) -
       evalhub collections create --file collection.json --format json
     """
     data = _load_config_file(spec_file)
-    # Validate the input against the model before sending
-    CollectionCreateRequest(**data)
+    request = CollectionCreateRequest(**data)
     client = get_client(ctx)
-    collection = client.collections.create(data)
+    collection = client.collections.create(request.model_dump(mode="json"))
     click.echo(f"Collection created: {collection.resource.id}")
     if output_format in ("json", "yaml"):
         output([collection.model_dump(mode="json")], output_format=output_format)
