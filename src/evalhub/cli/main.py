@@ -422,7 +422,6 @@ def eval_results(ctx: click.Context, job_id: str, output_format: str) -> None:
 
     if not job.results or not job.results.benchmarks:
         click.echo("No results available.")
-        ctx.exit(0)
         return
 
     if output_format in ("json", "yaml"):
