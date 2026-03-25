@@ -83,7 +83,7 @@ examples = [
 ]
 
 # All core functionality (excludes examples which are optional)
-all = ["eval-hub-sdk[core,adapter,client,cli,dev]"]
+all = ["eval-hub-sdk[core,adapter,client,cli,mcp,dev]"]
 
 [project.scripts]
 evalhub = "evalhub.cli.bootstrap:main"

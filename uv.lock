@@ -664,6 +664,7 @@ adapter = [
 all = [
     { name = "click" },
     { name = "httpx" },
+    { name = "mcp" },
     { name = "mypy" },
     { name = "olot" },
     { name = "oras" },
@@ -731,7 +732,7 @@ dev = [
 requires-dist = [
     { name = "click", marker = "extra == 'cli'", specifier = ">=8.1.0" },
     { name = "click", marker = "extra == 'mcp'", specifier = ">=8.1.0" },
-    { name = "eval-hub-sdk", extras = ["adapter", "cli", "client", "core", "dev"], marker = "extra == 'all'" },
+    { name = "eval-hub-sdk", extras = ["adapter", "cli", "client", "core", "dev", "mcp"], marker = "extra == 'all'" },
     { name = "eval-hub-sdk", extras = ["cli"], marker = "extra == 'dev'" },
     { name = "eval-hub-sdk", extras = ["core"], marker = "extra == 'adapter'" },
     { name = "eval-hub-sdk", extras = ["core"], marker = "extra == 'cli'" },
