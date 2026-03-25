@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sys
 import time
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import click
@@ -103,9 +105,19 @@ def _build_request_from_flags(
     provider: str,
     benchmark: tuple[str, ...],
     description: str | None,
+    metrics: tuple[str, ...],
+    dataset: str | None,
 ) -> JobSubmissionRequest:
     """Build a JobSubmissionRequest from CLI flags."""
-    benchmarks = [BenchmarkConfig(id=b, provider_id=provider) for b in benchmark]
+    parameters: dict[str, Any] = {}
+    if metrics:
+        parameters["metrics"] = list(metrics)
+    if dataset:
+        parameters["dataset"] = dataset
+    benchmarks = [
+        BenchmarkConfig(id=b, provider_id=provider, parameters=parameters)
+        for b in benchmark
+    ]
     return JobSubmissionRequest(
         name=name,
         description=description,
@@ -127,6 +139,10 @@ def _build_request_from_flags(
 @click.option("--model-name", default=None, help="Model name or identifier.")
 @click.option("--provider", default=None, help="Evaluation provider ID.")
 @click.option("--benchmark", "-b", multiple=True, help="Benchmark ID (repeatable).")
+@click.option(
+    "--metric", "-m", "metrics", multiple=True, help="Metric name (repeatable)."
+)
+@click.option("--dataset", default=None, help="Dataset identifier or path.")
 @click.option("--description", default=None, help="Job description.")
 @click.option(
     "--wait", "wait_for", is_flag=True, default=False, help="Block until job completes."
@@ -152,6 +168,8 @@ def eval_run(
     model_name: str | None,
     provider: str | None,
     benchmark: tuple[str, ...],
+    metrics: tuple[str, ...],
+    dataset: str | None,
     description: str | None,
     wait_for: bool,
     timeout: float | None,
@@ -192,6 +210,8 @@ def eval_run(
             provider=provider,
             benchmark=benchmark,
             description=description,
+            metrics=metrics,
+            dataset=dataset,
         )
 
     job = client.jobs.submit(request)
@@ -221,6 +241,15 @@ def eval_run(
 )
 @click.option("--limit", type=int, default=None, help="Maximum number of jobs to list.")
 @click.option(
+    "--provider", "provider_filter", default=None, help="Filter by provider ID."
+)
+@click.option(
+    "--since",
+    "since_filter",
+    default=None,
+    help="Only show jobs created within this window (e.g. '24h', '7d').",
+)
+@click.option(
     "--watch",
     is_flag=True,
     default=False,
@@ -241,6 +270,8 @@ def eval_status(
     job_id: str | None,
     status_filter: str | None,
     limit: int | None,
+    provider_filter: str | None,
+    since_filter: str | None,
     watch: bool,
     poll_interval: float,
     output_format: str,
@@ -249,17 +280,37 @@ def eval_status(
 
     \b
     Examples:
-      evalhub eval status                     # list all jobs
-      evalhub eval status eval-123            # show single job
-      evalhub eval status --status running    # filter by status
-      evalhub eval status eval-123 --watch    # watch until complete
+      evalhub eval status                            # list all jobs
+      evalhub eval status eval-123                   # show single job
+      evalhub eval status --status running           # filter by status
+      evalhub eval status --provider lm_eval --since 24h
+      evalhub eval status eval-123 --watch           # watch until complete
     """
+    if watch and job_id is None:
+        raise click.UsageError("--watch requires a job ID.")
+
     client = get_client(ctx)
 
     if job_id is None:
         # List mode
         parsed_status = JobStatus(status_filter) if status_filter else None
+        since_dt = _parse_since(since_filter) if since_filter else None
         jobs = client.jobs.list(status=parsed_status, limit=limit)
+
+        # Client-side filters (server API only supports status + limit)
+        if provider_filter:
+            jobs = [
+                j
+                for j in jobs
+                if j.benchmarks and j.benchmarks[0].provider_id == provider_filter
+            ]
+        if since_dt:
+            jobs = [
+                j
+                for j in jobs
+                if j.resource.created_at and j.resource.created_at >= since_dt
+            ]
+
         rows = [
             {
                 "id": j.id,
@@ -290,6 +341,18 @@ def eval_status(
         return
 
     _print_job_detail(job)
+
+
+def _parse_since(value: str) -> datetime:
+    """Parse a duration string like '24h' or '7d' into an absolute UTC datetime."""
+    m = re.fullmatch(r"(\d+)([hd])", value.strip())
+    if not m:
+        raise click.BadParameter(
+            f"Invalid --since value {value!r}. Use e.g. '24h' or '7d'."
+        )
+    amount, unit = int(m.group(1)), m.group(2)
+    delta = timedelta(hours=amount) if unit == "h" else timedelta(days=amount)
+    return datetime.now(tz=UTC) - delta
 
 
 def _watch_job(client: Any, job_id: str, poll_interval: float) -> None:
