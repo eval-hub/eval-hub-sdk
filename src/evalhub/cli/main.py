@@ -218,7 +218,9 @@ def eval_run(
         job = client.jobs.wait_for_completion(
             job.id, timeout=timeout, poll_interval=poll_interval
         )
-        click.echo(f"Job {job.id} finished with state: {job.state.value}", err=structured)
+        click.echo(
+            f"Job {job.id} finished with state: {job.state.value}", err=structured
+        )
         if job.state == JobStatus.FAILED:
             ctx.exit(1)
 
@@ -682,7 +684,9 @@ def collections_run(
         job = client.jobs.wait_for_completion(
             job.id, timeout=timeout, poll_interval=poll_interval
         )
-        click.echo(f"Job {job.id} finished with state: {job.state.value}", err=structured)
+        click.echo(
+            f"Job {job.id} finished with state: {job.state.value}", err=structured
+        )
         if job.state == JobStatus.FAILED:
             ctx.exit(1)
 
