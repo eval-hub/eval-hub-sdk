@@ -164,7 +164,13 @@ async def get_job(job_id: str) -> str:
 )
 async def list_jobs_by_status(status: str) -> str:
     client = _get_client()
-    job_status = JobStatus(status)
+    try:
+        job_status = JobStatus(status)
+    except ValueError:
+        valid = ", ".join(s.value for s in JobStatus)
+        return json.dumps(
+            {"error": f"Invalid status '{status}'. Valid values: {valid}", "items": [], "count": 0}
+        )
     jobs = await client.jobs.list(status=job_status)
     return _serialize_list(jobs)
 

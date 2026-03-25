@@ -245,6 +245,16 @@ async def test_read_jobs_by_status(mock_client: MagicMock) -> None:
     mock_client.jobs.list.assert_awaited_once_with(status=JobStatus.RUNNING)
 
 
+async def test_read_jobs_by_invalid_status(mock_client: MagicMock) -> None:
+    result = await list_jobs_by_status("bogus")
+    data = json.loads(result)
+    assert data["count"] == 0
+    assert data["items"] == []
+    assert "Invalid status" in data["error"]
+    assert "bogus" in data["error"]
+    mock_client.jobs.list.assert_not_awaited()
+
+
 # ---------------------------------------------------------------------------
 # Tool listing tests
 # ---------------------------------------------------------------------------
