@@ -348,9 +348,7 @@ class TestEvalHubClient:
             "tags": [],
             "status": {"state": JobStatus.PENDING.value},
             "model": {"url": "http://localhost:8000/v1", "name": "test-model"},
-            "benchmarks": [
-                {"id": "mmlu", "provider_id": "lm_eval", "parameters": {}}
-            ],
+            "benchmarks": [{"id": "mmlu", "provider_id": "lm_eval", "parameters": {}}],
             "exports": {
                 "oci": {
                     "coordinates": {
