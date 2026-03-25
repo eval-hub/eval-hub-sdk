@@ -215,18 +215,19 @@ def eval_run(
         )
 
     job = client.jobs.submit(request)
-    click.echo(f"Job submitted: {job.id}")
+    structured = output_format in ("json", "yaml")
+    click.echo(f"Job submitted: {job.id}", err=structured)
 
     if wait_for:
-        click.echo(f"Waiting for job {job.id} to complete...")
+        click.echo(f"Waiting for job {job.id} to complete...", err=structured)
         job = client.jobs.wait_for_completion(
             job.id, timeout=timeout, poll_interval=poll_interval
         )
-        click.echo(f"Job {job.id} finished with state: {job.state.value}")
+        click.echo(f"Job {job.id} finished with state: {job.state.value}", err=structured)
         if job.state == JobStatus.FAILED:
             ctx.exit(1)
 
-    if output_format in ("json", "yaml"):
+    if structured:
         output([job.model_dump(mode="json")], output_format=output_format)
 
 
@@ -679,18 +680,19 @@ def collections_run(
         benchmarks=benchmarks,
     )
     job = client.jobs.submit(request)
-    click.echo(f"Job submitted: {job.id}")
+    structured = output_format in ("json", "yaml")
+    click.echo(f"Job submitted: {job.id}", err=structured)
 
     if wait_for:
-        click.echo(f"Waiting for job {job.id} to complete...")
+        click.echo(f"Waiting for job {job.id} to complete...", err=structured)
         job = client.jobs.wait_for_completion(
             job.id, timeout=timeout, poll_interval=poll_interval
         )
-        click.echo(f"Job {job.id} finished with state: {job.state.value}")
+        click.echo(f"Job {job.id} finished with state: {job.state.value}", err=structured)
         if job.state == JobStatus.FAILED:
             ctx.exit(1)
 
-    if output_format in ("json", "yaml"):
+    if structured:
         output([job.model_dump(mode="json")], output_format=output_format)
 
 
