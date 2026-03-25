@@ -107,6 +107,10 @@ class JobSpec(BaseModel):
     experiment_name: str | None = Field(
         default=None, description="Name for this evaluation experiment"
     )
+    mlflow_experiment_id: str | None = Field(
+        default=None,
+        description="MLflow experiment ID for logging runs and artifacts",
+    )
     tags: list[dict[str, str]] = Field(
         default_factory=list, description="Custom tags for the job"
     )
