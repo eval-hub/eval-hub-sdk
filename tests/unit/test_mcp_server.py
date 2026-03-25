@@ -5,12 +5,10 @@ correctly delegate to the client methods.
 """
 
 import json
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from mcp.types import CompletionArgument, ResourceTemplateReference
-
 from evalhub.mcp.server import (
     _serialize_list,
     _serialize_model,
@@ -42,7 +40,7 @@ from evalhub.models.api import (
     Provider,
     Resource,
 )
-
+from mcp.types import CompletionArgument, ResourceTemplateReference
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -53,7 +51,7 @@ def _make_resource(resource_id: str = "test-id") -> Resource:
     return Resource(
         id=resource_id,
         tenant="test-tenant",
-        created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        created_at=datetime(2025, 1, 1, tzinfo=UTC),
     )
 
 
@@ -110,7 +108,7 @@ def _make_job(
         resource=EvaluationJobResource(
             id=job_id,
             tenant="test-tenant",
-            created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            created_at=datetime(2025, 1, 1, tzinfo=UTC),
         ),
         status=EvaluationJobStatus(state=status),
         name="test-eval",
@@ -292,7 +290,7 @@ async def test_submit_evaluation_with_collection(mock_client: MagicMock) -> None
         model={"url": "http://model:8000", "name": "llama3"},
         collection={"id": "standard"},
     )
-    data = json.loads(result)
+    json.loads(result)  # validate JSON output
 
     call_args = mock_client.jobs.submit.call_args
     request = call_args[0][0]
