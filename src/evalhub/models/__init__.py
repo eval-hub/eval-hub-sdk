@@ -71,7 +71,6 @@ __all__ = [
     "CollectionList",
     "Resource",
     "Collection",
-    "CollectionList",
     "CollectionRef",
     # Framework models
     "FrameworkInfo",
