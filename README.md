@@ -672,6 +672,16 @@ mypy src/evalhub
 pytest -v --cov=src/evalhub
 ```
 
+### Installing Pre-Release Versions
+
+Pre-release development versions are published to [TestPyPI](https://test.pypi.org/). To install the latest pre-release:
+
+```bash
+pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ --pre eval-hub-sdk
+```
+
+The `--extra-index-url` flag ensures that dependencies are still resolved from the main PyPI index.
+
 ## Contributing
 
 1. Fork the repository
