@@ -24,6 +24,8 @@ Installation extras:
 """
 
 # Always available - core models
+from importlib.metadata import PackageNotFoundError, version
+
 from .models import (
     BenchmarkConfig,
     BenchmarkInfo,
@@ -45,8 +47,6 @@ from .models import (
     OCIConnectionConfig,
     OCICoordinates,
 )
-
-from importlib.metadata import PackageNotFoundError, version
 
 try:
     __version__ = version("eval-hub-sdk")
