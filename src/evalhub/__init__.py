@@ -46,7 +46,12 @@ from .models import (
     OCICoordinates,
 )
 
-__version__ = "0.1.4"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("eval-hub-sdk")
+except PackageNotFoundError:
+    __version__ = "unknown"
 
 # Base exports - always available
 __all__ = [
