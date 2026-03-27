@@ -103,3 +103,4 @@ def test_mcp_cli_flags_override_profile(
         insecure=False,
         timeout=30.0,
     )
+    mock_set_client.assert_called_once()
