@@ -59,8 +59,7 @@ cli = [
 
 # MCP server - for AI agent access to EvalHub
 mcp = [
-    "eval-hub-sdk[core]",
-    "click>=8.1.0",
+    "eval-hub-sdk[cli]",
     "mcp>=1.0.0",
 ]
 
@@ -87,7 +86,6 @@ all = ["eval-hub-sdk[core,adapter,client,cli,mcp,dev]"]
 
 [project.scripts]
 evalhub = "evalhub.cli.bootstrap:main"
-evalhub-mcp = "evalhub.mcp.__main__:main"
 
 [project.urls]
 Homepage = "https://github.com/eval-hub"
