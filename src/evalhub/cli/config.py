@@ -7,9 +7,11 @@ Config is stored at ~/.config/evalhub/config.yaml with structure:
       default:
         base_url: http://localhost:8080
         token: ...
+        tenant: null  # empty tenant for localhost
       prod:
         base_url: https://evalhub.example.com
         token: ...
+        tenant: team-a
 """
 
 from __future__ import annotations
