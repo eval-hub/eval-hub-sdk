@@ -283,6 +283,16 @@ class TestConfigListCommand:
         assert result.exit_code == 0
         assert "Missing required keys" not in result.output
 
+    def test_list_localhost_profile_empty_tenant_no_missing(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
+        runner.invoke(main, ["config", "set", "base_url", "http://localhost:8080"])
+        runner.invoke(main, ["config", "set", "token", "dev-token"])
+        runner.invoke(main, ["config", "set", "tenant", ""])
+        result = runner.invoke(main, ["config", "list"])
+        assert result.exit_code == 0
+        assert "Missing required keys" not in result.output
+
 
 class TestConfigUseCommand:
     def test_use_switches_active_profile(

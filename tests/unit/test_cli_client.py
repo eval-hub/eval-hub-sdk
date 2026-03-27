@@ -47,29 +47,29 @@ class TestCreateClient:
         assert client.tenant is None
         client.close()
 
-    def test_localhost_profile_tenant_null(self, config_file: Path) -> None:
-        """A localhost profile sets tenant to null — no X-Tenant header, no missing-key warning."""
+    def test_localhost_profile_empty_tenant(self, config_file: Path) -> None:
+        """A localhost profile sets tenant to empty — no X-Tenant header, no missing-key warning."""
         data = {
             "active_profile": "default",
             "profiles": {
                 "default": {
                     "base_url": "http://localhost:8080",
                     "token": "dev-token",
-                    "tenant": None,
+                    "tenant": "",
                 }
             },
         }
         save_config(data)
 
-        # config.yaml renders as "tenant: null\n" which YAML loads back as None
+        # config.yaml renders as "tenant: ''\n" which YAML loads back as ""
         raw = config_file.read_text()
-        assert "tenant: null" in raw
+        assert "tenant: ''" in raw
 
         assert missing_required_keys(data) == []
 
         client = create_client()
         assert client.base_url == "http://localhost:8080"
-        assert client.tenant is None
+        assert client.tenant == ""
         client.close()
 
     def test_reads_from_profile(self, config_file: Path) -> None:
