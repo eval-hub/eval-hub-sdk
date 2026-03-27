@@ -12,7 +12,12 @@ import httpx
 import pytest
 from click.testing import CliRunner
 from evalhub.cli.client import create_client, get_client, handle_api_errors
-from evalhub.cli.config import load_config, missing_required_keys, save_config, set_value
+from evalhub.cli.config import (
+    load_config,
+    missing_required_keys,
+    save_config,
+    set_value,
+)
 from evalhub.cli.main import main
 from evalhub.client import ClientError, JobNotFoundError
 
@@ -44,10 +49,16 @@ class TestCreateClient:
 
     def test_localhost_profile_tenant_null(self, config_file: Path) -> None:
         """A localhost profile sets tenant to null — no X-Tenant header, no missing-key warning."""
-        data = load_config()
-        set_value(data, "base_url", "http://localhost:8080")
-        set_value(data, "token", "dev-token")
-        set_value(data, "tenant", None)
+        data = {
+            "active_profile": "default",
+            "profiles": {
+                "default": {
+                    "base_url": "http://localhost:8080",
+                    "token": "dev-token",
+                    "tenant": None,
+                }
+            },
+        }
         save_config(data)
 
         # config.yaml renders as "tenant: null\n" which YAML loads back as None
