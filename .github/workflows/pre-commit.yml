@@ -9,7 +9,7 @@ name: Pre-commit
 # Version mapping:
 # - pre-commit-hooks: v4.5.0
 # - ruff-pre-commit: v0.1.6 -> ruff==0.1.6
-# - mirrors-mypy: v1.7.1 -> mypy==1.7.1
+# - mirrors-mypy: v1.19.1 -> mypy==1.19.1
 # - pyproject.toml dev deps: pytest>=7.4.0, ruff==0.1.6, etc.
 
 on:

@@ -171,7 +171,7 @@ class _MlflowOps:
         mlflow.set_experiment(job_spec.experiment_name)
         run_id = ""
         with mlflow.start_run(run_name=job_spec.id, tags=run_tags) as active_run:
-            run_id = active_run.info.run_id
+            run_id = str(active_run.info.run_id)
             mlflow.log_params({p.key: p.value for p in params})
             mlflow.log_metrics({m.key: m.value for m in metrics})
 

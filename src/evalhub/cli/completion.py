@@ -2,29 +2,59 @@
 
 from __future__ import annotations
 
-import click
+import os
 
-_POWERSHELL_SCRIPT = """\
-Register-ArgumentCompleter -Native -CommandName evalhub -ScriptBlock {
+import click
+from click.shell_completion import (
+    CompletionItem,
+    ShellComplete,
+    add_completion_class,
+    split_arg_string,
+)
+
+_SOURCE_POWERSHELL = """\
+Register-ArgumentCompleter -Native -CommandName %(prog_name)s -ScriptBlock {
     param($wordToComplete, $commandAst, $cursorPosition)
-    $env:_EVALHUB_COMPLETE = 'powershell_complete'
-    $env:COMP_WORDS = $commandAst.ToString()
-    $env:COMP_CWORD = $cursorPosition
-    evalhub | ForEach-Object {
-        $type, $value, $help = $_ -split '\\t', 3
+    $env:%(complete_var)s = 'powershell_complete'
+    $env:_EVALHUB_WORDS = $commandAst.ToString()
+    $env:_EVALHUB_WORD_TO_COMPLETE = $wordToComplete
+    %(prog_name)s | ForEach-Object {
+        $type, $value, $help = $_ -split ',', 3
         [System.Management.Automation.CompletionResult]::new(
             $value, $value,
             $(if ($type -eq 'dir') { 'ProviderContainer' }
               elseif ($type -eq 'file') { 'ProviderItem' }
               else { 'ParameterValue' }),
-            $(if ($help) { $help } else { $value })
+            $(if ($help) { $help } else { ' ' })
         )
     }
-    Remove-Item Env:_EVALHUB_COMPLETE
-    Remove-Item Env:COMP_WORDS
-    Remove-Item Env:COMP_CWORD
+    Remove-Item Env:%(complete_var)s
+    Remove-Item Env:_EVALHUB_WORDS
+    Remove-Item Env:_EVALHUB_WORD_TO_COMPLETE
 }
 """
+
+
+class PowerShellComplete(ShellComplete):
+    """Shell completion for PowerShell."""
+
+    name = "powershell"
+    source_template = _SOURCE_POWERSHELL
+
+    def get_completion_args(self) -> tuple[list[str], str]:
+        cwords = split_arg_string(os.environ["_EVALHUB_WORDS"])
+        incomplete = os.environ.get("_EVALHUB_WORD_TO_COMPLETE", "")
+        # All args after the program name, excluding the incomplete word
+        args = cwords[1:]
+        if args and args[-1] == incomplete:
+            args = args[:-1]
+        return args, incomplete
+
+    def format_completion(self, item: CompletionItem) -> str:
+        return f"{item.type},{item.value},{item.help or ''}"
+
+
+add_completion_class(PowerShellComplete)
 
 
 def _get_completion_script(shell: str) -> str:
@@ -90,4 +120,4 @@ def completion_fish() -> None:
 @completion.command("powershell")
 def completion_powershell() -> None:
     """Generate PowerShell completion script."""
-    click.echo(_POWERSHELL_SCRIPT)
+    click.echo(_get_completion_script("powershell"))
