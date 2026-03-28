@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
 import pytest
 from click.shell_completion import CompletionItem
 from click.testing import CliRunner
@@ -156,7 +154,9 @@ class TestPowerShellCompleteClass:
         assert args == ["completion"]
         assert incomplete == "ba"
 
-    def test_get_completion_args_empty_incomplete(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_get_completion_args_empty_incomplete(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("_EVALHUB_WORDS", "evalhub completion")
         monkeypatch.setenv("_EVALHUB_WORD_TO_COMPLETE", "")
         comp = PowerShellComplete(main, {}, "evalhub", "_EVALHUB_COMPLETE")
@@ -178,5 +178,6 @@ class TestPowerShellCompleteClass:
 
     def test_registered_with_click(self) -> None:
         from click.shell_completion import get_completion_class
+
         cls = get_completion_class("powershell")
         assert cls is PowerShellComplete
