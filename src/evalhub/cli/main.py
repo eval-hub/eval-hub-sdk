@@ -24,6 +24,7 @@ from evalhub.models import (
 
 from . import config as cfg
 from .client import get_client, handle_api_errors
+from .completion import completion
 from .formatter import format_option, output
 
 
@@ -70,6 +71,9 @@ def main(
     ctx.obj["profile"] = profile
     ctx.obj["base_url"] = base_url
     ctx.obj["token"] = token
+
+
+main.add_command(completion)
 
 
 @main.command()
