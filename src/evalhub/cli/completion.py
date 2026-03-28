@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import click
 
-
 _POWERSHELL_SCRIPT = """\
 Register-ArgumentCompleter -Native -CommandName evalhub -ScriptBlock {
     param($wordToComplete, $commandAst, $cursorPosition)
