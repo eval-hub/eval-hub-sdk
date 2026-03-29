@@ -63,7 +63,17 @@ def main(
     token: str | None,
     verbose: bool,
 ) -> None:
-    """EvalHub CLI - manage evaluations, providers, collections, and configuration."""
+    """EvalHub CLI - manage evaluations, providers, collections, and configuration.
+
+    \b
+    Quick start:
+      evalhub config set base_url http://localhost:8080
+      evalhub config set token my-api-token
+      evalhub config set tenant my-tenant
+      evalhub health
+      evalhub eval run --config eval.yaml
+      evalhub eval status
+    """
     if not verbose:
         logging.getLogger("evalhub").setLevel(logging.ERROR)
     ctx.ensure_object(dict)
@@ -74,13 +84,31 @@ def main(
 
 @main.command()
 def version() -> None:
-    """Print version and build info."""
+    """Print the EvalHub CLI version.
+
+    \b
+    Examples:
+      evalhub version
+    """
     click.echo(f"evalhub {evalhub.__version__}")
 
 
 @main.group()
 def eval() -> None:
-    """Submit and manage evaluation jobs."""
+    """Submit and manage evaluation jobs.
+
+    \b
+    Use 'eval run' to submit a new evaluation, 'eval status' to track
+    progress, 'eval results' to fetch outcomes, and 'eval cancel' to
+    abort a running job.
+
+    \b
+    Examples:
+      evalhub eval run --config eval.yaml
+      evalhub eval status
+      evalhub eval results eval-123
+      evalhub eval cancel eval-123
+    """
 
 
 def _load_config_file(path: str) -> dict[str, Any]:
@@ -480,7 +508,20 @@ def eval_cancel(ctx: click.Context, job_id: str, hard_delete: bool) -> None:
 
 @main.group()
 def collections() -> None:
-    """Browse and manage benchmark collections."""
+    """Browse and manage benchmark collections.
+
+    \b
+    Collections group related benchmarks together for convenient
+    evaluation. Use 'collections list' to browse, 'collections describe'
+    for details, 'collections run' to evaluate a model against a
+    collection, or 'collections create/delete' to manage them.
+
+    \b
+    Examples:
+      evalhub collections list
+      evalhub collections describe rag-safety
+      evalhub collections run rag-safety --model-url http://vllm:8000/v1 --model-name llama3
+    """
 
 
 @collections.command("list")
@@ -696,7 +737,18 @@ def collections_run(
 
 @main.group()
 def providers() -> None:
-    """List and inspect evaluation providers."""
+    """List and inspect evaluation providers.
+
+    \b
+    Providers are evaluation frameworks (e.g. lm-evaluation-harness,
+    ragas, garak) registered with EvalHub. Each provider exposes a
+    set of benchmarks that can be used in evaluation jobs.
+
+    \b
+    Examples:
+      evalhub providers list
+      evalhub providers describe lm_evaluation_harness
+    """
 
 
 @providers.command("list")
@@ -704,7 +756,17 @@ def providers() -> None:
 @click.pass_context
 @handle_api_errors
 def providers_list(ctx: click.Context, output_format: str) -> None:
-    """List all registered evaluation providers."""
+    """List all registered evaluation providers.
+
+    \b
+    Shows provider ID, name, description, and number of benchmarks.
+
+    \b
+    Examples:
+      evalhub providers list
+      evalhub providers list --format json
+      evalhub providers list --format csv
+    """
     client = get_client(ctx)
     items = client.providers.list()
     rows = [
@@ -731,7 +793,18 @@ def providers_list(ctx: click.Context, output_format: str) -> None:
 def providers_describe(
     ctx: click.Context, provider_id: str, output_format: str
 ) -> None:
-    """Show detailed information about a provider."""
+    """Show detailed information about a provider.
+
+    \b
+    Displays provider metadata and its available benchmarks with
+    categories and supported metrics.
+
+    \b
+    Examples:
+      evalhub providers describe lm_evaluation_harness
+      evalhub providers describe ragas --format json
+      evalhub providers describe garak --format yaml
+    """
     client = get_client(ctx)
     provider = client.providers.get(provider_id)
 
@@ -767,7 +840,18 @@ def providers_describe(
 @click.pass_context
 @handle_api_errors
 def health(ctx: click.Context) -> None:
-    """Check health of the EvalHub service."""
+    """Check health of the EvalHub service.
+
+    \b
+    Sends a health check request and reports service status with
+    response time. Exits with code 1 if the service is unhealthy
+    or unreachable.
+
+    \b
+    Examples:
+      evalhub health
+      evalhub --base-url https://evalhub.example.com health
+    """
     client = get_client(ctx)
     start = time.monotonic()
     try:
@@ -786,7 +870,21 @@ def health(ctx: click.Context) -> None:
 @main.group()
 @click.pass_context
 def config(ctx: click.Context) -> None:
-    """View and update CLI configuration."""
+    """View and update CLI configuration.
+
+    \b
+    Configuration is stored in ~/.config/evalhub/config.yaml and
+    supports multiple profiles. Use 'config set' to store values,
+    'config get' to read them, 'config list' to see the full
+    profile, and 'config use' to switch profiles.
+
+    \b
+    Examples:
+      evalhub config set base_url http://localhost:8080
+      evalhub config get base_url
+      evalhub config list
+      evalhub config use prod
+    """
 
 
 @config.command("set")
@@ -794,7 +892,19 @@ def config(ctx: click.Context) -> None:
 @click.argument("value")
 @click.pass_context
 def config_set(ctx: click.Context, key: str, value: str) -> None:
-    """Set a configuration value in the active profile."""
+    """Set a configuration value in the active profile.
+
+    \b
+    Known keys: base_url, token, tenant, provider, insecure, timeout.
+
+    \b
+    Examples:
+      evalhub config set base_url http://localhost:8080
+      evalhub config set token my-api-token
+      evalhub config set tenant my-tenant
+      evalhub config set insecure true
+      evalhub --profile prod config set base_url https://evalhub.example.com
+    """
     if not cfg.is_known_key(key):
         click.echo(
             f"Warning: '{key}' is not a recognised config key. "
@@ -813,7 +923,14 @@ def config_set(ctx: click.Context, key: str, value: str) -> None:
 @click.argument("key")
 @click.pass_context
 def config_get(ctx: click.Context, key: str) -> None:
-    """Get a configuration value from the active profile."""
+    """Get a configuration value from the active profile.
+
+    \b
+    Examples:
+      evalhub config get base_url
+      evalhub config get token
+      evalhub --profile prod config get base_url
+    """
     profile = ctx.obj.get("profile")
     data = cfg.load_config()
     value = cfg.get_value(data, key, profile=profile)
@@ -826,7 +943,16 @@ def config_get(ctx: click.Context, key: str) -> None:
 @config.command("list")
 @click.pass_context
 def config_list(ctx: click.Context) -> None:
-    """List all configuration values in the active profile."""
+    """List all configuration values in the active profile.
+
+    \b
+    Shows all key-value pairs and flags any missing required keys.
+
+    \b
+    Examples:
+      evalhub config list
+      evalhub --profile prod config list
+    """
     profile = ctx.obj.get("profile")
     data = cfg.load_config()
     profile_name = profile or cfg.get_active_profile(data)
@@ -845,7 +971,18 @@ def config_list(ctx: click.Context) -> None:
 @config.command("use")
 @click.argument("profile")
 def config_use(profile: str) -> None:
-    """Switch the active configuration profile."""
+    """Switch the active configuration profile.
+
+    \b
+    Sets the given profile as the default for all subsequent commands.
+    The profile must already exist (create it by setting a value with
+    --profile).
+
+    \b
+    Examples:
+      evalhub config use prod
+      evalhub config use staging
+    """
     data = cfg.load_config()
     profiles = data.get("profiles", {})
     if profile not in profiles:
