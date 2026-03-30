@@ -94,8 +94,9 @@ def completion() -> None:
       # fish
       evalhub completion fish > ~/.config/fish/completions/evalhub.fish
 
-      # powershell (add to $PROFILE)
-      evalhub completion powershell >> $PROFILE
+      # powershell (source from $PROFILE)
+      evalhub completion powershell > ~/.config/evalhub/completion.ps1
+      Add-Content $PROFILE '. ~/.config/evalhub/completion.ps1'
     """
 
 
