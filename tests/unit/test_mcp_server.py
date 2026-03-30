@@ -311,7 +311,11 @@ async def test_submit_evaluation_wire_path(mock_client: MagicMock) -> None:
             "model": {"url": "http://model:8000/v1", "name": "llama3"},
             "benchmarks": [
                 {"id": "gsm8k", "provider_id": "lm_eval"},
-                {"id": "mmlu", "provider_id": "lm_eval", "parameters": {"num_few_shot": 5}},
+                {
+                    "id": "mmlu",
+                    "provider_id": "lm_eval",
+                    "parameters": {"num_few_shot": 5},
+                },
             ],
             "experiment": {
                 "name": "my-experiment",
