@@ -32,10 +32,13 @@ from evalhub.models.api import (
     BenchmarkConfig,
     BenchmarkReference,
     Collection,
+    CollectionRef,
     EvaluationJob,
     EvaluationJobResource,
     EvaluationJobStatus,
+    ExperimentConfig,
     JobStatus,
+    ModelAuth,
     ModelConfig,
     Provider,
     Resource,
@@ -277,8 +280,8 @@ async def test_list_tools() -> None:
 async def test_submit_evaluation(mock_client: MagicMock) -> None:
     result = await submit_evaluation(
         name="my-eval",
-        model={"url": "http://model:8000", "name": "llama3"},
-        benchmarks=[{"id": "gsm8k", "provider_id": "lm_eval"}],
+        model=ModelConfig(url="http://model:8000", name="llama3"),
+        benchmarks=[BenchmarkConfig(id="gsm8k", provider_id="lm_eval")],
     )
     data = json.loads(result)
     assert data["name"] == "test-eval"
@@ -297,8 +300,8 @@ async def test_submit_evaluation(mock_client: MagicMock) -> None:
 async def test_submit_evaluation_with_collection(mock_client: MagicMock) -> None:
     result = await submit_evaluation(
         name="collection-eval",
-        model={"url": "http://model:8000", "name": "llama3"},
-        collection={"id": "standard"},
+        model=ModelConfig(url="http://model:8000", name="llama3"),
+        collection=CollectionRef(id="standard"),
     )
     json.loads(result)  # validate JSON output
 
@@ -312,12 +315,12 @@ async def test_submit_evaluation_with_collection(mock_client: MagicMock) -> None
 async def test_submit_evaluation_with_model_auth(mock_client: MagicMock) -> None:
     await submit_evaluation(
         name="auth-eval",
-        model={
-            "url": "http://model:8000",
-            "name": "llama3",
-            "auth": {"secret_ref": "my-secret"},
-        },
-        benchmarks=[{"id": "gsm8k", "provider_id": "lm_eval"}],
+        model=ModelConfig(
+            url="http://model:8000",
+            name="llama3",
+            auth=ModelAuth(secret_ref="my-secret"),
+        ),
+        benchmarks=[BenchmarkConfig(id="gsm8k", provider_id="lm_eval")],
     )
 
     call_args = mock_client.jobs.submit.call_args
@@ -329,9 +332,9 @@ async def test_submit_evaluation_with_model_auth(mock_client: MagicMock) -> None
 async def test_submit_evaluation_with_experiment(mock_client: MagicMock) -> None:
     await submit_evaluation(
         name="exp-eval",
-        model={"url": "http://model:8000", "name": "llama3"},
-        benchmarks=[{"id": "gsm8k", "provider_id": "lm_eval"}],
-        experiment={"name": "my-experiment"},
+        model=ModelConfig(url="http://model:8000", name="llama3"),
+        benchmarks=[BenchmarkConfig(id="gsm8k", provider_id="lm_eval")],
+        experiment=ExperimentConfig(name="my-experiment"),
     )
 
     call_args = mock_client.jobs.submit.call_args
@@ -341,24 +344,24 @@ async def test_submit_evaluation_with_experiment(mock_client: MagicMock) -> None
 
 
 async def test_submit_evaluation_both_benchmarks_and_collection(
-    mock_client: MagicMock
+    mock_client: MagicMock,
 ) -> None:
     with pytest.raises(ValueError, match="exactly one"):
         await submit_evaluation(
             name="bad-eval",
-            model={"url": "http://model:8000", "name": "llama3"},
-            benchmarks=[{"id": "gsm8k", "provider_id": "lm_eval"}],
-            collection={"id": "standard"},
+            model=ModelConfig(url="http://model:8000", name="llama3"),
+            benchmarks=[BenchmarkConfig(id="gsm8k", provider_id="lm_eval")],
+            collection=CollectionRef(id="standard"),
         )
 
 
 async def test_submit_evaluation_neither_benchmarks_nor_collection(
-    mock_client: MagicMock
+    mock_client: MagicMock,
 ) -> None:
     with pytest.raises(ValueError, match="exactly one"):
         await submit_evaluation(
             name="bad-eval",
-            model={"url": "http://model:8000", "name": "llama3"},
+            model=ModelConfig(url="http://model:8000", name="llama3"),
         )
 
 
