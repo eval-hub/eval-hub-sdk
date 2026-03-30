@@ -263,10 +263,13 @@ async def submit_evaluation(
         tags: Optional list of tags for organizing jobs.
         experiment: Optional MLflow experiment configuration.
     """
-    has_benchmarks = bool(benchmarks)
+    has_benchmarks = benchmarks is not None
     has_collection = collection is not None
     if has_benchmarks == has_collection:
         raise ValueError("Provide exactly one of 'benchmarks' or 'collection'.")
+
+    if benchmarks is not None and len(benchmarks) == 0:
+        raise ValueError("'benchmarks' cannot be empty when provided.")
 
     client = _get_client()
 
