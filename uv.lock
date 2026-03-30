@@ -679,6 +679,7 @@ all = [
 cli = [
     { name = "click" },
     { name = "httpx" },
+    { name = "mcp" },
     { name = "pyyaml" },
     { name = "rich" },
 ]
@@ -706,11 +707,8 @@ examples = [
     { name = "ragas" },
 ]
 mcp = [
-    { name = "click" },
     { name = "httpx" },
     { name = "mcp" },
-    { name = "pyyaml" },
-    { name = "rich" },
 ]
 
 [package.dev-dependencies]
@@ -735,11 +733,11 @@ dev = [
 requires-dist = [
     { name = "click", marker = "extra == 'cli'", specifier = ">=8.1.0" },
     { name = "eval-hub-sdk", extras = ["adapter", "cli", "client", "core", "dev", "mcp"], marker = "extra == 'all'" },
-    { name = "eval-hub-sdk", extras = ["cli"], marker = "extra == 'mcp'" },
     { name = "eval-hub-sdk", extras = ["cli", "mcp"], marker = "extra == 'dev'" },
     { name = "eval-hub-sdk", extras = ["core"], marker = "extra == 'adapter'" },
-    { name = "eval-hub-sdk", extras = ["core"], marker = "extra == 'cli'" },
     { name = "eval-hub-sdk", extras = ["core"], marker = "extra == 'client'" },
+    { name = "eval-hub-sdk", extras = ["core"], marker = "extra == 'mcp'" },
+    { name = "eval-hub-sdk", extras = ["core", "mcp"], marker = "extra == 'cli'" },
     { name = "httpx", marker = "extra == 'core'", specifier = ">=0.25.0" },
     { name = "importlib-metadata", specifier = ">=6.0.0" },
     { name = "lm-eval", marker = "extra == 'examples'", specifier = ">=0.4.0" },

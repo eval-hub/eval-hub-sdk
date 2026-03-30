@@ -51,7 +51,7 @@ client = [
 
 # CLI - command-line interface
 cli = [
-    "eval-hub-sdk[core]",
+    "eval-hub-sdk[core,mcp]",
     "click>=8.1.0",
     "pyyaml>=6.0",
     "rich>=13.0.0",
@@ -59,7 +59,7 @@ cli = [
 
 # MCP server - for AI agent access to EvalHub
 mcp = [
-    "eval-hub-sdk[cli]",
+    "eval-hub-sdk[core]",
     "mcp>=1.0.0",
 ]
 

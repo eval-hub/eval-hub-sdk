@@ -15,11 +15,19 @@ from evalhub.cli.main import main
 
 @pytest.fixture()
 def config_file(tmp_path: Path) -> Iterator[Path]:
-    """Provide a temporary config file path and set EVALHUB_CONFIG."""
+    """Provide a temporary config file path and isolate from env vars."""
     path = tmp_path / "config.yaml"
+    saved_config = os.environ.get("EVALHUB_CONFIG")
+    saved_token = os.environ.get("EVALHUB_TOKEN")
     os.environ["EVALHUB_CONFIG"] = str(path)
+    os.environ.pop("EVALHUB_TOKEN", None)
     yield path
-    os.environ.pop("EVALHUB_CONFIG", None)
+    if saved_config is not None:
+        os.environ["EVALHUB_CONFIG"] = saved_config
+    else:
+        os.environ.pop("EVALHUB_CONFIG", None)
+    if saved_token is not None:
+        os.environ["EVALHUB_TOKEN"] = saved_token
 
 
 @pytest.fixture()
