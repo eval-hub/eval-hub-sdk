@@ -97,6 +97,7 @@ def evalhub_server_with_real_config() -> Generator[str, None, None]:
 
     # Create temporary directory for server files (preserved after run for debugging of server logfiles, etc)
     tmpdir = tempfile.mkdtemp(prefix="evalhub-e2e-")
+    server_process = None
     try:
         logger.debug(f"\nTemp directory for this run: {tmpdir}")
         # Copy entire config directory to temp location (including providers subdirectory)
@@ -168,9 +169,10 @@ def evalhub_server_with_real_config() -> Generator[str, None, None]:
         yield base_url
     finally:
         # Cleanup: terminate the server subprocess
-        try:
-            server_process.terminate()
-            server_process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            server_process.kill()
-            server_process.wait()
+        if server_process is not None:
+            try:
+                server_process.terminate()
+                server_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                server_process.kill()
+                server_process.wait()
