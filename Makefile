@@ -9,7 +9,7 @@ test:
 .PHONY: test-e2e
 test-e2e:
 	uv run uv pip show eval-hub-server
-	uv run pytest -m e2e --e2e --e2e-debug -s -x --color=yes -ra
+	uv run pytest --e2e --e2e-debug -s -x --color=yes -ra
 
 .PHONY: ruff
 ruff:
