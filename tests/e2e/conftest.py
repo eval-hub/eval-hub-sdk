@@ -108,7 +108,9 @@ def evalhub_server_with_real_config() -> Generator[str, None, None]:
             f"  {item.relative_to(tmpdir)}{'/' if item.is_dir() else ''}"
             for item in sorted(Path(tmpdir).rglob("*"))
         )
-        logger.debug("Server directory structure (working dir: %s):\n%s", tmpdir, dir_listing)
+        logger.debug(
+            "Server directory structure (working dir: %s):\n%s", tmpdir, dir_listing
+        )
 
         # Create log file for server output
         log_file = Path(tmpdir) / "server.log"
@@ -116,7 +118,10 @@ def evalhub_server_with_real_config() -> Generator[str, None, None]:
         # Kill any process already using port 8080
         port = 8080
         if _kill_process_on_port(port):
-            logger.warning("Killed existing process on port %d (normal if a previous test run didn't clean up properly)", port)
+            logger.warning(
+                "Killed existing process on port %d (normal if a previous test run didn't clean up properly)",
+                port,
+            )
             # Give the OS a moment to release the port
             time.sleep(0.5)
 
