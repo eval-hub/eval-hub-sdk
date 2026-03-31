@@ -8,9 +8,8 @@ test:
 
 .PHONY: test-e2e
 test-e2e:
-	@echo "*** WARN: Running E2E with uv run --no-sync so not to override any replacement for eval-hub-server ***"
-	uv run --no-sync uv pip show eval-hub-server
-	uv run --no-sync pytest --e2e -s -x --color=yes -ra
+	uv run uv pip show eval-hub-server
+	uv run pytest -m e2e --e2e --e2e-debug -s -x --color=yes -ra
 
 .PHONY: ruff
 ruff:

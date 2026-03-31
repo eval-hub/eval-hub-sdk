@@ -760,7 +760,7 @@ provides-extras = ["core", "adapter", "client", "cli", "mcp", "dev", "examples",
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "eval-hub-server", git = "https://github.com/eval-hub/eval-hub?subdirectory=python-server" },
+    { name = "eval-hub-server", index = "https://test.pypi.org/simple/" },
     { name = "fastapi", specifier = ">=0.124.4" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "mypy", specifier = ">=1.19.1" },
@@ -778,8 +778,15 @@ dev = [
 
 [[package]]
 name = "eval-hub-server"
-version = "0.1.0a0"
-source = { git = "https://github.com/eval-hub/eval-hub?subdirectory=python-server#6eff607f2d7247172118bafac8f853b1d0d0dbc1" }
+version = "0.3.0.dev223"
+source = { registry = "https://test.pypi.org/simple/" }
+wheels = [
+    { url = "https://test-files.pythonhosted.org/packages/f1/6c/b0dea8cd9b4fa925bedb75366d454e2f4466cf84414e47378894dcd8e494/eval_hub_server-0.3.0.dev223-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:7f9869fc499374a00a7bf375542ae897e49140895ed33580803704e2de13f292", size = 21772062, upload-time = "2026-03-30T14:45:24.186Z" },
+    { url = "https://test-files.pythonhosted.org/packages/94/0e/cef2f002b0648fa54bc24f1775b262199b6ef6701bba703718752b9605f1/eval_hub_server-0.3.0.dev223-py3-none-macosx_11_0_arm64.whl", hash = "sha256:ea26b9eaab1a63619c0f1b74fd7c238e4a31ab3a04854f4a969b9cc9ce252d6a", size = 20001758, upload-time = "2026-03-30T14:45:27.157Z" },
+    { url = "https://test-files.pythonhosted.org/packages/28/ae/2758b6c64a63fed42b2938c007abb1f69b4be1e06e09c7946226aa50f617/eval_hub_server-0.3.0.dev223-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:504bdaefe9c2c9ecdb706fe0df5bfd0b4e8613e47d7182c71a3ed82b0dd8796a", size = 19019072, upload-time = "2026-03-30T14:45:29.43Z" },
+    { url = "https://test-files.pythonhosted.org/packages/a7/f1/ac6790d56bc260f815db054fc6911ac9e00c0d00670f2aa970b817c36052/eval_hub_server-0.3.0.dev223-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:2a23b087d54d72cb8f8f700131028ba23c745ca3c43f400c9949a023b961b361", size = 21333936, upload-time = "2026-03-30T14:45:31.995Z" },
+    { url = "https://test-files.pythonhosted.org/packages/f1/13/3684575e03354119f6b4fd406966e45f0e9136da06a34144eb45636710b6/eval_hub_server-0.3.0.dev223-py3-none-win_amd64.whl", hash = "sha256:89c3b5374f677626149264aa90c4a9defa2d19641cf57b0aabdf0300e57d2a02", size = 21793660, upload-time = "2026-03-30T14:45:34.243Z" },
+]
 
 [[package]]
 name = "evaluate"

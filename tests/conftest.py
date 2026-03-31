@@ -1,5 +1,6 @@
 """Pytest configuration for eval-hub-sdk tests."""
 
+import logging
 from typing import Any
 
 import pytest
@@ -13,13 +14,26 @@ def pytest_addoption(parser: Any) -> None:
         default=False,
         help="Run only E2E tests",
     )
+    parser.addoption(
+        "--e2e-debug",
+        action="store_true",
+        default=False,
+        help="Enable DEBUG logging for E2E test fixtures",
+    )
 
 
 def pytest_configure(config: Any) -> None:
-    """Register custom markers."""
+    """Register custom markers and configure logging."""
     config.addinivalue_line(
         "markers", "e2e: mark test as end-to-end test (run with --e2e flag)"
     )
+    if config.getoption("--e2e-debug", default=False):
+        e2e_logger = logging.getLogger("tests.e2e.conftest")
+        e2e_logger.setLevel(logging.DEBUG)
+        handler = logging.StreamHandler()
+        handler.setLevel(logging.DEBUG)
+        handler.setFormatter(logging.Formatter("%(name)s %(levelname)s: %(message)s"))
+        e2e_logger.addHandler(handler)
 
 
 def pytest_collection_modifyitems(config: Any, items: list[Any]) -> None:

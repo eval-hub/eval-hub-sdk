@@ -1,5 +1,6 @@
 """Shared fixtures and utilities for E2E tests."""
 
+import logging
 import platform
 import shutil
 import subprocess
@@ -10,6 +11,8 @@ from pathlib import Path
 
 import httpx
 import pytest
+
+logger = logging.getLogger(__name__)
 
 
 def _kill_process_on_port(port: int) -> bool:
@@ -46,67 +49,12 @@ def _kill_process_on_port(port: int) -> bool:
     return False
 
 
-def _run_server(working_dir: str) -> None:
-    """
-    Run the eval-hub server binary in the specified working directory.
-
-    This function is intended to be used as a target for multiprocessing.Process.
-
-    Args:
-        working_dir: Directory containing the config subdirectory
-    """
-    from evalhub_server import get_binary_path
-
-    binary_path = get_binary_path()
-    subprocess.run([binary_path], cwd=working_dir, check=False)
-
-
 def _ensure_server_binary() -> bool:
-    """
-    TODO: this should be REMOVED when eval-hub-server is moved to a pypi release
-    TODO: this is temporary until eval-hub-server is release'd on Pypi because we need the binary(ies)
-    """
     try:
         from evalhub_server import get_binary_path
 
-        # Check if binary already exists
-        try:
-            binary_path = get_binary_path()
-            return Path(binary_path).exists()
-        except FileNotFoundError:
-            pass
-
-        # Try to copy from local eval-hub repo
-        system = platform.system().lower()
-        machine = platform.machine().lower()
-
-        if system == "darwin":
-            binary_name = (
-                f"eval-hub-darwin-{'arm64' if machine == 'arm64' else 'amd64'}"
-            )
-        elif system == "linux":
-            binary_name = f"eval-hub-linux-{'arm64' if 'aarch64' in machine or 'arm64' in machine else 'amd64'}"
-        else:
-            return False
-
-        # Look for eval-hub repo (assume it's a sibling directory)
-        eval_hub_repo = Path(__file__).parent.parent.parent.parent / "eval-hub"
-        binary_source = eval_hub_repo / "bin" / binary_name
-
-        if binary_source.exists():
-            # Copy to evalhub_server package
-            import evalhub_server
-
-            pkg_dir = Path(evalhub_server.__file__).parent
-            binaries_dir = pkg_dir / "binaries"
-            binaries_dir.mkdir(exist_ok=True)
-
-            binary_dest = binaries_dir / binary_name
-            shutil.copy2(binary_source, binary_dest)
-            binary_dest.chmod(0o755)
-            return True
-
-        return False
+        binary_path = get_binary_path()
+        return Path(binary_path).exists()
     except Exception:
         return False
 
@@ -147,19 +95,20 @@ def evalhub_server_with_real_config() -> Generator[str, None, None]:
             "Please ensure the config directory is properly set up."
         )
 
-    # Create temporary directory for server files
-    with tempfile.TemporaryDirectory() as tmpdir:
+    # Create temporary directory for server files (preserved after run for debugging of server logfiles, etc)
+    tmpdir = tempfile.mkdtemp(prefix="evalhub-e2e-")
+    try:
+        logger.debug(f"\nTemp directory for this run: {tmpdir}")
         # Copy entire config directory to temp location (including providers subdirectory)
         config_dir = Path(tmpdir) / "config"
         shutil.copytree(config_source_dir, config_dir)
 
         # Debug: print directory structure
-        print("\n\n===== SERVER DIRECTORY STRUCTURE =====")
-        print(f"Working dir will be: {tmpdir}")
-        for item in sorted(Path(tmpdir).rglob("*")):
-            rel = item.relative_to(tmpdir)
-            print(f"  {rel}{'/' if item.is_dir() else ''}")
-        print("=" * 50)
+        dir_listing = "\n".join(
+            f"  {item.relative_to(tmpdir)}{'/' if item.is_dir() else ''}"
+            for item in sorted(Path(tmpdir).rglob("*"))
+        )
+        logger.debug("Server directory structure (working dir: %s):\n%s", tmpdir, dir_listing)
 
         # Create log file for server output
         log_file = Path(tmpdir) / "server.log"
@@ -167,10 +116,7 @@ def evalhub_server_with_real_config() -> Generator[str, None, None]:
         # Kill any process already using port 8080
         port = 8080
         if _kill_process_on_port(port):
-            print(f"\n⚠️  WARNING: Killed existing process on port {port}")
-            print(
-                "    (This is normal if a previous test run didn't clean up properly)\n"
-            )
+            logger.warning("Killed existing process on port %d (normal if a previous test run didn't clean up properly)", port)
             # Give the OS a moment to release the port
             time.sleep(0.5)
 
@@ -208,18 +154,14 @@ def evalhub_server_with_real_config() -> Generator[str, None, None]:
 
         # Debug: Print server logs
         if log_file.exists():
-            print("\n\n===== SERVER LOGS =====")
             with open(log_file) as f:
                 logs = f.read()
-                # Only print first 3000 chars to avoid flooding output
-                if len(logs) > 3000:
-                    print(logs[:3000] + f"\n... ({len(logs) - 3000} more chars)")
-                else:
-                    print(logs)
-            print("=" * 50)
+            if len(logs) > 3000:
+                logs = logs[:3000] + f"\n... ({len(logs) - 3000} more chars)"
+            logger.debug("Server log file: %s\n%s", log_file.resolve(), logs)
 
         yield base_url
-
+    finally:
         # Cleanup: terminate the server subprocess
         try:
             server_process.terminate()

@@ -194,7 +194,7 @@ tag_format = "v$version"
 
 [dependency-groups]
 dev = [
-    "eval-hub-server @ git+https://github.com/eval-hub/eval-hub#subdirectory=python-server",  # TODO: this should be moved to a pypi release
+    "eval-hub-server",
     "fastapi>=0.124.4",
     "httpx>=0.28.1",
     "mypy>=1.19.1",
@@ -209,3 +209,11 @@ dev = [
     "types-pyyaml>=6.0.12.20250915",
     "uvicorn>=0.38.0",
 ]
+
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+explicit = true  # uv will only use TestPyPI for packages explicitly configured to use it
+
+[tool.uv.sources]
+eval-hub-server = { index = "testpypi" }
