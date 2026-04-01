@@ -100,6 +100,9 @@ Create a new Python file for your adapter:
 
 ```python
 # my_framework_adapter.py
+from datetime import UTC, datetime
+from pathlib import Path
+
 from evalhub.adapter import (
     FrameworkAdapter,
     JobSpec,
@@ -109,6 +112,8 @@ from evalhub.adapter import (
     JobPhase,
     JobStatusUpdate,
     EvaluationResult,
+    MessageInfo,
+    OCIArtifactSpec,
 )
 
 class MyFrameworkAdapter(FrameworkAdapter):
@@ -122,7 +127,10 @@ class MyFrameworkAdapter(FrameworkAdapter):
             status=JobStatus.RUNNING,
             phase=JobPhase.INITIALIZING,
             progress=0.0,
-            message="Loading benchmark and model"
+            message=MessageInfo(
+                message="Loading benchmark and model",
+                message_code="initializing",
+            ),
         ))
 
         # Load your evaluation framework and benchmark
@@ -135,7 +143,10 @@ class MyFrameworkAdapter(FrameworkAdapter):
             status=JobStatus.RUNNING,
             phase=JobPhase.RUNNING_EVALUATION,
             progress=0.3,
-            message=f"Evaluating on {config.num_examples} examples"
+            message=MessageInfo(
+                message=f"Evaluating on {config.num_examples} examples",
+                message_code="running_evaluation",
+            ),
         ))
 
         # Run evaluation (adapter-specific params come from parameters)
@@ -146,19 +157,28 @@ class MyFrameworkAdapter(FrameworkAdapter):
             num_few_shot=config.parameters.get("num_few_shot", 0)
         )
 
-        # Save and persist artifacts
-        output_files = save_results(config.id, results)
-        artifact = callbacks.create_oci_artifact(OCIArtifactSpec(
-            files=output_files,
-            job_id=config.id,
-            benchmark_id=config.benchmark_id,
-            model_name=config.model.name
-        ))
+        # Save results to a directory and persist as OCI artifact
+        results_dir = save_results(config.id, results)
+        oci_artifact = None
+        oci_exports = config.exports.oci if config.exports else None
+        if oci_exports is not None:
+            coords = oci_exports.coordinates.model_copy(deep=True)
+            coords.annotations.update({
+                "org.opencontainers.image.created": datetime.now(UTC).isoformat(),
+                "io.github.eval-hub.benchmark": config.benchmark_id,
+                "io.github.eval-hub.model": config.model.name,
+                "io.github.eval-hub.job_id": config.id,
+            })
+            oci_artifact = callbacks.create_oci_artifact(OCIArtifactSpec(
+                files_path=results_dir,
+                coordinates=coords,
+            ))
 
         # Return results
         return JobResults(
             id=config.id,
             benchmark_id=config.benchmark_id,
+            benchmark_index=config.benchmark_index,
             model_name=config.model.name,
             results=[
                 EvaluationResult(
@@ -169,7 +189,7 @@ class MyFrameworkAdapter(FrameworkAdapter):
             ],
             num_examples_evaluated=len(results),
             duration_seconds=results["duration"],
-            oci_artifact=artifact
+            oci_artifact=oci_artifact,
         )
 ```
 
