@@ -147,17 +147,17 @@ class MyFrameworkAdapter(FrameworkAdapter):
         )
 
         # Save and persist artifacts
-        output_files = save_results(config.job_id, results)
+        output_files = save_results(config.id, results)
         artifact = callbacks.create_oci_artifact(OCIArtifactSpec(
             files=output_files,
-            job_id=config.job_id,
+            job_id=config.id,
             benchmark_id=config.benchmark_id,
             model_name=config.model.name
         ))
 
         # Return results
         return JobResults(
-            job_id=config.job_id,
+            id=config.id,
             benchmark_id=config.benchmark_id,
             model_name=config.model.name,
             results=[
@@ -235,7 +235,7 @@ adapter = MyFrameworkAdapter(settings=settings)
 
 # Create callbacks
 callbacks = DefaultCallbacks(
-    job_id=job_spec.job_id,
+    job_id=job_spec.id,
     benchmark_id=job_spec.benchmark_id,
     benchmark_index=job_spec.benchmark_index,
     sidecar_url=job_spec.callback_url,
@@ -251,7 +251,7 @@ results = adapter.run_benchmark_job(job_spec, callbacks)
 # Report final results to service via sidecar
 callbacks.report_results(results)
 
-print(f"Job completed: {results.job_id}")
+print(f"Job completed: {results.id}")
 ```
 
 ### 4. Deploy to Kubernetes
@@ -452,7 +452,7 @@ When using `DefaultCallbacks`, pass `benchmark_index` (and optionally `provider_
 **JobResults** - Returned when job completes:
 ```python
 class JobResults(BaseModel):
-    job_id: str
+    id: str
     benchmark_id: str
     benchmark_index: int                       # Index within the job
     model_name: str
@@ -502,7 +502,7 @@ adapter = MyFrameworkAdapter(settings=settings)
 
 # Create callbacks
 callbacks = DefaultCallbacks(
-    job_id=job_spec.job_id,
+    job_id=job_spec.id,
     benchmark_id=job_spec.benchmark_id,
     benchmark_index=job_spec.benchmark_index,
     sidecar_url=job_spec.callback_url,
@@ -516,7 +516,7 @@ results = adapter.run_benchmark_job(job_spec, callbacks)
 # Report final results
 callbacks.report_results(results)
 
-print(f"Job {results.job_id} completed with score: {results.overall_score}")
+print(f"Job {results.id} completed with score: {results.overall_score}")
 ```
 
 ### Kubernetes Job
