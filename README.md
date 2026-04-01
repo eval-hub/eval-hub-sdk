@@ -223,30 +223,16 @@ Create the entrypoint script:
 ```python
 # run_adapter.py
 from my_framework_adapter import MyFrameworkAdapter
-from evalhub.adapter import AdapterSettings, DefaultCallbacks, JobSpec
+from evalhub.adapter import DefaultCallbacks
 
-# Load settings and job spec explicitly
-settings = AdapterSettings.from_env()
-settings.validate_runtime()
-job_spec = JobSpec.from_file(settings.resolved_job_spec_path)
+# Initialize adapter (loads settings and job spec internally)
+adapter = MyFrameworkAdapter()
 
-# Initialize adapter with settings
-adapter = MyFrameworkAdapter(settings=settings)
-
-# Create callbacks
-callbacks = DefaultCallbacks(
-    job_id=job_spec.id,
-    benchmark_id=job_spec.benchmark_id,
-    benchmark_index=job_spec.benchmark_index,
-    sidecar_url=job_spec.callback_url,
-    registry_url=settings.registry_url,
-    registry_username=settings.registry_username,
-    registry_password=settings.registry_password,
-    insecure=settings.registry_insecure,
-)
+# Create callbacks from adapter (auto-configures sidecar, OCI proxy, etc.)
+callbacks = DefaultCallbacks.from_adapter(adapter)
 
 # Run adapter
-results = adapter.run_benchmark_job(job_spec, callbacks)
+results = adapter.run_benchmark_job(adapter.job_spec, callbacks)
 
 # Report final results to service via sidecar
 callbacks.report_results(results)
@@ -490,28 +476,16 @@ CMD ["python", "entrypoint.py"]
 ```python
 # entrypoint.py
 from my_adapter import MyFrameworkAdapter
-from evalhub.adapter import AdapterSettings, DefaultCallbacks, JobSpec
+from evalhub.adapter import DefaultCallbacks
 
-# Load settings and job spec explicitly
-settings = AdapterSettings.from_env()
-settings.validate_runtime()
-job_spec = JobSpec.from_file(settings.resolved_job_spec_path)
+# Initialize adapter (loads settings and job spec internally)
+adapter = MyFrameworkAdapter()
 
-# Initialize adapter with settings
-adapter = MyFrameworkAdapter(settings=settings)
-
-# Create callbacks
-callbacks = DefaultCallbacks(
-    job_id=job_spec.id,
-    benchmark_id=job_spec.benchmark_id,
-    benchmark_index=job_spec.benchmark_index,
-    sidecar_url=job_spec.callback_url,
-    registry_url=settings.registry_url,
-    insecure=settings.registry_insecure,
-)
+# Create callbacks from adapter (auto-configures sidecar, OCI proxy, etc.)
+callbacks = DefaultCallbacks.from_adapter(adapter)
 
 # Run adapter
-results = adapter.run_benchmark_job(job_spec, callbacks)
+results = adapter.run_benchmark_job(adapter.job_spec, callbacks)
 
 # Report final results
 callbacks.report_results(results)
