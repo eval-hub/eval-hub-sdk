@@ -291,7 +291,7 @@ spec:
           name: job-123-spec
 ```
 
-For a complete working example, see `evalhub/adapter/examples/simple_adapter.py`.
+For a complete working example, see `examples/simple_adapter/simple_adapter.py`.
 
 ## Package Organization Guide
 
@@ -338,11 +338,19 @@ from evalhub import (
 )
 ```
 
-## Complete Example
+## Examples
 
-The SDK includes a complete reference implementation showing all adapter patterns:
+### Contributed Adapters
 
-**Example Adapter**: `src/evalhub/adapter/examples/simple_adapter.py`
+For real use-case adapter implementations, see the
+[eval-hub-contrib](https://github.com/eval-hub/eval-hub-contrib/tree/main/adapters)
+repository which includes adapters for GuideLLM, LightEval, and MTEB.
+
+### Simple Adapter Example
+
+The SDK includes a reference implementation showing all adapter patterns:
+
+**Example Adapter**: `examples/simple_adapter/simple_adapter.py`
 
 This example demonstrates:
 - Loading JobSpec from mounted ConfigMap
