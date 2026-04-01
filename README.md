@@ -580,9 +580,9 @@ from evalhub.adapter import AdapterSettings
 
 def test_settings_parse(monkeypatch):
     monkeypatch.setenv("EVALHUB_MODE", "local")
-    monkeypatch.setenv("REGISTRY_URL", "localhost:5000")
+    monkeypatch.setenv("OCI_INSECURE", "true")
     s = AdapterSettings.from_env()
-    assert str(s.registry_url) == "localhost:5000"
+    assert s.oci_insecure is True
 ```
 
 ### Quality Assurance
