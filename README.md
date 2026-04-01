@@ -260,7 +260,7 @@ callbacks.report_results(results)
 print(f"Job completed: {results.id}")
 ```
 
-### 4. Deploy to Kubernetes
+### 5. Deploy to Kubernetes
 
 The eval-hub service will create Kubernetes Jobs for your adapter:
 
