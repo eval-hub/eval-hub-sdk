@@ -13,8 +13,9 @@ data:
       "provider_id": "evalhub-provider",
       "benchmark_id": "mmlu",
       "benchmark_index": 0,
+      "tenant": "evalhub-test",
       "model": {
-        "url": "http://model-server.models.svc.cluster.local:8000/v1",
+        "url": "http://127.0.0.1:8080/model/v1",
         "name": "llama-2-7b-chat"
       },
       "num_examples": 1000,

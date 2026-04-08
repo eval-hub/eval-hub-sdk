@@ -31,8 +31,8 @@ graph TB
             A6["6. Exit"]
         end
 
-        subgraph sidecar["Sidecar Container"]
-            S1["ConfigMap mounted<br/>/meta/job.json"]
+        subgraph sidecar["Sidecar (init or sidecar container)"]
+            S1["job.json (+ sidecar_config.json)<br/>mounted under /meta"]
             S2["Forward status to<br/>EvalHub service (HTTP)"]
             S3["Authenticated push of<br/>OCI artifacts<br/>to OCI Registry"]
             S4["Forward results to<br/>EvalHub service (HTTP)"]
@@ -424,11 +424,12 @@ class JobSpec(BaseModel):
     provider_id: str                   # Provider identifier
     benchmark_id: str                 # Benchmark to evaluate
     benchmark_index: int              # Index of this benchmark within the job (included in all status/result events)
-    model: ModelConfig                # Model configuration (url, name)
+    model: ModelConfig                # Model configuration (in cluster, url is the sidecar /model proxy; upstream is in sidecar_config.json)
     parameters: Dict[str, Any]  # Adapter-specific parameters
     callback_url: str                  # Base URL for callbacks (SDK appends /status, /results)
 
     # Optional fields
+    tenant: Optional[str]             # Eval Hub tenant (X-Tenant); written to job.json by the service
     num_examples: Optional[int]       # Number of examples to evaluate
     experiment_name: Optional[str]    # Experiment name
     tags: list[dict[str, str]]        # Custom tags (default: [])

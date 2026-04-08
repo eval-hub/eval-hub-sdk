@@ -51,10 +51,9 @@ class AdapterSettings(BaseSettings):
     )
     oci_insecure: bool = Field(default=False, validation_alias="OCI_INSECURE")
 
-    # Authentication configuration (for Kubernetes ServiceAccount tokens)
-    auth_token_path: Path | None = Field(
-        default=None, validation_alias="EVALHUB_AUTH_TOKEN_PATH"
-    )
+    # Optional TLS CA for HTTPS to eval-hub (e.g. verify TLS to the runtime sidecar).
+    # Forwarded by ``DefaultCallbacks.from_adapter``. Upstream bearer auth is injected by the
+    # sidecar in Kubernetes job pods, not from the adapter process.
     ca_bundle_path: Path | None = Field(
         default=None, validation_alias="EVALHUB_CA_BUNDLE_PATH"
     )
@@ -88,48 +87,6 @@ class AdapterSettings(BaseSettings):
             if self.mode == EvalHubMode.K8S
             else Path(DEFAULT_JOB_SPEC_PATH_LOCAL)
         )
-
-    @property
-    def resolved_auth_token_path(self) -> Path | None:
-        """Resolve ServiceAccount token path with auto-detection.
-
-        Returns the path to the ServiceAccount token if running in Kubernetes,
-        or None if not available (local mode).
-        """
-        if self.auth_token_path is not None:
-            return self.auth_token_path
-
-        # Auto-detect Kubernetes ServiceAccount token
-        default_token_path = Path("/var/run/secrets/kubernetes.io/serviceaccount/token")
-        if default_token_path.exists():
-            return default_token_path
-
-        return None
-
-    @property
-    def resolved_ca_bundle_path(self) -> Path | None:
-        """Resolve CA bundle path with auto-detection.
-
-        Tries multiple common locations for service CA bundles in order:
-        1. OpenShift service-ca (injected via annotation)
-        2. Kubernetes ServiceAccount CA
-
-        Returns None if no CA bundle is found (local mode).
-        """
-        if self.ca_bundle_path is not None:
-            return self.ca_bundle_path
-
-        # Try common CA bundle locations
-        ca_paths = [
-            Path("/etc/pki/ca-trust/source/anchors/service-ca.crt"),  # OpenShift
-            Path("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"),  # Kubernetes
-        ]
-
-        for path in ca_paths:
-            if path.exists():
-                return path
-
-        return None
 
     def validate_runtime(self) -> None:
         """Validate that required settings are available for adapter runtime."""

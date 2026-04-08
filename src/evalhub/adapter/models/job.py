@@ -63,6 +63,7 @@ class JobSpec(BaseModel):
         - callback_url: URL for status and result callbacks
 
     Optional fields:
+        - tenant: Eval Hub tenant (X-Tenant); prefer over pod namespace for callbacks
         - num_examples: Number of examples to evaluate (None = all)
         - experiment_name: Name for this evaluation experiment
         - tags: Custom tags for the job
@@ -79,6 +80,14 @@ class JobSpec(BaseModel):
     benchmark_id: str = Field(..., description="Benchmark to evaluate")
     benchmark_index: int = Field(
         ..., description="Index of this benchmark within the job"
+    )
+
+    tenant: str | None = Field(
+        default=None,
+        description=(
+            "API evaluation tenant (X-Tenant scope). Eval Hub writes this in job.json; "
+            "use it for multi-tenant context instead of inferring from the pod namespace."
+        ),
     )
 
     # Model configuration (mandatory)

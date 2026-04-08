@@ -123,6 +123,23 @@ class TestJobSpec:
             {"key": "developer", "value": "alice"},
         ]
 
+    def test_jobspec_tenant_from_json_file(self, tmp_path: Path) -> None:
+        """tenant in job.json matches eval-hub JobSpec (X-Tenant scope)."""
+        job_spec = {
+            "id": "t1",
+            "provider_id": "p",
+            "benchmark_id": "b",
+            "benchmark_index": 0,
+            "tenant": "team-a",
+            "model": {"url": "http://localhost:8080/model/v1", "name": "m"},
+            "parameters": {},
+            "callback_url": "http://localhost:8080",
+        }
+        spec_file = tmp_path / "job.json"
+        spec_file.write_text(json.dumps(job_spec))
+        spec = JobSpec.from_file(spec_file)
+        assert spec.tenant == "team-a"
+
     def test_jobspec_default_tags_is_empty_list(self) -> None:
         """Test that tags default to an empty list."""
         spec = JobSpec(

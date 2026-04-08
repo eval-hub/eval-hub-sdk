@@ -72,7 +72,6 @@ from ..models.api import (
     JobStatus,
     ModelConfig,
 )
-from .auth import ModelCredentials, read_model_auth_key, resolve_model_credentials
 from .callbacks import DefaultCallbacks
 from .config import MlflowBackend, get_job_spec_path
 from .models import (
@@ -114,9 +113,6 @@ __all__ = [
     "get_job_spec_path",
     "AdapterSettings",
     "MlflowBackend",
-    "ModelCredentials",
-    "read_model_auth_key",
-    "resolve_model_credentials",
     # Common models (re-exported for convenience)
     "JobStatus",
     "ModelConfig",

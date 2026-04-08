@@ -248,10 +248,9 @@ class DefaultCallbacks(JobCallbacks):
         benchmark_id: str,
         provider_id: str | None = None,
         benchmark_index: int = 0,
+        tenant: str | None = None,
         sidecar_url: str | None = None,
         insecure: bool = False,
-        auth_token: str | None = None,
-        auth_token_path: Path | str | None = None,
         ca_bundle_path: Path | str | None = None,
         events_path_template: str | None = None,
         oci_auth_config_path: Path | None = None,
@@ -267,12 +266,11 @@ class DefaultCallbacks(JobCallbacks):
             provider_id: Provider identifier (optional). If not provided, status updates
                         will not include provider_id field.
             benchmark_index: Index of this benchmark within the job (default 0).
+            tenant: Eval Hub tenant from job.json (optional). Used for ``X-Tenant`` on
+                sidecar HTTP requests; prefer over namespace env when set.
             sidecar_url: URL of evalhub service for status updates (optional).
                         If None, status updates are logged locally.
             insecure: Allow insecure HTTP connections (evalhub)
-            auth_token: Explicit authentication token (overrides auto-detection)
-            auth_token_path: Path to authentication token file (e.g., ServiceAccount token)
-                           If not provided, auto-detects Kubernetes ServiceAccount token
             ca_bundle_path: Path to CA bundle for TLS verification
                           If not provided, auto-detects OpenShift/Kubernetes CA bundles
             oci_proxy_host: OCI proxy host for k8s sidecar mode (e.g. "localhost:8080").
@@ -291,6 +289,7 @@ class DefaultCallbacks(JobCallbacks):
         self.benchmark_id = benchmark_id
         self.provider_id = provider_id
         self.benchmark_index = benchmark_index
+        self._job_tenant = tenant
         self.sidecar_url = sidecar_url.rstrip("/") if sidecar_url else None
         self._events_path_template = (
             events_path_template
@@ -313,10 +312,6 @@ class DefaultCallbacks(JobCallbacks):
 
         # Store insecure flag for evalhub communication
         self._insecure = insecure
-
-        # Store auth token source for per-request reading
-        self._explicit_auth_token = auth_token
-        self._auth_token_path = self._resolve_auth_token_path(auth_token_path)
 
         # Auto-detect or load CA bundle (only if TLS verification is enabled)
         if insecure:
@@ -343,53 +338,6 @@ class DefaultCallbacks(JobCallbacks):
                     "httpx not installed. Status updates will be logged locally. "
                     "Install with: pip install httpx"
                 )
-
-    @staticmethod
-    def _resolve_auth_token_path(token_path: Path | str | None) -> Path | None:
-        """Resolve the path to the authentication token file.
-
-        Priority:
-        1. Specified token path (if it exists)
-        2. Auto-detected Kubernetes ServiceAccount token
-        3. None (local mode, no authentication)
-
-        Args:
-            token_path: Path to token file
-
-        Returns:
-            Path to token file or None
-        """
-        if token_path:
-            path = Path(token_path)
-            if path.exists():
-                return path
-            logger.warning(f"Specified token path does not exist: {token_path}")
-
-        default_token_path = Path("/var/run/secrets/kubernetes.io/serviceaccount/token")
-        if default_token_path.exists():
-            logger.debug("Auto-detected Kubernetes ServiceAccount token")
-            return default_token_path
-
-        logger.debug("No authentication token found - running in local mode")
-        return None
-
-    def _read_auth_token(self) -> str | None:
-        """Read the authentication token fresh from disk (or return explicit token).
-
-        Returns:
-            Token string or None
-        """
-        if self._explicit_auth_token:
-            return self._explicit_auth_token
-
-        if self._auth_token_path:
-            try:
-                return self._auth_token_path.read_text().strip() or None
-            except OSError:
-                logger.warning(f"Failed to read token from {self._auth_token_path}")
-                return None
-
-        return None
 
     def _resolve_ca_bundle(self, ca_bundle_path: Path | str | None) -> Path | None:
         """Resolve CA bundle path with auto-detection.
@@ -431,9 +379,16 @@ class DefaultCallbacks(JobCallbacks):
         logger.debug("No CA bundle found - using system defaults")
         return None
 
-    @staticmethod
-    def _resolve_namespace() -> str | None:
-        """Read the pod namespace from the ServiceAccount mount."""
+    def _resolve_namespace(self) -> str | None:
+        """Tenant for ``X-Tenant`` on sidecar→eval-hub requests.
+
+        Uses ``tenant`` from job.json (set via constructor) when set; otherwise the
+        pod service account namespace file when mounted.
+        """
+        if self._job_tenant:
+            t = self._job_tenant.strip()
+            if t:
+                return t
         ns_path = Path("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
         if ns_path.exists():
             try:
@@ -443,12 +398,8 @@ class DefaultCallbacks(JobCallbacks):
         return None
 
     def _request_headers(self) -> dict[str, str]:
-        """Build per-request headers with fresh auth token and tenant namespace."""
+        """Build per-request headers for eval-hub HTTP (tenant; no adapter bearer token)."""
         headers: dict[str, str] = {}
-
-        token = self._read_auth_token()
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
 
         namespace = self._resolve_namespace()
         if namespace:
@@ -459,8 +410,7 @@ class DefaultCallbacks(JobCallbacks):
     def _create_http_client(self) -> Any:
         """Create httpx client with TLS configuration.
 
-        Auth headers are added per-request via _request_headers() so that
-        rotated ServiceAccount tokens are picked up automatically.
+        Per-request headers (e.g. ``X-Tenant``) are added via _request_headers().
 
         Returns:
             httpx.Client: Configured HTTP client
@@ -527,8 +477,8 @@ class DefaultCallbacks(JobCallbacks):
             except self.httpx.HTTPStatusError as e:
                 if e.response.status_code == 401:
                     logger.error(
-                        "Authentication failed (401). Ensure the job has a valid "
-                        "ServiceAccount token at /var/run/secrets/kubernetes.io/serviceaccount/token"
+                        "Authentication failed (401). For sidecar deployments, ensure the "
+                        "runtime sidecar can obtain a token for eval-hub; the adapter does not send one."
                     )
                 elif e.response.status_code == 403:
                     logger.error(
@@ -660,8 +610,10 @@ class DefaultCallbacks(JobCallbacks):
             provider_id=adapter.job_spec.provider_id,
             benchmark_id=adapter.job_spec.benchmark_id,
             benchmark_index=adapter.job_spec.benchmark_index,
+            tenant=adapter.job_spec.tenant,
             sidecar_url=adapter.job_spec.callback_url,
             insecure=adapter.settings.evalhub_insecure,
+            ca_bundle_path=adapter.settings.ca_bundle_path,
             oci_auth_config_path=adapter.settings.oci_auth_config_path,
             oci_insecure=adapter.settings.oci_insecure,
             oci_proxy_host=(
