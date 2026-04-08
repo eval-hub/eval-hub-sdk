@@ -9,7 +9,7 @@ from typing import Any
 from evalhub.adapter.models.adapter import FrameworkAdapter
 
 from ..models.api import JobStatus
-from .config import DEFAULT_TERMINATION_FILE_PATH, EvalHubMode, MlflowBackend
+from .config import EvalHubMode, MlflowBackend
 from .mlflow import MlflowArtifact
 from .models import (
     JobCallbacks,
@@ -257,7 +257,6 @@ class DefaultCallbacks(JobCallbacks):
         oci_auth_config_path: Path | None = None,
         oci_insecure: bool = False,
         oci_proxy_host: str | None = None,
-        termination_file_path: str | None = None,
         mlflow_backend: MlflowBackend = MlflowBackend.ODH,
     ):
         """Initialize default callbacks.
@@ -282,11 +281,6 @@ class DefaultCallbacks(JobCallbacks):
                           authentication). The returned artifact references still use the
                           original registry host. Automatically set via from_adapter()
                           when mode is K8S.
-            termination_file_path: Path to write a termination signal file when
-                          report_results completes. Used in K8S sidecar mode so the
-                          proxy container can detect adapter completion and shut down.
-                          None disables (local mode). Automatically set via
-                          from_adapter() when mode is K8S.
             mlflow_backend: MLflow client backend to use for artifact saving.
                            Use MlflowBackend.ODH (default) for the built-in client or
                            MlflowBackend.UPSTREAM for the official mlflow library.
@@ -330,9 +324,6 @@ class DefaultCallbacks(JobCallbacks):
             logger.warning("TLS verification disabled - skipping CA bundle detection")
         else:
             self._ca_bundle = self._resolve_ca_bundle(ca_bundle_path)
-
-        # Termination file for K8s sidecar coordination
-        self._termination_file_path = termination_file_path
 
         # MLflow integration (single-method API)
         self.mlflow = _MlflowOps(backend=mlflow_backend)
@@ -576,25 +567,6 @@ class DefaultCallbacks(JobCallbacks):
         logger.info(f"Created OCI artifact for job {self.job_id} as: {result}")
         return result
 
-    def _signal_termination(self, error: str | None = None) -> None:
-        """Write termination file for sidecar detection.
-
-        No-op when ``_termination_file_path`` is None (local mode).
-        Never raises; logs on failure.
-        """
-        if self._termination_file_path is None:
-            return
-        try:
-            Path(self._termination_file_path).write_text(
-                "0" if error is None else error
-            )
-            logger.info("Termination file written to %s", self._termination_file_path)
-        except Exception:
-            logger.exception(
-                "Failed to write termination file to %s",
-                self._termination_file_path,
-            )
-
     def report_results(self, results: JobResults) -> None:
         """Report final evaluation results to evalhub or log them.
 
@@ -603,8 +575,6 @@ class DefaultCallbacks(JobCallbacks):
         Args:
             results: Final job results to report
         """
-        error: str | None = None
-
         # If evalhub available, send results with completed status event
         if self.sidecar_url and self._httpx_available and self._http_client:
             try:
@@ -662,12 +632,14 @@ class DefaultCallbacks(JobCallbacks):
                 )
 
             except self.httpx.HTTPStatusError as e:
-                error = f"Failed to send results to evalhub (HTTP {e.response.status_code}): {e}"
-                logger.error(error)
+                logger.error(
+                    "Failed to send results to evalhub (HTTP %s): %s",
+                    e.response.status_code,
+                    e,
+                )
                 # Fall through to local logging
             except Exception as e:
-                error = f"Failed to send results to evalhub: {e}"
-                logger.error(error)
+                logger.error("Failed to send results to evalhub: %s", e)
                 # Fall through to local logging
 
         # Local logging
@@ -679,9 +651,6 @@ class DefaultCallbacks(JobCallbacks):
             f"Examples: {results.num_examples_evaluated} | "
             f"Duration: {results.duration_seconds:.2f}s"
         )
-
-        # Signal sidecar that the adapter is done
-        self._signal_termination(error)
 
     @staticmethod
     def from_adapter(adapter: FrameworkAdapter) -> DefaultCallbacks:
@@ -697,11 +666,6 @@ class DefaultCallbacks(JobCallbacks):
             oci_insecure=adapter.settings.oci_insecure,
             oci_proxy_host=(
                 DEFAULT_OCI_PROXY_HOST
-                if adapter.settings.mode == EvalHubMode.K8S
-                else None
-            ),
-            termination_file_path=(
-                DEFAULT_TERMINATION_FILE_PATH
                 if adapter.settings.mode == EvalHubMode.K8S
                 else None
             ),

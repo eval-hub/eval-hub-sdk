@@ -42,11 +42,6 @@ DEFAULT_JOB_SPEC_PATH_LOCAL = "meta/job.json"
 # Environment variable name for job spec location
 JOB_SPEC_PATH_ENV = "EVALHUB_JOB_SPEC_PATH"
 
-# Default termination file path (shared emptyDir volume in K8s sidecar pattern).
-# The adapter writes this file when report_results completes so the sidecar
-# proxy can detect completion and shut down gracefully.
-DEFAULT_TERMINATION_FILE_PATH = "/shared/terminated"
-
 
 def get_job_spec_path() -> Path:
     """Get the job spec file path from environment or default.
