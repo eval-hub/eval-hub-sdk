@@ -925,7 +925,9 @@ def config_set(ctx: click.Context, key: str, value: str) -> None:
 
 @config.command("get")
 @click.argument("key")
-@click.option("--unmask", is_flag=True, default=False, help="Show the raw value without masking.")
+@click.option(
+    "--unmask", is_flag=True, default=False, help="Show the raw value without masking."
+)
 @click.pass_context
 def config_get(ctx: click.Context, key: str, unmask: bool) -> None:
     """Get a configuration value from the active profile.
