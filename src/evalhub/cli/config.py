@@ -29,8 +29,18 @@ DEFAULT_CONFIG_FILE = DEFAULT_CONFIG_DIR / "config.yaml"
 REQUIRED_KEYS = ("base_url", "token", "tenant")
 OPTIONAL_KEYS = ("provider", "insecure", "timeout")
 KNOWN_KEYS = set(REQUIRED_KEYS) | set(OPTIONAL_KEYS)
+SENSITIVE_KEYS = frozenset({"token"})
 
 DEFAULT_PROFILE = "default"
+
+
+def mask_value(
+    value: str, *, prefix_len: int = 3, suffix_len: int = 2, min_len: int = 8
+) -> str:
+    """Mask a sensitive value, showing only a prefix and suffix."""
+    if len(value) < min_len:
+        return "***"
+    return f"{value[:prefix_len]}***{value[-suffix_len:]}"
 
 
 def _config_path() -> Path:

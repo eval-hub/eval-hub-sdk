@@ -14,11 +14,13 @@ from click.testing import CliRunner
 from evalhub.cli.config import (
     DEFAULT_PROFILE,
     REQUIRED_KEYS,
+    SENSITIVE_KEYS,
     get_active_profile,
     get_profile,
     get_value,
     is_known_key,
     load_config,
+    mask_value,
     missing_required_keys,
     save_config,
     set_active_profile,
@@ -268,7 +270,8 @@ class TestConfigListCommand:
         result = runner.invoke(main, ["config", "list"])
         assert result.exit_code == 0
         assert "base_url: http://myhost:8080" in result.output
-        assert "token: abc123" in result.output
+        assert "token: ***" in result.output
+        assert "token: abc123" not in result.output
         assert "Profile: default" in result.output
         assert "Missing required keys:" in result.output
         assert "tenant" in result.output
@@ -377,3 +380,58 @@ class TestFilePermissions:
         assert not (mode & stat.S_IWGRP), "Group write should be off"
         assert not (mode & stat.S_IROTH), "Other read should be off"
         assert not (mode & stat.S_IWOTH), "Other write should be off"
+
+
+class TestMaskValue:
+    def test_long_value_shows_prefix_and_suffix(self) -> None:
+        assert mask_value("abcdefghij") == "abc***ij"
+
+    def test_exactly_min_length(self) -> None:
+        assert mask_value("12345678") == "123***78"
+
+    def test_short_value_fully_masked(self) -> None:
+        assert mask_value("short") == "***"
+
+    def test_empty_string(self) -> None:
+        assert mask_value("") == "***"
+
+    def test_single_char(self) -> None:
+        assert mask_value("x") == "***"
+
+    def test_sensitive_keys_contains_token(self) -> None:
+        assert "token" in SENSITIVE_KEYS
+
+
+class TestConfigMasking:
+    def test_config_get_token_masked_by_default(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
+        runner.invoke(main, ["config", "set", "token", "my-secret-token-value"])
+        result = runner.invoke(main, ["config", "get", "token"])
+        assert result.exit_code == 0
+        assert "my-secret-token-value" not in result.output
+        assert "my-***ue" in result.output
+
+    def test_config_get_token_unmask_flag(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
+        runner.invoke(main, ["config", "set", "token", "my-secret-token-value"])
+        result = runner.invoke(main, ["config", "get", "token", "--unmask"])
+        assert result.exit_code == 0
+        assert result.output.strip() == "my-secret-token-value"
+
+    def test_config_get_non_sensitive_key_not_masked(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
+        runner.invoke(main, ["config", "set", "base_url", "http://localhost:8080"])
+        result = runner.invoke(main, ["config", "get", "base_url"])
+        assert result.exit_code == 0
+        assert result.output.strip() == "http://localhost:8080"
+
+    def test_config_list_masks_token(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
+        runner.invoke(main, ["config", "set", "token", "longtoken123"])
+        result = runner.invoke(main, ["config", "list"])
+        assert "token: lon***23" in result.output
+        assert "longtoken123" not in result.output

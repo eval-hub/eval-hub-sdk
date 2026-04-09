@@ -925,14 +925,20 @@ def config_set(ctx: click.Context, key: str, value: str) -> None:
 
 @config.command("get")
 @click.argument("key")
+@click.option("--unmask", is_flag=True, default=False, help="Show the raw value without masking.")
 @click.pass_context
-def config_get(ctx: click.Context, key: str) -> None:
+def config_get(ctx: click.Context, key: str, unmask: bool) -> None:
     """Get a configuration value from the active profile.
+
+    \b
+    Sensitive values (e.g. token) are masked by default.
+    Use --unmask to reveal the full value.
 
     \b
     Examples:
       evalhub config get base_url
       evalhub config get token
+      evalhub config get token --unmask
       evalhub --profile prod config get base_url
     """
     profile = ctx.obj.get("profile")
@@ -941,7 +947,10 @@ def config_get(ctx: click.Context, key: str) -> None:
     if value is None:
         profile_name = profile or cfg.get_active_profile(data)
         raise click.ClickException(f"Key '{key}' not found in profile '{profile_name}'")
-    click.echo(value)
+    if key in cfg.SENSITIVE_KEYS and not unmask:
+        click.echo(cfg.mask_value(str(value)))
+    else:
+        click.echo(value)
 
 
 @config.command("list")
@@ -966,7 +975,8 @@ def config_list(ctx: click.Context) -> None:
         click.echo("  (no configuration values)")
     else:
         for k, v in prof.items():
-            click.echo(f"  {k}: {v}")
+            display = cfg.mask_value(str(v)) if k in cfg.SENSITIVE_KEYS else v
+            click.echo(f"  {k}: {display}")
     missing = cfg.missing_required_keys(data, profile=profile)
     if missing:
         click.echo(f"\n  Missing required keys: {', '.join(missing)}")
