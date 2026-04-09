@@ -433,5 +433,6 @@ class TestConfigMasking:
     ) -> None:
         runner.invoke(main, ["config", "set", "token", "longtoken123"])
         result = runner.invoke(main, ["config", "list"])
+        assert result.exit_code == 0
         assert "token: lon***23" in result.output
         assert "longtoken123" not in result.output
