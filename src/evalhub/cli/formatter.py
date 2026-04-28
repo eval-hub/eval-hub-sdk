@@ -73,7 +73,7 @@ def _print_table(
 
     table = Table(show_lines=False, padding=(0, 1))
     for c in cols:
-        table.add_column(c.upper(), no_wrap=True)
+        table.add_column(c.upper(), no_wrap=False, header_style="bold", overflow="fold")
 
     for row in data:
         table.add_row(*[str(row.get(c, "")) for c in cols])
