@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 from click.testing import CliRunner
+
 from evalhub.cli.main import main
 from evalhub.models.api import (
     BenchmarkConfig,
@@ -23,7 +24,6 @@ from evalhub.models.api import (
     EvaluationJobStatus,
     JobStatus,
     ModelConfig,
-    QueueConfig,
 )
 
 NOW = datetime(2026, 3, 23, 12, 0, 0, tzinfo=UTC)

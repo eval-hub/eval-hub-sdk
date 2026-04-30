@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
+
 from evalhub.models.api import (
     BenchmarkConfig,
     BenchmarkInfo,
@@ -29,7 +31,6 @@ from evalhub.models.api import (
     ProviderList,
     QueueConfig,
 )
-from pydantic import ValidationError
 
 
 class TestModelConfig:
