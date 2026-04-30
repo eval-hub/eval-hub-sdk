@@ -812,12 +812,12 @@ def collections_run(
             f"Collection '{collection_id}' has no benchmarks to run."
         )
 
-    queue: QueueConfig | None = QueueConfig(name=queue) if queue else None
+    queue_config: QueueConfig | None = QueueConfig(name=queue) if queue else None
     request = JobSubmissionRequest(
         name=job_name,
         model=ModelConfig(url=model_url, name=model_name),
         benchmarks=benchmarks,
-        queue=queue,
+        queue=queue_config,
     )
     job = client.jobs.submit(request)
     structured = output_format in ("json", "yaml")
