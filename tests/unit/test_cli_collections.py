@@ -16,6 +16,7 @@ from evalhub.models.api import (
     BenchmarkReference,
     Collection,
     PassCriteria,
+    QueueConfig,
     Resource,
 )
 
@@ -562,6 +563,72 @@ class TestCollectionsRun:
             )
         assert result.exit_code == 0
         assert "job-abc" in result.output
+
+    def test_run_with_queue_flag(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        collection = _make_collection(
+            id="rag-safety",
+            benchmarks=[_make_benchmark_ref()],
+        )
+        mock_client.collections.get.return_value = collection
+
+        job = MagicMock()
+        job.id = "job-abc"
+        job.state.value = "running"
+        mock_client.jobs.submit.return_value = job
+
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(
+                main,
+                [
+                    "collections",
+                    "run",
+                    "rag-safety",
+                    "--model-url",
+                    "http://vllm:8000/v1",
+                    "--model-name",
+                    "llama3",
+                    "--queue",
+                    "user-queue",
+                ],
+            )
+        assert result.exit_code == 0
+        req = mock_client.jobs.submit.call_args[0][0]
+        assert req.queue is not None
+        assert req.queue.name == "user-queue"
+        assert req.queue.kind is None
+
+    def test_run_without_queue_flag(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        collection = _make_collection(
+            id="rag-safety",
+            benchmarks=[_make_benchmark_ref()],
+        )
+        mock_client.collections.get.return_value = collection
+
+        job = MagicMock()
+        job.id = "job-abc"
+        job.state.value = "running"
+        mock_client.jobs.submit.return_value = job
+
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(
+                main,
+                [
+                    "collections",
+                    "run",
+                    "rag-safety",
+                    "--model-url",
+                    "http://vllm:8000/v1",
+                    "--model-name",
+                    "llama3",
+                ],
+            )
+        assert result.exit_code == 0
+        req = mock_client.jobs.submit.call_args[0][0]
+        assert req.queue is None
 
 
 # ---------------------------------------------------------------------------

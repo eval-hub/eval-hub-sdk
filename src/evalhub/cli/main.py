@@ -25,6 +25,7 @@ from evalhub.models import (
     ModelConfig,
     OCIConnectionConfig,
     OCICoordinates,
+    QueueConfig,
 )
 
 from . import config as cfg
@@ -146,6 +147,7 @@ def _build_request_from_flags(
     dataset: str | None,
     experiment: ExperimentConfig | None = None,
     exports: EvaluationExports | None = None,
+    queue: QueueConfig | None = None,
 ) -> JobSubmissionRequest:
     """Build a JobSubmissionRequest from CLI flags."""
     parameters: dict[str, Any] = {}
@@ -164,6 +166,7 @@ def _build_request_from_flags(
         benchmarks=benchmarks,
         experiment=experiment,
         exports=exports,
+        queue=queue,
     )
 
 
@@ -211,6 +214,11 @@ def _build_request_from_flags(
     help="Kubernetes Secret name for registry auth (optional; use with OCI host/repo).",
 )
 @click.option(
+    "--queue",
+    default=None,
+    help="Kueue LocalQueue name for workload scheduling (inline flags only).",
+)
+@click.option(
     "--wait", "wait_for", is_flag=True, default=False, help="Block until job completes."
 )
 @click.option(
@@ -241,6 +249,7 @@ def eval_run(
     oci_host: str | None,
     oci_repository: str | None,
     oci_connection: str | None,
+    queue: str | None,
     wait_for: bool,
     timeout: float | None,
     poll_interval: float,
@@ -264,6 +273,9 @@ def eval_run(
       evalhub eval run --name my-eval --model-url http://vllm:8000/v1 \\
           --model-name llama3 --provider guidellm -b quick_perf_test \\
           --oci-host quay.io --oci-repository myorg/myrepo --oci-connection my-oci-secret
+      evalhub eval run --name my-eval --model-url http://vllm:8000/v1 \\
+          --model-name llama3 --provider lm_evaluation_harness -b mmlu \\
+          --queue my-local-queue
     """
     client = get_client(ctx)
 
@@ -301,6 +313,9 @@ def eval_run(
                     k8s=k8s,
                 )
             )
+        queue_config: QueueConfig | None = None
+        if queue:
+            queue_config = QueueConfig(name=queue)
         request = _build_request_from_flags(
             name=cast(str, name),
             model_url=cast(str, model_url),
@@ -312,6 +327,7 @@ def eval_run(
             dataset=dataset,
             experiment=experiment,
             exports=exports,
+            queue=queue_config,
         )
 
     job = client.jobs.submit(request)
@@ -735,6 +751,11 @@ def collections_delete(ctx: click.Context, collection_id: str) -> None:
 @click.option("--model-name", required=True, help="Model name or identifier.")
 @click.option("--name", default=None, help="Job name (defaults to collection name).")
 @click.option(
+    "--queue",
+    default=None,
+    help="Kueue LocalQueue name for workload scheduling.",
+)
+@click.option(
     "--wait", "wait_for", is_flag=True, default=False, help="Block until job completes."
 )
 @click.option(
@@ -756,6 +777,7 @@ def collections_run(
     model_url: str,
     model_name: str,
     name: str | None,
+    queue: str | None,
     wait_for: bool,
     timeout: float | None,
     poll_interval: float,
@@ -770,6 +792,8 @@ def collections_run(
     Examples:
       evalhub collections run rag-safety --model-url http://vllm:8000/v1 --model-name llama3
       evalhub collections run rag-safety --model-url http://vllm:8000/v1 --model-name llama3 --wait
+      evalhub collections run rag-safety --model-url http://vllm:8000/v1 --model-name llama3 \\
+          --queue my-local-queue
     """
     client = get_client(ctx)
     collection = client.collections.get(collection_id)
@@ -788,10 +812,12 @@ def collections_run(
             f"Collection '{collection_id}' has no benchmarks to run."
         )
 
+    queue: QueueConfig | None = QueueConfig(name=queue) if queue else None
     request = JobSubmissionRequest(
         name=job_name,
         model=ModelConfig(url=model_url, name=model_name),
         benchmarks=benchmarks,
+        queue=queue,
     )
     job = client.jobs.submit(request)
     structured = output_format in ("json", "yaml")

@@ -39,6 +39,7 @@ from .api import (
     PrimaryScore,
     Provider,
     ProviderList,
+    QueueConfig,
     Resource,
 )
 
@@ -80,6 +81,8 @@ __all__ = [
     "Resource",
     "Collection",
     "CollectionRef",
+    # Queue / scheduling models
+    "QueueConfig",
     # Framework models
     "FrameworkInfo",
     # Response models

@@ -298,6 +298,18 @@ class OCICoordinates(BaseModel):
     )
 
 
+class QueueConfig(BaseModel):
+    """Scheduling queue configuration for Kubernetes runtimes (e.g. Kueue LocalQueue)."""
+
+    kind: str | None = Field(
+        default=None,
+        description="Queue integration type. Only 'kueue' is supported. Defaults to 'kueue' server-side when omitted.",
+    )
+    name: str = Field(
+        ..., description="Queue resource name (for Kueue, the LocalQueue name)."
+    )
+
+
 class OCIConnectionConfig(BaseModel):
     """K8s connection configuration for OCI registry authentication."""
 
@@ -350,6 +362,10 @@ class JobSubmissionRequest(BaseModel):
         default=None,
         description="Optional exports configuration (e.g., OCI artifact persistence)",
     )
+    queue: QueueConfig | None = Field(
+        default=None,
+        description="Optional scheduling queue for Kubernetes-backed evaluation jobs (e.g. Kueue).",
+    )
 
     @model_validator(mode="after")
     def check_benchmarks_or_collection(self) -> "JobSubmissionRequest":
@@ -394,6 +410,10 @@ class EvaluationJob(BaseModel):
     exports: EvaluationExports | None = Field(
         default=None,
         description="Optional exports configuration",
+    )
+    queue: QueueConfig | None = Field(
+        default=None,
+        description="Optional scheduling queue for Kubernetes-backed evaluation jobs (e.g. Kueue).",
     )
 
     # Convenience properties to access nested fields

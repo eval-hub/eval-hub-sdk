@@ -27,6 +27,7 @@ from evalhub.models.api import (
     OCIConnectionConfig,
     OCICoordinates,
     ProviderList,
+    QueueConfig,
 )
 from pydantic import ValidationError
 
@@ -934,3 +935,51 @@ class TestListModelsServerCompatibility:
         benchmarks_list = BenchmarksList.model_validate(server_response)
         assert benchmarks_list.total_count == 0
         assert len(benchmarks_list.items) == 0
+
+
+class TestQueueConfig:
+    def test_basic_creation(self) -> None:
+        q = QueueConfig(name="user-queue")
+        assert q.name == "user-queue"
+        assert q.kind is None
+
+    def test_creation_with_kind(self) -> None:
+        q = QueueConfig(kind="kueue", name="user-queue")
+        assert q.kind == "kueue"
+        assert q.name == "user-queue"
+
+    def test_name_required(self) -> None:
+        with pytest.raises(ValidationError):
+            QueueConfig()  # type: ignore[call-arg]
+
+    def test_serialization_omits_kind_when_none(self) -> None:
+        q = QueueConfig(name="user-queue")
+        data = q.model_dump(exclude_none=True)
+        assert data == {"name": "user-queue"}
+        assert "kind" not in data
+
+    def test_serialization_includes_kind_when_set(self) -> None:
+        q = QueueConfig(kind="kueue", name="user-queue")
+        data = q.model_dump(exclude_none=True)
+        assert data == {"kind": "kueue", "name": "user-queue"}
+
+    def test_job_submission_request_with_queue(self) -> None:
+        req = JobSubmissionRequest(
+            name="my-eval",
+            model=ModelConfig(url="http://vllm:8000/v1", name="llama3"),
+            benchmarks=[BenchmarkConfig(id="mmlu", provider_id="lm_eval")],
+            queue=QueueConfig(name="user-queue"),
+        )
+        assert req.queue is not None
+        assert req.queue.name == "user-queue"
+        data = req.model_dump(exclude_none=True)
+        assert data["queue"] == {"name": "user-queue"}
+
+    def test_job_submission_request_without_queue(self) -> None:
+        req = JobSubmissionRequest(
+            name="my-eval",
+            model=ModelConfig(url="http://vllm:8000/v1", name="llama3"),
+            benchmarks=[BenchmarkConfig(id="mmlu", provider_id="lm_eval")],
+        )
+        assert req.queue is None
+        assert "queue" not in req.model_dump(exclude_none=True)

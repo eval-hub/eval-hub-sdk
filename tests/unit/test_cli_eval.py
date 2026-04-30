@@ -23,6 +23,7 @@ from evalhub.models.api import (
     EvaluationJobStatus,
     JobStatus,
     ModelConfig,
+    QueueConfig,
 )
 
 NOW = datetime(2026, 3, 23, 12, 0, 0, tzinfo=UTC)
@@ -357,6 +358,86 @@ class TestEvalRun:
             )
         assert result.exit_code == 0
         assert "eval-123" in result.output
+
+    def test_run_with_queue_flag(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        mock_client.jobs.submit.return_value = _make_job()
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(
+                main,
+                [
+                    "eval",
+                    "run",
+                    "--name",
+                    "inline-eval",
+                    "--model-url",
+                    "http://vllm:8000/v1",
+                    "--model-name",
+                    "llama3",
+                    "--provider",
+                    "lm_eval",
+                    "-b",
+                    "mmlu",
+                    "--queue",
+                    "user-queue",
+                ],
+            )
+        assert result.exit_code == 0
+        req = mock_client.jobs.submit.call_args[0][0]
+        assert req.queue is not None
+        assert req.queue.name == "user-queue"
+        assert req.queue.kind is None
+
+    def test_run_without_queue_flag(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        mock_client.jobs.submit.return_value = _make_job()
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(
+                main,
+                [
+                    "eval",
+                    "run",
+                    "--name",
+                    "inline-eval",
+                    "--model-url",
+                    "http://vllm:8000/v1",
+                    "--model-name",
+                    "llama3",
+                    "--provider",
+                    "lm_eval",
+                    "-b",
+                    "mmlu",
+                ],
+            )
+        assert result.exit_code == 0
+        req = mock_client.jobs.submit.call_args[0][0]
+        assert req.queue is None
+
+    def test_run_with_queue_via_config_file(
+        self,
+        runner: CliRunner,
+        config_file: Path,
+        mock_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        cfg = {
+            "name": "my-eval",
+            "model": {"url": "http://vllm:8000/v1", "name": "llama3"},
+            "benchmarks": [{"id": "mmlu", "provider_id": "lm_eval"}],
+            "queue": {"name": "user-queue"},
+        }
+        cfg_path = tmp_path / "eval.yaml"
+        cfg_path.write_text(yaml.safe_dump(cfg))
+
+        mock_client.jobs.submit.return_value = _make_job()
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(main, ["eval", "run", "--config", str(cfg_path)])
+        assert result.exit_code == 0
+        req = mock_client.jobs.submit.call_args[0][0]
+        assert req.queue is not None
+        assert req.queue.name == "user-queue"
 
 
 # --- eval status ---
