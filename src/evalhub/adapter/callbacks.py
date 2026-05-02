@@ -685,6 +685,12 @@ class DefaultCallbacks(JobCallbacks):
                         exclude_none=True
                     )
 
+                eval_meta_artifacts = (results.evaluation_metadata or {}).get(
+                    "artifacts", {}
+                )
+                if eval_meta_artifacts:
+                    artifacts.update(eval_meta_artifacts)
+
                 if artifacts:
                     status_event["artifacts"] = artifacts
 
