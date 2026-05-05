@@ -36,6 +36,7 @@ def _make_collection(
     id: str = "rag-safety",
     name: str = "RAG Safety",
     description: str = "Safety evaluation for RAG pipelines",
+    category: str = "leaderboard",
     tags: list[str] | None = None,
     benchmarks: list[BenchmarkReference] | None = None,
     pass_criteria: PassCriteria | None = None,
@@ -44,6 +45,7 @@ def _make_collection(
         resource=Resource(id=id),
         name=name,
         description=description,
+        category=category,
         tags=tags or [],
         benchmarks=benchmarks or [],
         pass_criteria=pass_criteria,
@@ -203,6 +205,7 @@ class TestCollectionsDescribe:
         assert result.exit_code == 0
         assert "RAG Safety" in result.output
         assert "rag-safety" in result.output
+        assert "Category:    leaderboard" in result.output
         assert "Benchmarks (2)" in result.output
         assert "mmlu" in result.output
         assert "toxicity" in result.output
@@ -285,6 +288,7 @@ class TestCollectionsCreate:
         spec = {
             "name": "New Collection",
             "description": "Created via CLI",
+            "category": "leaderboard",
             "benchmarks": [
                 {"benchmark_id": "mmlu", "provider_id": "lm_evaluation_harness"}
             ],
@@ -312,6 +316,7 @@ class TestCollectionsCreate:
     ) -> None:
         spec = {
             "name": "JSON Collection",
+            "category": "leaderboard",
             "benchmarks": [
                 {"benchmark_id": "arc_easy", "provider_id": "lm_evaluation_harness"}
             ],
@@ -336,7 +341,7 @@ class TestCollectionsCreate:
         mock_client: MagicMock,
         tmp_path: Path,
     ) -> None:
-        spec = {"name": "My Collection", "benchmarks": []}
+        spec = {"name": "My Collection", "category": "leaderboard", "benchmarks": []}
         spec_file = tmp_path / "collection.yaml"
         spec_file.write_text(yaml.dump(spec))
 
@@ -362,6 +367,58 @@ class TestCollectionsCreate:
             result = runner.invoke(
                 main,
                 ["collections", "create", "--file", "/nonexistent/path.yaml"],
+            )
+        assert result.exit_code != 0
+        mock_client.collections.create.assert_not_called()
+
+    def test_create_sends_category(
+        self,
+        runner: CliRunner,
+        config_file: Path,
+        mock_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        spec = {
+            "name": "Leader Collection",
+            "description": "A leaderboard collection",
+            "category": "leaderboard",
+            "benchmarks": [
+                {"benchmark_id": "hellaswag_ar", "provider_id": "lm_evaluation_harness"}
+            ],
+        }
+        spec_file = tmp_path / "collection.yaml"
+        spec_file.write_text(yaml.dump(spec))
+
+        created = _make_collection(
+            id="leader-col", name="Leader Collection", category="leaderboard"
+        )
+        mock_client.collections.create.return_value = created
+
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(
+                main, ["collections", "create", "--file", str(spec_file)]
+            )
+        assert result.exit_code == 0
+        call_data = mock_client.collections.create.call_args[0][0]
+        assert call_data["category"] == "leaderboard"
+
+    def test_create_missing_category(
+        self,
+        runner: CliRunner,
+        config_file: Path,
+        mock_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        spec = {
+            "name": "No Category",
+            "benchmarks": [],
+        }
+        spec_file = tmp_path / "bad.yaml"
+        spec_file.write_text(yaml.dump(spec))
+
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(
+                main, ["collections", "create", "--file", str(spec_file)]
             )
         assert result.exit_code != 0
         mock_client.collections.create.assert_not_called()

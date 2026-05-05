@@ -98,6 +98,7 @@ def _make_collection(collection_id: str = "standard") -> Collection:
         resource=_make_resource(collection_id),
         name="Standard Collection",
         description="A standard benchmark collection",
+        category="leaderboard",
         benchmarks=[
             BenchmarkReference(id="gsm8k", provider_id="lm_eval"),
         ],

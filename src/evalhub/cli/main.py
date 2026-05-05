@@ -663,6 +663,7 @@ def collections_describe(
     click.echo(f"Collection: {collection.name}")
     click.echo(f"ID:          {collection.resource.id}")
     click.echo(f"Description: {collection.description}")
+    click.echo(f"Category:    {collection.category}")
     if collection.tags:
         click.echo(f"Tags:        {', '.join(collection.tags)}")
     if collection.pass_criteria:
