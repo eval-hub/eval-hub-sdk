@@ -213,11 +213,3 @@ dev = [
     "types-pyyaml>=6.0.12.20250915",
     "uvicorn>=0.38.0",
 ]
-
-[[tool.uv.index]]
-name = "testpypi"
-url = "https://test.pypi.org/simple/"
-explicit = true  # uv will only use TestPyPI for packages explicitly configured to use it
-
-[tool.uv.sources]
-eval-hub-server = { index = "testpypi" }
