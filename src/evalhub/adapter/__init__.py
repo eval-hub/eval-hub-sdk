@@ -71,6 +71,7 @@ from ..models.api import (
     EvaluationResult,
     JobStatus,
     ModelConfig,
+    OCICoordinates,
 )
 from .auth import ModelCredentials, read_model_auth_key, resolve_model_credentials
 from .callbacks import DefaultCallbacks
@@ -130,4 +131,5 @@ __all__ = [
     "JobStatus",
     "ModelConfig",
     "EvaluationResult",
+    "OCICoordinates",
 ]
