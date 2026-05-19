@@ -775,7 +775,8 @@ class TracesNamespace:
 
         run_id = parameters.get(_TRACE_PARAM_RUN_ID)
         if isinstance(run_id, str) and run_id.strip():
-            run_filter = f"tags.mlflow.runId = '{run_id.strip()}'"
+            safe_run_id = run_id.strip().replace("'", "''")
+            run_filter = f"tags.mlflow.runId = '{safe_run_id}'"
             filter_string = (
                 f"({filter_string}) AND ({run_filter})" if filter_string else run_filter
             )
