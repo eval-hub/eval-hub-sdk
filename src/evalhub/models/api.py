@@ -601,9 +601,6 @@ class Resource(BaseModel):
     updated_at: datetime | None = Field(
         default=None, description="Last update timestamp"
     )
-    read_only: bool | None = Field(
-        default=None, description="Whether the resource is read-only"
-    )
     owner: str | None = Field(default=None, description="Resource owner")
 
 
