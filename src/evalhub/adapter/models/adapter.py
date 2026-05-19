@@ -12,6 +12,7 @@ from evalhub.adapter.config import EvalHubMode
 from .job import JobCallbacks, JobResults, JobSpec
 
 if TYPE_CHECKING:
+    from ..mlflow import MlflowClient
     from ..settings import AdapterSettings
 
 logger = logging.getLogger(__name__)
@@ -118,6 +119,7 @@ class FrameworkAdapter(ABC):
             )
 
         self._job_spec = self._load_job_spec()
+        self._mlflow: MlflowClient | None = None
 
     def _load_job_spec(self) -> JobSpec:
         """Load JobSpec from configured path.
@@ -150,6 +152,25 @@ class FrameworkAdapter(ABC):
             JobSpec: The job specification for this adapter instance
         """
         return self._job_spec
+
+    @property
+    def mlflow(self) -> MlflowClient | None:
+        """Pre-configured MLflow client, or ``None`` when MLflow is unavailable.
+
+        Lazily created on first access from ``MLFLOW_TRACKING_URI``.
+        In Kubernetes the URI points to the sidecar (``http://localhost:8080``),
+        so all traffic is authenticated and proxied automatically.
+        """
+        if self._mlflow is None:
+            import os
+
+            tracking_uri = os.environ.get("MLFLOW_TRACKING_URI")
+            if not tracking_uri:
+                return None
+            from ..mlflow import MlflowClient as _MlflowClient
+
+            self._mlflow = _MlflowClient(tracking_uri=tracking_uri)
+        return self._mlflow
 
     @property
     def local_jobs_base_path(self) -> Path | None:

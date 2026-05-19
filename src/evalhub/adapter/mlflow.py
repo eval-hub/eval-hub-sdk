@@ -9,6 +9,7 @@ Modelled after github.com/opendatahub-io/mlflow-go.
 
 from __future__ import annotations
 
+import json
 import logging
 import mimetypes
 import os
@@ -97,6 +98,43 @@ class MlflowArtifact:
     path: str
     content: bytes
     content_type: str = "application/octet-stream"
+
+
+@dataclass
+class SpanInfo:
+    """A single span within an MLflow trace."""
+
+    span_id: str
+    name: str
+    parent_span_id: str | None = None
+    status: str = ""
+    start_time_ns: int = 0
+    end_time_ns: int = 0
+    attributes: dict[str, Any] = field(default_factory=dict)
+    events: list[dict[str, Any]] = field(default_factory=list)
+    inputs: Any = None
+    outputs: Any = None
+
+
+@dataclass
+class TraceInfo:
+    """Metadata for an MLflow trace."""
+
+    request_id: str
+    experiment_id: str
+    timestamp_ms: int = 0
+    execution_time_ms: int = 0
+    status: str = ""
+    tags: dict[str, str] = field(default_factory=dict)
+    request_metadata: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class Trace:
+    """An MLflow trace (info + span data)."""
+
+    info: TraceInfo
+    data: dict[str, Any] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -237,6 +275,7 @@ class MlflowClient:
             verify=verify,
             headers=req_headers,
         )
+        self._traces = TracesNamespace(self)
 
     def close(self) -> None:
         self._client.close()
@@ -587,11 +626,208 @@ class MlflowClient:
             for f in data.get("files", [])
         ]
 
+    # -- Trace operations (delegated to namespace) ---------------------------
+
+    @property
+    def traces(self) -> TracesNamespace:
+        """Namespace for trace operations: ``client.traces.search(...)``, etc."""
+        return self._traces
+
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
+def _parse_trace(raw: dict[str, Any]) -> Trace:
+    """Build a ``Trace`` from the MLflow REST API JSON shape."""
+    info_raw = raw.get("info", {})
+    tags: dict[str, str] = {}
+    for t in info_raw.get("tags", []):
+        tags[t.get("key", "")] = t.get("value", "")
+    req_meta: dict[str, str] = {}
+    for m in info_raw.get("request_metadata", []):
+        req_meta[m.get("key", "")] = m.get("value", "")
+
+    info = TraceInfo(
+        request_id=info_raw.get("request_id", ""),
+        experiment_id=info_raw.get("experiment_id", ""),
+        timestamp_ms=info_raw.get("timestamp_ms", 0),
+        execution_time_ms=info_raw.get("execution_time_ms", 0),
+        status=info_raw.get("status", ""),
+        tags=tags,
+        request_metadata=req_meta,
+    )
+    return Trace(info=info, data=raw.get("data", {}))
+
+
 def _now_ms() -> int:
     return int(time.time() * 1000)
+
+
+# ---------------------------------------------------------------------------
+# Traces namespace
+# ---------------------------------------------------------------------------
+
+_TRACE_PARAM_EXPERIMENT_ID = "mlflow_traces_experiment_id"
+_TRACE_PARAM_EXPERIMENT_NAME = "mlflow_traces_experiment_name"
+_TRACE_PARAM_MAX_RESULTS = "mlflow_traces_max_results"
+_TRACE_PARAM_FILTER = "mlflow_traces_filter"
+_TRACE_PARAM_RUN_ID = "mlflow_traces_run_id"
+
+
+class TracesNamespace:
+    """Trace operations on an ``MlflowClient``.
+
+    Access via ``client.traces``::
+
+        traces, token = client.traces.search(experiment_ids=["1"])
+        trace = client.traces.get("tr-abc", experiment_id="1")
+        out = client.traces.materialize(params, "/tmp/out")
+    """
+
+    def __init__(self, client: MlflowClient) -> None:
+        self._client = client
+
+    def search(
+        self,
+        experiment_ids: list[str],
+        max_results: int = 100,
+        filter_string: str | None = None,
+        order_by: list[str] | None = None,
+        page_token: str | None = None,
+    ) -> tuple[list[Trace], str | None]:
+        """Search traces via ``GET /api/2.0/mlflow/traces``.
+
+        Returns (traces, next_page_token).  Token is ``None`` when there
+        are no more pages.
+        """
+        params: dict[str, str] = {
+            "experiment_ids": ",".join(experiment_ids),
+            "max_results": str(max_results),
+        }
+        if filter_string:
+            params["filter"] = filter_string
+        if order_by:
+            params["order_by"] = ",".join(order_by)
+        if page_token:
+            params["page_token"] = page_token
+
+        data = self._client._get("/traces", params)
+        traces: list[Trace] = []
+        for raw in data.get("traces", []):
+            traces.append(_parse_trace(raw))
+
+        next_token = data.get("next_page_token") or None
+        return traces, next_token
+
+    def get(self, request_id: str, experiment_id: str) -> Trace:
+        """Fetch a single trace by request_id."""
+        data = self._client._get(
+            f"/traces/{request_id}",
+            {"experiment_id": experiment_id},
+        )
+        return _parse_trace(data.get("trace", data))
+
+    @staticmethod
+    def is_source_configured(parameters: dict[str, Any] | None) -> bool:
+        """True when job parameters reference an MLflow experiment for trace input."""
+        if not parameters:
+            return False
+        exp_id = parameters.get(_TRACE_PARAM_EXPERIMENT_ID)
+        if exp_id is not None and str(exp_id).strip():
+            return True
+        name = parameters.get(_TRACE_PARAM_EXPERIMENT_NAME)
+        return isinstance(name, str) and bool(name.strip())
+
+    def materialize(
+        self,
+        parameters: dict[str, Any],
+        output_dir: str | Path,
+    ) -> Path:
+        """Fetch traces from MLflow and write one JSON file per trace.
+
+        Returns the output directory (populated with ``tr-<id>.json`` files).
+        """
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+
+        # Resolve experiment ID
+        exp_id_raw = parameters.get(_TRACE_PARAM_EXPERIMENT_ID)
+        exp_name = parameters.get(_TRACE_PARAM_EXPERIMENT_NAME)
+        if exp_id_raw is not None and str(exp_id_raw).strip():
+            experiment_id = str(exp_id_raw).strip()
+        elif isinstance(exp_name, str) and exp_name.strip():
+            exp = self._client.get_experiment_by_name(exp_name.strip())
+            if exp is None:
+                raise ValueError(f"MLflow experiment not found: {exp_name.strip()!r}")
+            experiment_id = exp.experiment_id
+        else:
+            raise ValueError(
+                f"Set parameters.{_TRACE_PARAM_EXPERIMENT_ID} or "
+                f"parameters.{_TRACE_PARAM_EXPERIMENT_NAME}"
+            )
+
+        max_results = int(parameters.get(_TRACE_PARAM_MAX_RESULTS, 500))
+        filter_string = parameters.get(_TRACE_PARAM_FILTER)
+        if not isinstance(filter_string, str) or not filter_string.strip():
+            filter_string = None
+
+        run_id = parameters.get(_TRACE_PARAM_RUN_ID)
+        if isinstance(run_id, str) and run_id.strip():
+            run_filter = f"tags.mlflow.runId = '{run_id.strip()}'"
+            filter_string = (
+                f"({filter_string}) AND ({run_filter})" if filter_string else run_filter
+            )
+
+        collected = 0
+        page_token: str | None = None
+        while collected < max_results:
+            page_size = min(100, max_results - collected)
+            traces, page_token = self.search(
+                experiment_ids=[experiment_id],
+                max_results=page_size,
+                filter_string=filter_string,
+                page_token=page_token,
+            )
+            if not traces:
+                break
+            for trace in traces:
+                tid = trace.info.request_id
+                prefix = "" if tid.startswith("tr-") else "tr-"
+                file_path = out / f"{prefix}{tid}.json"
+                trace_dict = {
+                    "info": {
+                        "request_id": trace.info.request_id,
+                        "experiment_id": trace.info.experiment_id,
+                        "timestamp_ms": trace.info.timestamp_ms,
+                        "execution_time_ms": trace.info.execution_time_ms,
+                        "status": trace.info.status,
+                        "tags": trace.info.tags,
+                        "request_metadata": trace.info.request_metadata,
+                    },
+                    "data": trace.data,
+                }
+                file_path.write_text(
+                    json.dumps(trace_dict, indent=2, default=str),
+                    encoding="utf-8",
+                )
+                collected += 1
+                if collected >= max_results:
+                    break
+            if not page_token:
+                break
+
+        if collected == 0:
+            raise ValueError(
+                f"No traces returned from MLflow (experiment_id={experiment_id!r}, "
+                f"filter={filter_string!r}). Confirm traces exist."
+            )
+
+        logger.info(
+            "Materialized %d trace(s) from MLflow experiment %s -> %s",
+            collected,
+            experiment_id,
+            out,
+        )
+        return out
