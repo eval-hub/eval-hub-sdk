@@ -15,6 +15,7 @@ import mimetypes
 import os
 import re
 import time
+import uuid
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -794,7 +795,9 @@ class TracesNamespace:
             if not traces:
                 break
             for trace in traces:
-                tid = trace.info.request_id
+                tid = re.sub(r"[^a-zA-Z0-9_\-]", "_", trace.info.request_id)
+                if not tid:
+                    tid = uuid.uuid4().hex
                 prefix = "" if tid.startswith("tr-") else "tr-"
                 file_path = out / f"{prefix}{tid}.json"
                 trace_dict = {
