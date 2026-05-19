@@ -71,6 +71,20 @@ class AsyncProvidersResource:
         )
         return Provider(**response.json())
 
+    async def delete(self, provider_id: str, *, tenant: str | None = None) -> None:
+        """Delete an evaluation provider.
+
+        Args:
+            provider_id: The provider identifier
+            tenant: Tenant override for this request (default: client-level tenant)
+
+        Raises:
+            httpx.HTTPError: If the provider is not found or request fails
+        """
+        await self._client._request_delete(
+            f"/evaluations/providers/{provider_id}", tenant=tenant
+        )
+
 
 class SyncProvidersResource:
     """Synchronous resource for provider operations."""
@@ -130,3 +144,17 @@ class SyncProvidersResource:
             "/evaluations/providers", json=data, tenant=tenant
         )
         return Provider(**response.json())
+
+    def delete(self, provider_id: str, *, tenant: str | None = None) -> None:
+        """Delete an evaluation provider.
+
+        Args:
+            provider_id: The provider identifier
+            tenant: Tenant override for this request (default: client-level tenant)
+
+        Raises:
+            httpx.HTTPError: If the provider is not found or request fails
+        """
+        self._client._request_delete(
+            f"/evaluations/providers/{provider_id}", tenant=tenant
+        )

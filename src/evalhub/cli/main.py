@@ -950,6 +950,7 @@ def providers() -> None:
       evalhub providers list
       evalhub providers describe lm_evaluation_harness
       evalhub providers create --file my-provider.yaml
+      evalhub providers delete my-provider
     """
 
 
@@ -1064,6 +1065,23 @@ def providers_create(ctx: click.Context, spec_file: str, output_format: str) -> 
     click.echo(f"Provider created: {provider.resource.id}")
     if output_format in ("json", "yaml"):
         output([provider.model_dump(mode="json")], output_format=output_format)
+
+
+@providers.command("delete")
+@click.argument("provider_id")
+@click.confirmation_option(prompt="Are you sure you want to delete this provider?")
+@click.pass_context
+@handle_api_errors
+def providers_delete(ctx: click.Context, provider_id: str) -> None:
+    """Delete an evaluation provider.
+
+    \b
+    Examples:
+      evalhub providers delete my-provider
+    """
+    client = get_client(ctx)
+    client.providers.delete(provider_id)
+    click.echo(f"Provider {provider_id} deleted.")
 
 
 @main.command("health")

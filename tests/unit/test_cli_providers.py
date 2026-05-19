@@ -387,6 +387,38 @@ class TestProvidersCreate:
         mock_client.providers.create.assert_not_called()
 
 
+class TestProvidersDelete:
+    def test_delete_confirmed(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        mock_client.providers.delete.return_value = None
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(
+                main, ["providers", "delete", "my-provider"], input="y\n"
+            )
+        assert result.exit_code == 0
+        assert "deleted" in result.output
+        mock_client.providers.delete.assert_called_once_with("my-provider")
+
+    def test_delete_aborted(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            runner.invoke(main, ["providers", "delete", "my-provider"], input="n\n")
+        mock_client.providers.delete.assert_not_called()
+
+    def test_delete_yes_flag(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        mock_client.providers.delete.return_value = None
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(
+                main, ["providers", "delete", "my-provider", "--yes"]
+            )
+        assert result.exit_code == 0
+        mock_client.providers.delete.assert_called_once_with("my-provider")
+
+
 class TestProvidersHelp:
     def test_providers_help(self, runner: CliRunner) -> None:
         result = runner.invoke(main, ["providers", "--help"])
@@ -394,6 +426,7 @@ class TestProvidersHelp:
         assert "list" in result.output
         assert "describe" in result.output
         assert "create" in result.output
+        assert "delete" in result.output
 
     def test_providers_list_help(self, runner: CliRunner) -> None:
         result = runner.invoke(main, ["providers", "list", "--help"])
