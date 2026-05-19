@@ -38,6 +38,7 @@ from .api import (
     PassCriteria,
     PrimaryScore,
     Provider,
+    ProviderCreateRequest,
     ProviderList,
     QueueConfig,
     Resource,
@@ -67,6 +68,7 @@ __all__ = [
     "ExperimentConfig",
     # Provider & Benchmark models
     "Provider",
+    "ProviderCreateRequest",
     "ProviderList",
     "Benchmark",
     "BenchmarkConfig",

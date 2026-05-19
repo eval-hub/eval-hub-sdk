@@ -70,8 +70,6 @@ def _make_provider(provider_id: str = "lm_eval") -> Provider:
                 description="Grade school math",
                 category="math",
                 metrics=["accuracy"],
-                num_few_shot=None,
-                dataset_size=None,
                 primary_score=None,
                 pass_criteria=None,
             )
@@ -86,8 +84,6 @@ def _make_benchmark(benchmark_id: str = "gsm8k") -> Benchmark:
         description="Grade school math",
         category="math",
         metrics=["accuracy"],
-        num_few_shot=None,
-        dataset_size=None,
         primary_score=None,
         pass_criteria=None,
     )

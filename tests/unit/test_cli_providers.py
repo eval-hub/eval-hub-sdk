@@ -35,8 +35,8 @@ def _make_benchmark(
     description: str = "Massive Multitask Language Understanding",
     category: str = "knowledge",
     metrics: list[str] | None = None,
-    num_few_shot: int | None = None,
-    dataset_size: int | None = None,
+    num_few_shot: int = 0,
+    dataset_size: int = 0,
     primary_score: PrimaryScore | None = None,
     pass_criteria: PassCriteria | None = None,
 ) -> Benchmark:
@@ -257,12 +257,143 @@ class TestHealth:
         assert "unreachable" in result.output
 
 
+class TestProvidersCreate:
+    def test_create_from_yaml(
+        self,
+        runner: CliRunner,
+        config_file: Path,
+        mock_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        spec = {
+            "name": "my-provider",
+            "title": "MyProvider",
+            "description": "A custom provider",
+            "tags": ["custom", "byof"],
+            "runtime": {"local": {"command": "python main.py"}},
+            "benchmarks": [
+                {
+                    "id": "my-benchmark",
+                    "name": "My Benchmark",
+                    "description": "A custom benchmark",
+                    "category": "general",
+                    "metrics": ["accuracy"],
+                }
+            ],
+        }
+        spec_file = tmp_path / "provider.yaml"
+        spec_file.write_text(yaml.dump(spec))
+
+        created = _make_provider(id="my-provider", name="MyProvider")
+        mock_client.providers.create.return_value = created
+
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(
+                main, ["providers", "create", "--file", str(spec_file)]
+            )
+        assert result.exit_code == 0
+        assert "my-provider" in result.output
+        mock_client.providers.create.assert_called_once()
+        call_data = mock_client.providers.create.call_args[0][0]
+        assert call_data["name"] == "my-provider"
+        assert call_data["title"] == "MyProvider"
+        assert call_data["tags"] == ["custom", "byof"]
+        assert call_data["runtime"] == {"local": {"command": "python main.py"}}
+
+    def test_create_from_json(
+        self,
+        runner: CliRunner,
+        config_file: Path,
+        mock_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        spec = {
+            "name": "json-provider",
+            "title": "JSON Provider",
+            "benchmarks": [
+                {
+                    "id": "bench-1",
+                    "name": "Bench 1",
+                    "description": "A benchmark",
+                    "category": "general",
+                }
+            ],
+        }
+        spec_file = tmp_path / "provider.json"
+        spec_file.write_text(json.dumps(spec))
+
+        created = _make_provider(id="json-provider", name="JSON Provider")
+        mock_client.providers.create.return_value = created
+
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(
+                main, ["providers", "create", "--file", str(spec_file)]
+            )
+        assert result.exit_code == 0
+        assert "json-provider" in result.output
+
+    def test_create_json_output(
+        self,
+        runner: CliRunner,
+        config_file: Path,
+        mock_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        spec = {"name": "my-provider", "title": "MyProvider", "benchmarks": []}
+        spec_file = tmp_path / "provider.yaml"
+        spec_file.write_text(yaml.dump(spec))
+
+        created = _make_provider(id="my-provider", name="MyProvider")
+        mock_client.providers.create.return_value = created
+
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(
+                main,
+                ["providers", "create", "--file", str(spec_file), "--format", "json"],
+            )
+        assert result.exit_code == 0
+        assert "my-provider" in result.output
+        json_start = result.output.index("[")
+        parsed = json.loads(result.output[json_start:])
+        assert parsed[0]["name"] == "MyProvider"
+
+    def test_create_missing_file(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(
+                main,
+                ["providers", "create", "--file", "/nonexistent/path.yaml"],
+            )
+        assert result.exit_code != 0
+        mock_client.providers.create.assert_not_called()
+
+    def test_create_invalid_spec(
+        self,
+        runner: CliRunner,
+        config_file: Path,
+        mock_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        spec: dict = {"description": "Missing required fields", "benchmarks": []}
+        spec_file = tmp_path / "bad.yaml"
+        spec_file.write_text(yaml.dump(spec))
+
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(
+                main, ["providers", "create", "--file", str(spec_file)]
+            )
+        assert result.exit_code != 0
+        mock_client.providers.create.assert_not_called()
+
+
 class TestProvidersHelp:
     def test_providers_help(self, runner: CliRunner) -> None:
         result = runner.invoke(main, ["providers", "--help"])
         assert result.exit_code == 0
         assert "list" in result.output
         assert "describe" in result.output
+        assert "create" in result.output
 
     def test_providers_list_help(self, runner: CliRunner) -> None:
         result = runner.invoke(main, ["providers", "list", "--help"])

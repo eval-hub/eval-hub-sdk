@@ -53,6 +53,24 @@ class AsyncProvidersResource:
         )
         return Provider(**response.json())
 
+    async def create(self, data: dict, *, tenant: str | None = None) -> Provider:
+        """Create a new evaluation provider.
+
+        Args:
+            data: Provider specification as a dict (name, title, description, runtime, benchmarks, ...)
+            tenant: Tenant override for this request (default: client-level tenant)
+
+        Returns:
+            Provider: The newly created provider
+
+        Raises:
+            httpx.HTTPError: If the request fails
+        """
+        response = await self._client._request_post(
+            "/evaluations/providers", json=data, tenant=tenant
+        )
+        return Provider(**response.json())
+
 
 class SyncProvidersResource:
     """Synchronous resource for provider operations."""
@@ -92,5 +110,23 @@ class SyncProvidersResource:
         """
         response = self._client._request_get(
             f"/evaluations/providers/{provider_id}", tenant=tenant
+        )
+        return Provider(**response.json())
+
+    def create(self, data: dict, *, tenant: str | None = None) -> Provider:
+        """Create a new evaluation provider.
+
+        Args:
+            data: Provider specification as a dict (name, title, description, runtime, benchmarks, ...)
+            tenant: Tenant override for this request (default: client-level tenant)
+
+        Returns:
+            Provider: The newly created provider
+
+        Raises:
+            httpx.HTTPError: If the request fails
+        """
+        response = self._client._request_post(
+            "/evaluations/providers", json=data, tenant=tenant
         )
         return Provider(**response.json())
