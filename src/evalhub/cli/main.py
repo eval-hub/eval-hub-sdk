@@ -1062,8 +1062,9 @@ def providers_create(ctx: click.Context, spec_file: str, output_format: str) -> 
     request = ProviderCreateRequest(**data)
     client = get_client(ctx)
     provider = client.providers.create(request.model_dump(mode="json"))
-    click.echo(f"Provider created: {provider.resource.id}")
-    if output_format in ("json", "yaml"):
+    structured = output_format in ("json", "yaml")
+    click.echo(f"Provider created: {provider.resource.id}", err=structured)
+    if structured:
         output([provider.model_dump(mode="json")], output_format=output_format)
 
 
