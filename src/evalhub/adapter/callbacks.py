@@ -62,6 +62,10 @@ class _MlflowOps:
     def __init__(self, backend: MlflowBackend = MlflowBackend.ODH) -> None:
         self._backend = backend
 
+    @staticmethod
+    def _build_run_name(job_spec: JobSpec) -> str:
+        return f"{job_spec.id}_{job_spec.benchmark_index}"
+
     def save(
         self,
         results: JobResults,
@@ -87,11 +91,13 @@ class _MlflowOps:
     @staticmethod
     def _build_params_metrics(
         results: JobResults,
+        job_spec: JobSpec,
     ) -> tuple[list, list]:
         from .mlflow import Metric, Param, sanitize_metric_key_for_api
 
         params = [
             Param("benchmark_id", results.benchmark_id),
+            Param("provider_id", job_spec.provider_id),
             Param("model_name", results.model_name),
             Param("num_examples_evaluated", str(results.num_examples_evaluated)),
             Param("duration_seconds", str(results.duration_seconds)),
@@ -162,7 +168,7 @@ class _MlflowOps:
     ) -> str:
         from .mlflow import MlflowClient
 
-        params, metrics = self._build_params_metrics(results)
+        params, metrics = self._build_params_metrics(results, job_spec)
         run_tags: dict[str, str] = {
             tag["key"]: tag["value"] for tag in (job_spec.tags or [])
         }
@@ -173,7 +179,9 @@ class _MlflowOps:
                 job_spec.experiment_name or ""
             )
             with client.start_run(
-                experiment_id, run_name=job_spec.id, tags=run_tags
+                experiment_id,
+                run_name=self._build_run_name(job_spec),
+                tags=run_tags,
             ) as rid:
                 run_id = rid
                 client.log_batch(run_id, metrics=metrics, params=params)
@@ -212,14 +220,16 @@ class _MlflowOps:
                 "Install it with: pip install mlflow-skinny"
             ) from exc
 
-        params, metrics = self._build_params_metrics(results)
+        params, metrics = self._build_params_metrics(results, job_spec)
         run_tags: dict[str, str] = {
             tag["key"]: tag["value"] for tag in (job_spec.tags or [])
         }
 
         mlflow.set_experiment(job_spec.experiment_name)
         run_id = ""
-        with mlflow.start_run(run_name=job_spec.id, tags=run_tags) as active_run:
+        with mlflow.start_run(
+            run_name=self._build_run_name(job_spec), tags=run_tags
+        ) as active_run:
             run_id = str(active_run.info.run_id)
             mlflow.log_params({p.key: p.value for p in params})
             mlflow.log_metrics({m.key: m.value for m in metrics})

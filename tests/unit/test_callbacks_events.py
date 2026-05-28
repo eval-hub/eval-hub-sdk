@@ -139,3 +139,67 @@ def test_mlflow_save_returns_run_id_from_upstream_path() -> None:
         rid = ops.save(results, spec)
     assert rid == "run-upstream"
     m.assert_called_once()
+
+
+def test_build_run_name_format() -> None:
+    from evalhub.adapter.callbacks import _MlflowOps
+    from evalhub.adapter.models.job import JobSpec
+    from evalhub.models.api import ModelConfig
+
+    spec = JobSpec(
+        id="job-42",
+        provider_id="p",
+        benchmark_id="mmlu",
+        benchmark_index=3,
+        model=ModelConfig(url="http://localhost/v1", name="m"),
+        parameters={},
+        callback_url="http://localhost/",
+    )
+    assert _MlflowOps._build_run_name(spec) == "job-42_3"
+
+
+def test_build_params_metrics_base_params_and_metrics() -> None:
+    from evalhub.adapter.callbacks import _MlflowOps
+    from evalhub.adapter.models.job import JobResults, JobSpec
+    from evalhub.models.api import EvaluationResult, ModelConfig
+
+    spec = JobSpec(
+        id="j1",
+        provider_id="lm_evaluation_harness",
+        benchmark_id="mmlu",
+        benchmark_index=0,
+        model=ModelConfig(url="http://localhost/v1", name="m"),
+        parameters={},
+        callback_url="http://localhost/",
+    )
+    results = JobResults(
+        id="j1",
+        benchmark_id="mmlu",
+        benchmark_index=0,
+        model_name="gpt-4",
+        results=[
+            EvaluationResult(metric_name="acc", metric_value=0.9, metric_type="float"),
+            EvaluationResult(
+                metric_name="f1", metric_value="N/A", metric_type="string"
+            ),
+        ],
+        num_examples_evaluated=100,
+        duration_seconds=42.5,
+        overall_score=0.85,
+        completed_at=datetime.now(UTC),
+    )
+    params, metrics = _MlflowOps._build_params_metrics(results, spec)
+    param_dict = {p.key: p.value for p in params}
+
+    assert param_dict == {
+        "benchmark_id": "mmlu",
+        "provider_id": "lm_evaluation_harness",
+        "model_name": "gpt-4",
+        "num_examples_evaluated": "100",
+        "duration_seconds": "42.5",
+    }
+
+    metric_dict = {m.key: m.value for m in metrics}
+    assert metric_dict["acc"] == 0.9
+    assert metric_dict["overall_score"] == 0.85
+    assert "f1" not in metric_dict
