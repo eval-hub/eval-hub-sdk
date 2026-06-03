@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
+import warnings
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any, Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from ...models.api import EvaluationResult, JobStatus, ModelConfig, OCICoordinates
 from .cards import EnvironmentCardMetadata, EvalCardMetadata
@@ -174,10 +175,14 @@ class JobStatusUpdate(BaseModel):
     """Status update sent to service via callback."""
 
     status: JobStatus = Field(..., description="Current job status")
+    # Not part of the server BenchmarkStatusEvent schema; used only for
+    # local fallback logging when no sidecar is available or the POST fails.
     phase: JobPhase | None = Field(default=None, description="Current execution phase")
     progress: float | None = Field(
         default=None, description="Progress percentage (0.0 to 1.0)"
     )
+    # Not part of the server BenchmarkStatusEvent schema; kept for backward
+    # compatibility with adapters that read it locally (e.g. logging).
     message: MessageInfo = Field(
         default_factory=lambda: MessageInfo(
             message="Status update",
@@ -192,15 +197,52 @@ class JobStatusUpdate(BaseModel):
     completed_steps: int | None = Field(
         default=None, description="Number of completed steps"
     )
+    # Deprecated: use error_message instead. Kept for backward compatibility;
+    # if both are set, error_message takes precedence. Marked for deletion in a future release.
     error: ErrorInfo | None = Field(
-        default=None, description="Error information if failed"
+        default=None,
+        description="Deprecated: use error_message instead. Marked for deletion in a future release.",
+        deprecated=True,
     )
+    error_message: MessageInfo | None = Field(
+        default=None, description="Error information (sent as error_message)"
+    )
+    warning_message: MessageInfo | None = Field(
+        default=None, description="Warning information (sent as warning_message)"
+    )
+    # Not part of the server BenchmarkStatusEvent schema; not sent to the
+    # server and not used in local logging. Marked for deletion in a future release.
     error_details: dict[str, Any] | None = Field(
-        default=None, description="Detailed error information"
+        default=None,
+        description="Deprecated: not sent to server. Marked for deletion in a future release.",
+        deprecated=True,
     )
     timestamp: datetime = Field(
         default_factory=lambda: datetime.now(UTC), description="Update timestamp"
     )
+
+    @model_validator(mode="after")
+    def _warn_deprecated_fields(self) -> Self:
+        if self.error is not None:
+            warnings.warn(
+                "JobStatusUpdate.error is deprecated and will be removed in a"
+                " future release, use error_message instead",
+                DeprecationWarning,
+                stacklevel=4,
+            )
+        if self.error_details is not None:
+            warnings.warn(
+                "JobStatusUpdate.error_details is deprecated and will be"
+                " removed in a future release",
+                DeprecationWarning,
+                stacklevel=4,
+            )
+        return self
+
+    @property
+    def resolved_error(self) -> MessageInfo | ErrorInfo | None:
+        """Return error_message if set, falling back to deprecated error field."""
+        return self.error_message or self.error
 
 
 class OCIArtifactSpec(BaseModel):

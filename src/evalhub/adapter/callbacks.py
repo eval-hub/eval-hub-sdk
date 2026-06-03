@@ -13,7 +13,6 @@ from .config import EvalHubMode, MlflowBackend
 from .mlflow import MlflowArtifact
 from .models import (
     EnvironmentCardMetadata,
-    ErrorInfo,
     JobCallbacks,
     JobResults,
     JobSpec,
@@ -25,7 +24,7 @@ from .models import (
 from .oci import DEFAULT_OCI_PROXY_HOST, OCIArtifactPersister
 from .oci.persister import OCIArtifactContext
 
-_MLFLOW_SAVE_FAILED = ErrorInfo(
+_MLFLOW_SAVE_FAILED = MessageInfo(
     message="Failed to save evaluation results to MLflow.",
     message_code="mlflow_save_failed",
 )
@@ -98,7 +97,7 @@ class _MlflowOps:
                 self._callbacks.report_status(
                     JobStatusUpdate(
                         status=JobStatus.FAILED,
-                        error=_MLFLOW_SAVE_FAILED,
+                        error_message=_MLFLOW_SAVE_FAILED,
                         message=MessageInfo(
                             message="Evaluation failed",
                             message_code="evaluation_failed",
@@ -564,6 +563,15 @@ class DefaultCallbacks(JobCallbacks):
             timeout=30.0,
         )
 
+    def _build_base_status_event(self, status: str) -> dict[str, Any]:
+        """Build the common BenchmarkStatusEvent fields required by the server."""
+        return {
+            "provider_id": self.provider_id or "",
+            "id": self.benchmark_id,
+            "benchmark_index": self.benchmark_index,
+            "status": status,
+        }
+
     def report_status(self, update: JobStatusUpdate) -> None:
         """Report status update to evalhub or log it.
 
@@ -575,22 +583,17 @@ class DefaultCallbacks(JobCallbacks):
             try:
                 url = f"{self.sidecar_url}{self._events_path_template.format(job_id=self.job_id)}"
 
-                # Transform to eval-hub API format
-                status_event = {
-                    "id": self.benchmark_id,
-                    "benchmark_index": self.benchmark_index,
-                    "state": update.status.value,
-                    "status": update.status.value,
-                    "message": update.message.model_dump(mode="json"),
-                }
+                status_event = self._build_base_status_event(update.status.value)
 
-                # Include error details for failed updates
-                if update.error:
-                    status_event["error_message"] = update.error.model_dump(mode="json")
+                if update.resolved_error:
+                    status_event["error_message"] = update.resolved_error.model_dump(
+                        mode="json"
+                    )
 
-                # Include provider_id if available
-                if self.provider_id:
-                    status_event["provider_id"] = self.provider_id
+                if update.warning_message:
+                    status_event["warning_message"] = update.warning_message.model_dump(
+                        mode="json"
+                    )
 
                 data = {"benchmark_status_event": status_event}
                 logger.debug("Events report_status body: %s", data)
@@ -682,24 +685,9 @@ class DefaultCallbacks(JobCallbacks):
                 for result in results.results:
                     metrics[result.metric_name] = result.metric_value
 
-                # Build status event with results
-                status_event = {
-                    "id": self.benchmark_id,
-                    "benchmark_index": self.benchmark_index,
-                    "state": JobStatus.COMPLETED.value,
-                    "status": JobStatus.COMPLETED.value,
-                    "message": {
-                        "message": "Evaluation completed successfully",
-                        "message_code": "evaluation_completed",
-                    },
-                    "metrics": metrics,
-                    "completed_at": results.completed_at.isoformat(),
-                    "duration_seconds": int(results.duration_seconds),
-                }
-
-                # Include provider_id if available
-                if self.provider_id:
-                    status_event["provider_id"] = self.provider_id
+                status_event = self._build_base_status_event(JobStatus.COMPLETED.value)
+                status_event["metrics"] = metrics
+                status_event["completed_at"] = results.completed_at.isoformat()
 
                 if results.mlflow_run_id:
                     status_event["mlflow_run_id"] = results.mlflow_run_id

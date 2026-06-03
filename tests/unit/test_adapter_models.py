@@ -254,6 +254,119 @@ class TestJobStatusUpdate:
         assert update.error_details is not None
         assert update.error_details["retry_count"] == 3
 
+    def test_status_update_with_error_message(self) -> None:
+        """Test status update with new error_message field."""
+        update = JobStatusUpdate(
+            status=JobStatus.FAILED,
+            error_message=MessageInfo(
+                message="Model server unreachable",
+                message_code="model_server_unreachable",
+            ),
+        )
+
+        assert update.error_message is not None
+        assert update.error_message.message == "Model server unreachable"
+        assert update.error_message.message_code == "model_server_unreachable"
+        assert update.error is None
+
+    def test_status_update_with_warning_message(self) -> None:
+        """Test status update with warning_message field."""
+        update = JobStatusUpdate(
+            status=JobStatus.RUNNING,
+            warning_message=MessageInfo(
+                message="Slow model response",
+                message_code="slow_response",
+            ),
+        )
+
+        assert update.warning_message is not None
+        assert update.warning_message.message == "Slow model response"
+        assert update.warning_message.message_code == "slow_response"
+
+    def test_resolved_error_prefers_error_message_over_error(self) -> None:
+        """Test that resolved_error returns error_message when both are set."""
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            update = JobStatusUpdate(
+                status=JobStatus.FAILED,
+                error_message=MessageInfo(
+                    message="New error",
+                    message_code="new_error",
+                ),
+                error=ErrorInfo(
+                    message="Old error",
+                    message_code="old_error",
+                ),
+            )
+
+        assert update.resolved_error is not None
+        assert update.resolved_error.message == "New error"
+
+    def test_resolved_error_falls_back_to_deprecated_error(self) -> None:
+        """Test that resolved_error falls back to error when error_message is not set."""
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            update = JobStatusUpdate(
+                status=JobStatus.FAILED,
+                error=ErrorInfo(
+                    message="Legacy error",
+                    message_code="legacy_error",
+                ),
+            )
+
+        assert update.resolved_error is not None
+        assert update.resolved_error.message == "Legacy error"
+
+    def test_resolved_error_returns_none_when_no_error(self) -> None:
+        """Test that resolved_error returns None when neither field is set."""
+        update = JobStatusUpdate(status=JobStatus.RUNNING)
+        assert update.resolved_error is None
+
+    def test_deprecated_error_field_emits_warning(self) -> None:
+        """Test that using the deprecated error field emits a DeprecationWarning."""
+        import warnings
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            JobStatusUpdate(
+                status=JobStatus.FAILED,
+                error=ErrorInfo(
+                    message="test",
+                    message_code="test",
+                ),
+            )
+
+        deprecation_warnings = [
+            x
+            for x in w
+            if issubclass(x.category, DeprecationWarning)
+            and "error is deprecated" in str(x.message)
+        ]
+        assert len(deprecation_warnings) == 1
+
+    def test_deprecated_error_details_field_emits_warning(self) -> None:
+        """Test that using the deprecated error_details field emits a DeprecationWarning."""
+        import warnings
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            JobStatusUpdate(
+                status=JobStatus.FAILED,
+                error_details={"exception_type": "ValueError"},
+            )
+
+        deprecation_warnings = [
+            x
+            for x in w
+            if issubclass(x.category, DeprecationWarning)
+            and "error_details is deprecated" in str(x.message)
+        ]
+        assert len(deprecation_warnings) == 1
+
     def test_that_timestamp_is_automatically_set(self) -> None:
         """Test that timestamp is automatically set."""
         update = JobStatusUpdate(status=JobStatus.RUNNING)

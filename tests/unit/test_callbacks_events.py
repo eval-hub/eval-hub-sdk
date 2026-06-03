@@ -43,7 +43,10 @@ def _job_spec(experiment_name: str = "exp") -> JobSpec:
     )
 
 
-def test_report_results_sends_mlflow_run_id_when_set_on_job_results() -> None:
+def _make_callbacks(
+    provider_id: str | None = "lm_evaluation_harness",
+) -> tuple[DefaultCallbacks, MagicMock]:
+    """Create a DefaultCallbacks with a mocked HTTP client."""
     mock_http = MagicMock()
     resp = MagicMock()
     resp.raise_for_status = MagicMock()
@@ -53,11 +56,16 @@ def test_report_results_sends_mlflow_run_id_when_set_on_job_results() -> None:
         callbacks = DefaultCallbacks(
             job_id="job-1",
             benchmark_id="arc_easy",
-            provider_id="lm_evaluation_harness",
+            provider_id=provider_id,
             benchmark_index=0,
             sidecar_url="http://evalhub:8080",
             insecure=True,
         )
+    return callbacks, mock_http
+
+
+def test_report_results_sends_mlflow_run_id_when_set_on_job_results() -> None:
+    callbacks, mock_http = _make_callbacks()
 
     callbacks.report_results(_results(mlflow_run_id="mlflow-run-abc"))
 
@@ -67,19 +75,7 @@ def test_report_results_sends_mlflow_run_id_when_set_on_job_results() -> None:
 
 
 def test_report_results_omits_mlflow_run_id_when_not_set() -> None:
-    mock_http = MagicMock()
-    resp = MagicMock()
-    resp.raise_for_status = MagicMock()
-    mock_http.post.return_value = resp
-
-    with patch.object(DefaultCallbacks, "_create_http_client", return_value=mock_http):
-        callbacks = DefaultCallbacks(
-            job_id="job-1",
-            benchmark_id="arc_easy",
-            benchmark_index=0,
-            sidecar_url="http://evalhub:8080",
-            insecure=True,
-        )
+    callbacks, mock_http = _make_callbacks()
 
     callbacks.report_results(_results())
 
@@ -160,19 +156,7 @@ def test_mlflow_save_returns_run_id_from_upstream_path() -> None:
 
 @pytest.mark.unit
 def test_mlflow_save_posts_failed_event_on_mlflow_error() -> None:
-    mock_http = MagicMock()
-    resp = MagicMock()
-    resp.raise_for_status = MagicMock()
-    mock_http.post.return_value = resp
-
-    with patch.object(DefaultCallbacks, "_create_http_client", return_value=mock_http):
-        callbacks = DefaultCallbacks(
-            job_id="job-1",
-            benchmark_id="arc_easy",
-            benchmark_index=0,
-            sidecar_url="http://evalhub:8080",
-            insecure=True,
-        )
+    callbacks, mock_http = _make_callbacks()
 
     with patch.object(
         callbacks.mlflow,
@@ -183,7 +167,6 @@ def test_mlflow_save_posts_failed_event_on_mlflow_error() -> None:
             callbacks.mlflow.save(_results(), _job_spec())
 
     body = mock_http.post.call_args.kwargs["json"]["benchmark_status_event"]
-    assert body["state"] == JobStatus.FAILED.value
     assert body["status"] == JobStatus.FAILED.value
     assert (
         body["error_message"]["message"]
@@ -256,3 +239,103 @@ def test_build_params_metrics_base_params_and_metrics() -> None:
     assert metric_dict["acc"] == 0.9
     assert metric_dict["overall_score"] == 0.85
     assert "f1" not in metric_dict
+
+
+# ---------------------------------------------------------------------------
+# report_status payload tests
+# ---------------------------------------------------------------------------
+
+
+def test_report_status_sends_error_message() -> None:
+    from evalhub.adapter.models.job import JobStatusUpdate, MessageInfo
+    from evalhub.models.api import JobStatus
+
+    callbacks, mock_http = _make_callbacks()
+    callbacks.report_status(
+        JobStatusUpdate(
+            status=JobStatus.FAILED,
+            error_message=MessageInfo(
+                message="boom",
+                message_code="kaboom",
+            ),
+        )
+    )
+
+    body = mock_http.post.call_args.kwargs["json"]
+    event = body["benchmark_status_event"]
+    assert event["error_message"] == {"message": "boom", "message_code": "kaboom"}
+
+
+def test_report_status_sends_warning_message() -> None:
+    from evalhub.adapter.models.job import JobStatusUpdate, MessageInfo
+    from evalhub.models.api import JobStatus
+
+    callbacks, mock_http = _make_callbacks()
+    callbacks.report_status(
+        JobStatusUpdate(
+            status=JobStatus.RUNNING,
+            warning_message=MessageInfo(
+                message="slow",
+                message_code="slow_response",
+            ),
+        )
+    )
+
+    body = mock_http.post.call_args.kwargs["json"]
+    event = body["benchmark_status_event"]
+    assert event["warning_message"] == {
+        "message": "slow",
+        "message_code": "slow_response",
+    }
+
+
+def test_report_status_always_includes_provider_id() -> None:
+    from evalhub.adapter.models.job import JobStatusUpdate
+    from evalhub.models.api import JobStatus
+
+    callbacks, mock_http = _make_callbacks(provider_id=None)
+    callbacks.report_status(JobStatusUpdate(status=JobStatus.RUNNING))
+
+    body = mock_http.post.call_args.kwargs["json"]
+    event = body["benchmark_status_event"]
+    assert "provider_id" in event
+    assert event["provider_id"] == ""
+
+
+def test_report_status_does_not_send_state_or_message() -> None:
+    from evalhub.adapter.models.job import JobStatusUpdate
+    from evalhub.models.api import JobStatus
+
+    callbacks, mock_http = _make_callbacks()
+    callbacks.report_status(JobStatusUpdate(status=JobStatus.RUNNING))
+
+    body = mock_http.post.call_args.kwargs["json"]
+    event = body["benchmark_status_event"]
+    assert "state" not in event
+    assert "message" not in event
+
+
+# ---------------------------------------------------------------------------
+# report_results payload tests
+# ---------------------------------------------------------------------------
+
+
+def test_report_results_does_not_send_state_message_or_duration() -> None:
+    callbacks, mock_http = _make_callbacks()
+    callbacks.report_results(_results())
+
+    body = mock_http.post.call_args.kwargs["json"]
+    event = body["benchmark_status_event"]
+    assert "state" not in event
+    assert "message" not in event
+    assert "duration_seconds" not in event
+
+
+def test_report_results_always_includes_provider_id() -> None:
+    callbacks, mock_http = _make_callbacks(provider_id=None)
+    callbacks.report_results(_results())
+
+    body = mock_http.post.call_args.kwargs["json"]
+    event = body["benchmark_status_event"]
+    assert "provider_id" in event
+    assert event["provider_id"] == ""
