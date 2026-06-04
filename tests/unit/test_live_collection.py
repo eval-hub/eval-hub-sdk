@@ -16,6 +16,8 @@ from evalhub.adapter import (
     run_live_collection,
 )
 
+pytestmark = pytest.mark.unit
+
 
 def _response(status_code: int, payload: dict[str, Any]) -> httpx.Response:
     return httpx.Response(
@@ -76,6 +78,43 @@ def test_endpoint_config_requires_https_when_api_key_is_used() -> None:
             base_url="http://endpoint.example/v1",
             model="chatbot",
             api_key_env="CHATBOT_API_KEY",
+        )
+
+
+def test_endpoint_config_fails_fast_when_api_key_env_is_missing_or_blank(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    endpoint = LiveEndpointConfig(
+        base_url="https://endpoint.example/v1",
+        model="chatbot",
+        api_key_env="CHATBOT_API_KEY",
+    )
+
+    monkeypatch.delenv("CHATBOT_API_KEY", raising=False)
+    with pytest.raises(ValueError, match="required and must be non-empty"):
+        _ = endpoint.api_key
+
+    monkeypatch.setenv("CHATBOT_API_KEY", "   ")
+    with pytest.raises(ValueError, match="required and must be non-empty"):
+        _ = endpoint.api_key
+
+    monkeypatch.setenv("CHATBOT_API_KEY", " secret-token ")
+    assert endpoint.api_key == "secret-token"
+
+
+def test_live_collection_config_rejects_same_input_and_output_path(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "questions.jsonl"
+
+    with pytest.raises(ValueError, match="input_path and output_path"):
+        LiveCollectionConfig(
+            input_path=path,
+            output_path=path,
+            endpoint=LiveEndpointConfig(
+                base_url="https://endpoint.example/v1",
+                model="chatbot",
+            ),
         )
 
 
@@ -164,6 +203,80 @@ def test_run_live_collection_writes_jsonl_and_manifest(
     assert manifest["rows_failed"] == 1
     assert summary.rows_total == 2
     assert summary.rows_succeeded == 1
+    assert summary.rows_failed == 1
+
+
+def test_run_live_collection_fails_before_request_when_api_key_env_is_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_path = tmp_path / "questions.jsonl"
+    output_path = tmp_path / "responses.jsonl"
+    input_path.write_text(json.dumps({"question": "hello"}) + "\n", encoding="utf-8")
+    monkeypatch.delenv("CHATBOT_API_KEY", raising=False)
+
+    calls: list[dict[str, Any]] = []
+
+    def fake_post(*args: Any, **kwargs: Any) -> httpx.Response:
+        _ = args
+        calls.append(kwargs)
+        return _response(200, {"choices": [{"message": {"content": "ignored"}}]})
+
+    monkeypatch.setattr("httpx.post", fake_post)
+
+    with pytest.raises(ValueError, match="required and must be non-empty"):
+        run_live_collection(
+            LiveCollectionConfig(
+                input_path=input_path,
+                output_path=output_path,
+                endpoint=LiveEndpointConfig(
+                    base_url="https://endpoint.example/v1",
+                    model="chatbot",
+                    api_key_env="CHATBOT_API_KEY",
+                    max_retries=0,
+                ),
+            )
+        )
+
+    assert calls == []
+    assert not output_path.exists()
+
+
+def test_run_live_collection_rejects_non_string_questions_without_calling_endpoint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_path = tmp_path / "questions.jsonl"
+    output_path = tmp_path / "responses.jsonl"
+    input_path.write_text(json.dumps({"question": 123}) + "\n", encoding="utf-8")
+
+    calls: list[dict[str, Any]] = []
+
+    def fake_post(*args: Any, **kwargs: Any) -> httpx.Response:
+        _ = args
+        calls.append(kwargs)
+        return _response(
+            200,
+            {"choices": [{"message": {"content": "should not be called"}}]},
+        )
+
+    monkeypatch.setattr("httpx.post", fake_post)
+
+    summary = run_live_collection(
+        LiveCollectionConfig(
+            input_path=input_path,
+            output_path=output_path,
+            endpoint=LiveEndpointConfig(
+                base_url="https://endpoint.example/v1",
+                model="chatbot",
+            ),
+        )
+    )
+
+    row = json.loads(output_path.read_text(encoding="utf-8"))
+    assert row["response"] is None
+    assert row["error"]["type"] == "missing_question"
+    assert calls == []
     assert summary.rows_failed == 1
 
 

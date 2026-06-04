@@ -87,7 +87,12 @@ class LiveEndpointConfig(BaseModel):
         """Read the bearer token from the configured environment variable."""
         if not self.api_key_env:
             return None
-        return os.getenv(self.api_key_env)
+        value = os.getenv(self.api_key_env)
+        if value is None or not value.strip():
+            raise ValueError(
+                f"Environment variable {self.api_key_env!r} is required and must be non-empty"
+            )
+        return value.strip()
 
 
 class LiveCollectionConfig(BaseModel):
@@ -117,6 +122,14 @@ class LiveCollectionConfig(BaseModel):
             raise ValueError("id_field cannot be empty")
         return cleaned
 
+    @model_validator(mode="after")
+    def validate_paths_are_distinct(self) -> LiveCollectionConfig:
+        if self.input_path.resolve(strict=False) == self.output_path.resolve(
+            strict=False
+        ):
+            raise ValueError("input_path and output_path must be different")
+        return self
+
     @property
     def manifest_path(self) -> Path:
         """Return the sidecar manifest path for ``output_path``."""
@@ -145,6 +158,7 @@ def load_live_collection_config(parameters: dict[str, Any]) -> LiveCollectionCon
 
 def run_live_collection(config: LiveCollectionConfig) -> LiveCollectionSummary:
     """Collect live endpoint responses and write output JSONL plus a manifest."""
+    _ = config.endpoint.api_key
     rows = load_input_rows(config.input_path)
     collected = list(collect_live_responses(rows, config))
     write_jsonl(config.output_path, collected)
@@ -195,7 +209,8 @@ def collect_live_responses(
             output["response_metadata"]["source_id"] = row[config.id_field]
         output["error"] = None
 
-        question = str(row.get(config.question_field, "")).strip()
+        question_value = row.get(config.question_field)
+        question = question_value.strip() if isinstance(question_value, str) else ""
         if not question:
             output["error"] = {
                 "type": "missing_question",
@@ -239,8 +254,9 @@ def call_openai_chat_completion(
         "messages": [{"role": "user", "content": question}],
     }
     headers = {"content-type": "application/json"}
-    if endpoint.api_key:
-        headers["authorization"] = f"Bearer {endpoint.api_key}"
+    api_key = endpoint.api_key
+    if api_key:
+        headers["authorization"] = f"Bearer {api_key}"
 
     last_error: Exception | None = None
     for attempt in range(endpoint.max_retries + 1):
