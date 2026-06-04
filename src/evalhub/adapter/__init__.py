@@ -76,6 +76,14 @@ from ..models.api import (
 from .auth import ModelCredentials, read_model_auth_key, resolve_model_credentials
 from .callbacks import DefaultCallbacks
 from .config import MlflowBackend, get_job_spec_path
+from .live_collection import (
+    LiveCollectionConfig,
+    LiveCollectionSummary,
+    LiveEndpointConfig,
+    load_input_rows,
+    load_live_collection_config,
+    run_live_collection,
+)
 from .models import (
     CapabilityEvalEntry,
     EnvironmentCardMetadata,
@@ -127,6 +135,13 @@ __all__ = [
     "ModelCredentials",
     "read_model_auth_key",
     "resolve_model_credentials",
+    # Experimental live endpoint collection
+    "LiveEndpointConfig",
+    "LiveCollectionConfig",
+    "LiveCollectionSummary",
+    "load_input_rows",
+    "load_live_collection_config",
+    "run_live_collection",
     # Common models (re-exported for convenience)
     "JobStatus",
     "ModelConfig",
