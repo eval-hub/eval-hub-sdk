@@ -315,6 +315,35 @@ def test_report_status_does_not_send_state_or_message() -> None:
     assert "message" not in event
 
 
+def test_report_status_sends_phase_when_set() -> None:
+    from evalhub.adapter.models.job import JobPhase, JobStatusUpdate
+    from evalhub.models.api import JobStatus
+
+    callbacks, mock_http = _make_callbacks()
+    callbacks.report_status(
+        JobStatusUpdate(
+            status=JobStatus.RUNNING,
+            phase=JobPhase.RUNNING_EVALUATION,
+        )
+    )
+
+    body = mock_http.post.call_args.kwargs["json"]
+    event = body["benchmark_status_event"]
+    assert event["phase"] == "running_evaluation"
+
+
+def test_report_status_omits_phase_when_not_set() -> None:
+    from evalhub.adapter.models.job import JobStatusUpdate
+    from evalhub.models.api import JobStatus
+
+    callbacks, mock_http = _make_callbacks()
+    callbacks.report_status(JobStatusUpdate(status=JobStatus.RUNNING))
+
+    body = mock_http.post.call_args.kwargs["json"]
+    event = body["benchmark_status_event"]
+    assert "phase" not in event
+
+
 # ---------------------------------------------------------------------------
 # report_results payload tests
 # ---------------------------------------------------------------------------

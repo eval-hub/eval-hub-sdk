@@ -175,8 +175,6 @@ class JobStatusUpdate(BaseModel):
     """Status update sent to service via callback."""
 
     status: JobStatus = Field(..., description="Current job status")
-    # Not part of the server BenchmarkStatusEvent schema; used only for
-    # local fallback logging when no sidecar is available or the POST fails.
     phase: JobPhase | None = Field(default=None, description="Current execution phase")
     progress: float | None = Field(
         default=None, description="Progress percentage (0.0 to 1.0)"

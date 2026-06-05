@@ -585,6 +585,9 @@ class DefaultCallbacks(JobCallbacks):
 
                 status_event = self._build_base_status_event(update.status.value)
 
+                if update.phase is not None:
+                    status_event["phase"] = update.phase.value
+
                 if update.resolved_error:
                     status_event["error_message"] = update.resolved_error.model_dump(
                         mode="json"
