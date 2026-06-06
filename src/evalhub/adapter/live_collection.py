@@ -81,6 +81,7 @@ class LiveCollectionConfig(BaseModel):
     @field_validator("endpoint_url")
     @classmethod
     def _endpoint_url_must_be_http(cls, value: str) -> str:
+        """Require network endpoints to use explicit HTTP(S) schemes."""
         if not value.lower().startswith(("http://", "https://")):
             raise ValueError("endpoint_url must use http:// or https://")
         return value
@@ -233,6 +234,7 @@ def _load_csv_questions(
     question_column: str,
     id_column: str,
 ) -> list[LiveQuestion]:
+    """Parse CSV rows into live collection questions."""
     with path.open(newline="", encoding="utf-8") as csv_file:
         reader = csv.DictReader(csv_file)
         if reader.fieldnames is None or question_column not in reader.fieldnames:
@@ -266,6 +268,7 @@ def _load_jsonl_questions(
     question_column: str,
     id_column: str,
 ) -> list[LiveQuestion]:
+    """Parse newline-delimited JSON objects into live collection questions."""
     questions: list[LiveQuestion] = []
     with path.open(encoding="utf-8") as jsonl_file:
         for row_index, line in enumerate(jsonl_file, start=1):
@@ -290,6 +293,7 @@ def _load_json_questions(
     question_column: str,
     id_column: str,
 ) -> list[LiveQuestion]:
+    """Parse JSON list inputs into live collection questions."""
     raw_data = json.loads(path.read_text(encoding="utf-8"))
     if isinstance(raw_data, dict) and "questions" in raw_data:
         raw_data = raw_data["questions"]
@@ -319,6 +323,7 @@ def _question_from_mapping(
     id_column: str,
     row_index: int,
 ) -> LiveQuestion:
+    """Build a validated question from one structured input row."""
     raw_question = row.get(question_column)
     if not isinstance(raw_question, str) or not raw_question.strip():
         raise ValueError(f"Question row {row_index} must include '{question_column}'")
@@ -342,6 +347,7 @@ def _question_from_mapping(
 
 
 def _build_headers(config: LiveCollectionConfig) -> dict[str, str]:
+    """Build request headers, including optional bearer-token auth."""
     headers = dict(config.request_headers)
     if config.api_key_env:
         api_key = os.getenv(config.api_key_env)
@@ -357,6 +363,7 @@ def _collect_one_question(
     headers: Mapping[str, str],
     question: LiveQuestion,
 ) -> LiveCollectionRecord:
+    """Collect one endpoint response and return either content or row error."""
     last_error: str | None = None
     for _attempt in range(config.max_retries + 1):
         try:
@@ -401,6 +408,7 @@ def _chat_completion_body(
     config: LiveCollectionConfig,
     question: LiveQuestion,
 ) -> dict[str, Any]:
+    """Create an OpenAI-compatible chat-completions request body."""
     messages: list[dict[str, str]] = []
     if config.system_prompt:
         messages.append({"role": "system", "content": config.system_prompt})
@@ -415,6 +423,7 @@ def _chat_completion_body(
 
 
 def _extract_chat_content(raw_response: Mapping[str, Any]) -> str | None:
+    """Extract assistant text from a chat-completions response payload."""
     choices = raw_response.get("choices")
     if not isinstance(choices, list) or not choices:
         return None
