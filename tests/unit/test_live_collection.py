@@ -95,6 +95,42 @@ def test_load_live_questions_from_jsonl(tmp_path: Path) -> None:
     }
 
 
+def test_load_live_questions_skips_blank_json_and_normalizes_ids(tmp_path: Path) -> None:
+    questions_path = tmp_path / "questions.json"
+    questions_path.write_text(
+        json.dumps(
+            [
+                {"id": "  ", "question": "   "},
+                {"id": "  row-2  ", "question": "  Summarize this.  "},
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    questions = load_live_questions(questions_path)
+
+    assert len(questions) == 1
+    assert questions[0].question_id == "row-2"
+    assert questions[0].question == "Summarize this."
+
+
+def test_load_live_questions_skips_blank_jsonl_rows(tmp_path: Path) -> None:
+    questions_path = tmp_path / "questions.jsonl"
+    questions_path.write_text(
+        json.dumps({"id": "", "question": "   "})
+        + "\n"
+        + json.dumps({"id": "row-2", "question": "Keep this one"})
+        + "\n",
+        encoding="utf-8",
+    )
+
+    questions = load_live_questions(questions_path)
+
+    assert len(questions) == 1
+    assert questions[0].question_id == "row-2"
+    assert questions[0].question == "Keep this one"
+
+
 def test_collect_openai_chat_completions_writes_jsonl_and_manifest(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -148,6 +184,34 @@ def test_collect_openai_chat_completions_writes_jsonl_and_manifest(
     manifest_data = json.loads((output_dir / "manifest.json").read_text())
     assert manifest_data["completed"] == 2
     assert manifest_data["output_path"].endswith("responses.jsonl")
+
+
+def test_collect_openai_chat_completions_preserves_canonical_request_fields(
+    tmp_path: Path,
+) -> None:
+    questions_path = tmp_path / "questions.csv"
+    questions_path.write_text("question\nWhat is EvalHub?\n", encoding="utf-8")
+    client = StubClient([StubResponse()])
+    config = LiveCollectionConfig(
+        questions_path=questions_path,
+        output_dir=tmp_path / "out",
+        endpoint_url="https://example.test/v1/chat/completions",
+        model="test-model",
+        extra_body={
+            "model": "wrong-model",
+            "messages": [{"role": "user", "content": "wrong prompt"}],
+            "temperature": 0,
+        },
+    )
+
+    manifest = collect_openai_chat_completions(config, client=client)
+
+    assert manifest.completed == 1
+    assert client.calls[0]["json"]["model"] == "test-model"
+    assert client.calls[0]["json"]["messages"] == [
+        {"role": "user", "content": "What is EvalHub?"},
+    ]
+    assert client.calls[0]["json"]["temperature"] == 0
 
 
 def test_collect_openai_chat_completions_records_redirect_errors(

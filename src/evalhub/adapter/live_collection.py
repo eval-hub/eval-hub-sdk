@@ -277,14 +277,14 @@ def _load_jsonl_questions(
             raw_row = json.loads(line)
             if not isinstance(raw_row, dict):
                 raise ValueError("Each JSONL line must be an object")
-            questions.append(
-                _question_from_mapping(
-                    cast(Mapping[str, Any], raw_row),
-                    question_column,
-                    id_column,
-                    row_index,
-                )
+            question = _question_from_mapping(
+                cast(Mapping[str, Any], raw_row),
+                question_column,
+                id_column,
+                row_index,
             )
+            if question is not None:
+                questions.append(question)
     return questions
 
 
@@ -306,14 +306,14 @@ def _load_json_questions(
     for row_index, raw_row in enumerate(raw_data, start=1):
         if not isinstance(raw_row, dict):
             raise ValueError("Each JSON question row must be an object")
-        questions.append(
-            _question_from_mapping(
-                cast(Mapping[str, Any], raw_row),
-                question_column,
-                id_column,
-                row_index,
-            )
+        question = _question_from_mapping(
+            cast(Mapping[str, Any], raw_row),
+            question_column,
+            id_column,
+            row_index,
         )
+        if question is not None:
+            questions.append(question)
     return questions
 
 
@@ -322,14 +322,22 @@ def _question_from_mapping(
     question_column: str,
     id_column: str,
     row_index: int,
-) -> LiveQuestion:
+) -> LiveQuestion | None:
     """Build a validated question from one structured input row."""
     raw_question = row.get(question_column)
-    if not isinstance(raw_question, str) or not raw_question.strip():
+    if raw_question is None:
+        raise ValueError(f"Question row {row_index} must include '{question_column}'")
+    if not isinstance(raw_question, str):
         raise ValueError(f"Question row {row_index} must include '{question_column}'")
 
+    question_text = raw_question.strip()
+    if not question_text:
+        return None
+
     raw_id = row.get(id_column)
-    question_id = str(raw_id) if raw_id not in (None, "") else str(row_index)
+    question_id = str(raw_id).strip() if raw_id is not None else ""
+    if not question_id:
+        question_id = str(row_index)
 
     metadata: dict[str, Any] = {}
     explicit_metadata = row.get("metadata")
@@ -340,7 +348,7 @@ def _question_from_mapping(
             metadata[key] = value
 
     return LiveQuestion(
-        question=raw_question.strip(),
+        question=question_text,
         question_id=question_id,
         metadata=metadata,
     )
@@ -414,11 +422,9 @@ def _chat_completion_body(
         messages.append({"role": "system", "content": config.system_prompt})
     messages.append({"role": "user", "content": question.question})
 
-    body: dict[str, Any] = {
-        "model": config.model,
-        "messages": messages,
-    }
-    body.update(config.extra_body)
+    body: dict[str, Any] = dict(config.extra_body)
+    body["model"] = config.model
+    body["messages"] = messages
     return body
 
 
