@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import time
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -57,6 +58,16 @@ class LiveCollectionConfig(BaseModel):
     )
     max_retries: int = Field(
         default=0, ge=0, description="Number of retries after the initial request"
+    )
+    retry_backoff_seconds: float = Field(
+        default=0.25,
+        ge=0.0,
+        description="Base delay before retrying failed row requests",
+    )
+    max_retry_backoff_seconds: float = Field(
+        default=5.0,
+        ge=0.0,
+        description="Maximum delay before retrying failed row requests",
     )
 
     @classmethod
@@ -371,6 +382,12 @@ def _collect_one_question(
             )
         except Exception as exc:
             last_error = f"{type(exc).__name__}: {exc}"
+            if _attempt < config.max_retries and config.retry_backoff_seconds > 0:
+                delay = min(
+                    config.retry_backoff_seconds * (2**_attempt),
+                    config.max_retry_backoff_seconds,
+                )
+                time.sleep(delay)
 
     return LiveCollectionRecord(
         question=question.question,

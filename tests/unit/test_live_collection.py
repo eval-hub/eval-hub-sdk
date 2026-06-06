@@ -176,6 +176,7 @@ def test_collect_openai_chat_completions_records_redirect_errors(
 
 def test_collect_openai_chat_completions_retries_row_errors(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     questions_path = tmp_path / "questions.json"
     questions_path.write_text(
@@ -188,6 +189,7 @@ def test_collect_openai_chat_completions_retries_row_errors(
         endpoint_url="https://example.test/v1/chat/completions",
         model="test-model",
         max_retries=1,
+        retry_backoff_seconds=0.5,
     )
     client = StubClient(
         [
@@ -195,12 +197,15 @@ def test_collect_openai_chat_completions_retries_row_errors(
             StubResponse({"choices": [{"message": {"content": "recovered"}}]}),
         ]
     )
+    sleeps: list[float] = []
+    monkeypatch.setattr("evalhub.adapter.live_collection.time.sleep", sleeps.append)
 
     manifest = collect_openai_chat_completions(config, client=client)
 
     assert manifest.completed == 1
     assert manifest.failed == 0
     assert len(client.calls) == 2
+    assert sleeps == [0.5]
 
 
 def test_collect_openai_chat_completions_requires_configured_auth_env(

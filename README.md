@@ -271,7 +271,8 @@ Example `parameters["live_collection"]` shape:
 
 The helper does not require server/API changes. Redirects are not followed, and
 per-row request failures are recorded in the JSONL output instead of aborting
-the whole job.
+the whole job. When `max_retries` is set, failed row requests use capped
+exponential backoff between attempts.
 
 Because `endpoint_url`, `request_headers`, and `api_key_env` come from adapter
 parameters, use this helper only when the job submitter is trusted to choose the
