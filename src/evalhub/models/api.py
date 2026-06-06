@@ -619,6 +619,32 @@ class PassCriteria(BaseModel):
     threshold: float = Field(..., description="Threshold value for passing")
 
 
+class ScoreRange(BaseModel):
+    """A score band with semantic meaning."""
+
+    range: str = Field(..., description="Score range (e.g. '0-50')")
+    meaning: str = Field(..., description="Human-readable meaning of this band")
+
+
+class BenchmarkAgentMetadata(BaseModel):
+    """Agent-consumption metadata at the benchmark level."""
+
+    result_interpretation: str | None = Field(default=None)
+    score_ranges: list[ScoreRange] = Field(default_factory=list)
+
+
+class AgentMetadata(BaseModel):
+    """Agent-consumption metadata at the provider level."""
+
+    evaluates: list[str] = Field(default_factory=list)
+    recommended_when: list[str] = Field(default_factory=list)
+    target_type: str | None = Field(default=None)
+    summary: str | None = Field(default=None)
+    complements: list[str] = Field(default_factory=list)
+    hints: list[str] = Field(default_factory=list)
+    result_interpretation: list[str] = Field(default_factory=list)
+
+
 class Benchmark(BaseModel):
     """Benchmark information from EvalHub API."""
 
@@ -635,6 +661,7 @@ class Benchmark(BaseModel):
         None, description="Primary score configuration"
     )
     pass_criteria: PassCriteria | None = Field(None, description="Pass/fail criteria")
+    agent: BenchmarkAgentMetadata | None = Field(default=None)
 
 
 class BenchmarksList(BaseModel):
@@ -661,6 +688,7 @@ class Provider(BaseModel):
     benchmarks: list[Benchmark] = Field(
         default_factory=list, description="Benchmarks supported by this provider"
     )
+    agent: AgentMetadata | None = Field(default=None)
 
 
 class ProviderList(BaseModel):

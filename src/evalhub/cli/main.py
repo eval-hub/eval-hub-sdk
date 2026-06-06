@@ -974,6 +974,12 @@ def providers_list(ctx: click.Context, output_format: str) -> None:
     """
     client = get_client(ctx)
     items = client.providers.list()
+    if output_format in ("json", "yaml"):
+        output(
+            [p.model_dump(mode="json") for p in items],
+            output_format=output_format,
+        )
+        return
     rows = [
         {
             "id": p.resource.id,

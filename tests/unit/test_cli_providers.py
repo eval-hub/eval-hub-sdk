@@ -12,7 +12,14 @@ import pytest
 import yaml
 from click.testing import CliRunner
 from evalhub.cli.main import main
-from evalhub.models.api import Benchmark, PassCriteria, PrimaryScore, Provider, Resource
+from evalhub.models.api import (
+    AgentMetadata,
+    Benchmark,
+    PassCriteria,
+    PrimaryScore,
+    Provider,
+    Resource,
+)
 
 
 def _make_provider(
@@ -20,12 +27,14 @@ def _make_provider(
     name: str = "LM Evaluation Harness",
     description: str = "Language model evaluation framework",
     benchmarks: list | None = None,
+    agent: AgentMetadata | None = None,
 ) -> Provider:
     return Provider(
         resource=Resource(id=id),
         name=name,
         description=description,
         benchmarks=benchmarks or [],
+        agent=agent,
     )
 
 
@@ -103,7 +112,8 @@ class TestProvidersList:
         assert result.exit_code == 0
         parsed = json.loads(result.output)
         assert len(parsed) == 1
-        assert parsed[0]["id"] == "lm_eval"
+        assert parsed[0]["resource"]["id"] == "lm_eval"
+        assert "agent" in parsed[0]
 
     def test_list_yaml_format(
         self, runner: CliRunner, config_file: Path, mock_client: MagicMock
@@ -115,7 +125,31 @@ class TestProvidersList:
             result = runner.invoke(main, ["providers", "list", "--format", "yaml"])
         assert result.exit_code == 0
         parsed = yaml.safe_load(result.output)
-        assert parsed[0]["id"] == "garak"
+        assert parsed[0]["resource"]["id"] == "garak"
+        assert "agent" in parsed[0]
+
+    def test_list_json_includes_agent_metadata(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        agent = AgentMetadata(
+            evaluates=["reasoning", "knowledge"],
+            recommended_when=["general LLM evaluation"],
+            target_type="llm",
+            summary="Broad benchmark suite",
+            complements=["garak"],
+            hints=["use with mmlu for knowledge tasks"],
+            result_interpretation=["higher is better"],
+        )
+        mock_client.providers.list.return_value = [
+            _make_provider(id="lm_eval", name="LM Eval", agent=agent),
+        ]
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(main, ["providers", "list", "--format", "json"])
+        assert result.exit_code == 0
+        parsed = json.loads(result.output)
+        assert parsed[0]["agent"]["target_type"] == "llm"
+        assert parsed[0]["agent"]["summary"] == "Broad benchmark suite"
+        assert parsed[0]["agent"]["evaluates"] == ["reasoning", "knowledge"]
 
     def test_list_csv_format(
         self, runner: CliRunner, config_file: Path, mock_client: MagicMock

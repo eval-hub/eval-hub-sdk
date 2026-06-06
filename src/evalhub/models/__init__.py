@@ -1,7 +1,9 @@
 """EvalHub SDK Models - Standard request/response models for framework adapters."""
 
 from .api import (
+    AgentMetadata,
     Benchmark,
+    BenchmarkAgentMetadata,
     BenchmarkConfig,
     BenchmarkInfo,
     BenchmarkReference,
@@ -43,6 +45,7 @@ from .api import (
     QueueConfig,
     Resource,
     S3TestDataRef,
+    ScoreRange,
     TestDataRef,
 )
 
@@ -67,6 +70,9 @@ __all__ = [
     "ExperimentTag",
     "ExperimentConfig",
     # Provider & Benchmark models
+    "AgentMetadata",
+    "BenchmarkAgentMetadata",
+    "ScoreRange",
     "Provider",
     "ProviderCreateRequest",
     "ProviderList",

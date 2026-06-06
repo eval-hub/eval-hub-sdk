@@ -16,10 +16,18 @@ class AsyncProvidersResource:
     def __init__(self, client: BaseAsyncClient):
         self._client = client
 
-    async def list(self, *, tenant: str | None = None) -> list[Provider]:
+    async def list(
+        self,
+        *,
+        target_type: str | None = None,
+        evaluates: str | None = None,
+        tenant: str | None = None,
+    ) -> list[Provider]:
         """List all registered providers.
 
         Args:
+            target_type: Filter by agent target type (e.g. "model", "agent", "inference_server")
+            evaluates: Filter to providers whose agent evaluates this capability
             tenant: Tenant override for this request (default: client-level tenant)
 
         Returns:
@@ -33,7 +41,12 @@ class AsyncProvidersResource:
         )
         data = response.json()
         provider_list = ProviderList(**data)
-        return provider_list.items
+        items = provider_list.items
+        if target_type:
+            items = [p for p in items if p.agent and p.agent.target_type == target_type]
+        if evaluates:
+            items = [p for p in items if p.agent and evaluates in p.agent.evaluates]
+        return items
 
     async def get(self, provider_id: str, *, tenant: str | None = None) -> Provider:
         """Get information about a specific provider.
@@ -92,10 +105,18 @@ class SyncProvidersResource:
     def __init__(self, client: BaseSyncClient):
         self._client = client
 
-    def list(self, *, tenant: str | None = None) -> list[Provider]:
+    def list(
+        self,
+        *,
+        target_type: str | None = None,
+        evaluates: str | None = None,
+        tenant: str | None = None,
+    ) -> list[Provider]:
         """List all registered providers.
 
         Args:
+            target_type: Filter by agent target type (e.g. "model", "agent", "inference_server")
+            evaluates: Filter to providers whose agent evaluates this capability
             tenant: Tenant override for this request (default: client-level tenant)
 
         Returns:
@@ -107,7 +128,12 @@ class SyncProvidersResource:
         response = self._client._request_get("/evaluations/providers", tenant=tenant)
         data = response.json()
         provider_list = ProviderList(**data)
-        return provider_list.items
+        items = provider_list.items
+        if target_type:
+            items = [p for p in items if p.agent and p.agent.target_type == target_type]
+        if evaluates:
+            items = [p for p in items if p.agent and evaluates in p.agent.evaluates]
+        return items
 
     def get(self, provider_id: str, *, tenant: str | None = None) -> Provider:
         """Get information about a specific provider.

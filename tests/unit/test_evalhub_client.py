@@ -28,6 +28,9 @@ from evalhub.client.base import (
     BaseSyncClient,
 )
 from evalhub.models.api import (
+    AgentMetadata,
+    Benchmark,
+    BenchmarkAgentMetadata,
     BenchmarkConfig,
     CollectionRef,
     EvaluationExports,
@@ -38,6 +41,9 @@ from evalhub.models.api import (
     ModelConfig,
     OCIConnectionConfig,
     OCICoordinates,
+    Provider,
+    Resource,
+    ScoreRange,
 )
 
 # Environment variable to enable real server testing
@@ -461,3 +467,161 @@ class TestEvalHubClient:
             with patch.object(client, "_request", return_value=mock_response):
                 health = await client.health()
                 assert health["status"] == "healthy"
+
+
+class TestAgentMetadataModels:
+    """Unit tests for agent-discoverability model round-trips."""
+
+    def test_provider_agent_metadata_round_trip(self) -> None:
+        data: dict[str, Any] = {
+            "resource": {"id": "test"},
+            "name": "Test Provider",
+            "agent": {
+                "evaluates": ["data-ingestion", "metrics-reporting"],
+                "recommended_when": ["User wants to validate the pipeline"],
+                "target_type": "model",
+                "summary": "Validate the EvalHub pipeline",
+                "complements": [],
+                "hints": ["Requires JSON data mounted at /data"],
+                "result_interpretation": ["row_count: number of records"],
+            },
+        }
+        provider = Provider(**data)
+        assert provider.agent is not None
+        assert provider.agent.target_type == "model"
+        assert provider.agent.evaluates == ["data-ingestion", "metrics-reporting"]
+        assert provider.agent.hints == ["Requires JSON data mounted at /data"]
+        assert provider.agent.result_interpretation == ["row_count: number of records"]
+
+    def test_provider_without_agent_defaults_to_none(self) -> None:
+        provider = Provider(resource=Resource(id="p"), name="P")
+        assert provider.agent is None
+
+    def test_benchmark_agent_metadata_round_trip(self) -> None:
+        data: dict[str, Any] = {
+            "id": "datafile",
+            "name": "Datafile",
+            "category": "general",
+            "agent": {
+                "result_interpretation": "row_count shows records read",
+                "score_ranges": [
+                    {"range": "0-50", "meaning": "Low data volume"},
+                    {"range": "51-100", "meaning": "Expected range"},
+                ],
+            },
+        }
+        benchmark = Benchmark(**data)
+        assert benchmark.agent is not None
+        assert benchmark.agent.result_interpretation == "row_count shows records read"
+        assert len(benchmark.agent.score_ranges) == 2
+        assert benchmark.agent.score_ranges[0].range == "0-50"
+        assert benchmark.agent.score_ranges[0].meaning == "Low data volume"
+        assert benchmark.agent.score_ranges[1].range == "51-100"
+
+    def test_benchmark_without_agent_defaults_to_none(self) -> None:
+        benchmark = Benchmark(
+            id="b", name="B", category="general", primary_score=None, pass_criteria=None
+        )
+        assert benchmark.agent is None
+
+    def test_score_range_model(self) -> None:
+        sr = ScoreRange(range="0-100", meaning="full scale")
+        assert sr.range == "0-100"
+        assert sr.meaning == "full scale"
+
+    def test_benchmark_agent_metadata_empty_score_ranges(self) -> None:
+        bam = BenchmarkAgentMetadata(result_interpretation="some text")
+        assert bam.score_ranges == []
+
+    def test_agent_metadata_defaults(self) -> None:
+        am = AgentMetadata()
+        assert am.evaluates == []
+        assert am.recommended_when == []
+        assert am.target_type is None
+        assert am.summary is None
+        assert am.complements == []
+        assert am.hints == []
+        assert am.result_interpretation == []
+
+
+class TestProvidersListFiltering:
+    """Unit tests for client-side filtering in providers.list()."""
+
+    def _make_providers_response(self) -> dict:
+        return {
+            "total_count": 3,
+            "items": [
+                {
+                    "resource": {"id": "test"},
+                    "name": "Test",
+                    "agent": {
+                        "target_type": "model",
+                        "evaluates": ["data-ingestion", "metrics-reporting"],
+                    },
+                },
+                {
+                    "resource": {"id": "garak"},
+                    "name": "Garak",
+                    "agent": {
+                        "target_type": "agent",
+                        "evaluates": ["safety"],
+                    },
+                },
+                {
+                    "resource": {"id": "ragas"},
+                    "name": "RAGAS",
+                },
+            ],
+        }
+
+    def test_list_no_filter_returns_all(self) -> None:
+        with SyncEvalHubClient() as client:
+            mock_resp = Mock()
+            mock_resp.json.return_value = self._make_providers_response()
+            with patch.object(client, "_request_get", return_value=mock_resp):
+                result = client.providers.list()
+        assert len(result) == 3
+
+    def test_list_filter_by_target_type_model(self) -> None:
+        with SyncEvalHubClient() as client:
+            mock_resp = Mock()
+            mock_resp.json.return_value = self._make_providers_response()
+            with patch.object(client, "_request_get", return_value=mock_resp):
+                result = client.providers.list(target_type="model")
+        assert len(result) == 1
+        assert result[0].resource.id == "test"
+
+    def test_list_filter_by_target_type_agent(self) -> None:
+        with SyncEvalHubClient() as client:
+            mock_resp = Mock()
+            mock_resp.json.return_value = self._make_providers_response()
+            with patch.object(client, "_request_get", return_value=mock_resp):
+                result = client.providers.list(target_type="agent")
+        assert len(result) == 1
+        assert result[0].resource.id == "garak"
+
+    def test_list_filter_by_evaluates(self) -> None:
+        with SyncEvalHubClient() as client:
+            mock_resp = Mock()
+            mock_resp.json.return_value = self._make_providers_response()
+            with patch.object(client, "_request_get", return_value=mock_resp):
+                result = client.providers.list(evaluates="data-ingestion")
+        assert len(result) == 1
+        assert result[0].resource.id == "test"
+
+    def test_list_filter_by_evaluates_no_match(self) -> None:
+        with SyncEvalHubClient() as client:
+            mock_resp = Mock()
+            mock_resp.json.return_value = self._make_providers_response()
+            with patch.object(client, "_request_get", return_value=mock_resp):
+                result = client.providers.list(evaluates="hallucination")
+        assert result == []
+
+    def test_list_filter_excludes_providers_without_agent(self) -> None:
+        with SyncEvalHubClient() as client:
+            mock_resp = Mock()
+            mock_resp.json.return_value = self._make_providers_response()
+            with patch.object(client, "_request_get", return_value=mock_resp):
+                result = client.providers.list(target_type="model")
+        ids = [p.resource.id for p in result]
+        assert "ragas" not in ids
