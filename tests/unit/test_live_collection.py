@@ -15,6 +15,8 @@ from evalhub.adapter import (
 
 
 class StubResponse:
+    """Minimal HTTP response stub for live collection tests."""
+
     def __init__(
         self,
         payload: dict[str, Any] | None = None,
@@ -25,15 +27,20 @@ class StubResponse:
         self.status_code = status_code
 
     def raise_for_status(self) -> None:
+        """Raise when the configured status code represents an error."""
         if self.status_code >= 300:
             raise RuntimeError(f"HTTP {self.status_code}")
 
     def json(self) -> dict[str, Any]:
+        """Return the configured JSON payload."""
         return self.payload
 
 
 class StubClient:
+    """Minimal HTTP client stub that records outgoing POST calls."""
+
     def __init__(self, responses: list[StubResponse]) -> None:
+        """Store queued responses returned by subsequent POST calls."""
         self.responses = responses
         self.calls: list[dict[str, Any]] = []
 
@@ -45,6 +52,7 @@ class StubClient:
         headers: Mapping[str, str],
         timeout: float,
     ) -> StubResponse:
+        """Record one POST call and return the next queued response."""
         self.calls.append(
             {
                 "url": url,
@@ -57,6 +65,7 @@ class StubClient:
 
 
 def test_load_live_questions_from_csv(tmp_path: Path) -> None:
+    """Load one CSV question and preserve non-key columns as metadata."""
     questions_path = tmp_path / "questions.csv"
     questions_path.write_text(
         "id,question,topic\nq1,What is EvalHub?,sdk\n",
@@ -72,6 +81,7 @@ def test_load_live_questions_from_csv(tmp_path: Path) -> None:
 
 
 def test_load_live_questions_from_jsonl(tmp_path: Path) -> None:
+    """Load JSONL questions and merge explicit plus row-level metadata."""
     questions_path = tmp_path / "questions.jsonl"
     questions_path.write_text(
         json.dumps(
@@ -96,6 +106,7 @@ def test_load_live_questions_from_jsonl(tmp_path: Path) -> None:
 
 
 def test_load_live_questions_skips_blank_json_and_normalizes_ids(tmp_path: Path) -> None:
+    """Skip blank JSON questions and trim IDs for retained rows."""
     questions_path = tmp_path / "questions.json"
     questions_path.write_text(
         json.dumps(
@@ -115,6 +126,7 @@ def test_load_live_questions_skips_blank_json_and_normalizes_ids(tmp_path: Path)
 
 
 def test_load_live_questions_skips_blank_jsonl_rows(tmp_path: Path) -> None:
+    """Skip blank JSONL questions without aborting the whole load."""
     questions_path = tmp_path / "questions.jsonl"
     questions_path.write_text(
         json.dumps({"id": "", "question": "   "})
@@ -135,6 +147,7 @@ def test_collect_openai_chat_completions_writes_jsonl_and_manifest(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Write response rows, manifest data, auth headers, and request payloads."""
     questions_path = tmp_path / "questions.csv"
     questions_path.write_text(
         "id,question\nq1,What is EvalHub?\nq2,What is BYOF?\n",
@@ -189,6 +202,7 @@ def test_collect_openai_chat_completions_writes_jsonl_and_manifest(
 def test_collect_openai_chat_completions_preserves_canonical_request_fields(
     tmp_path: Path,
 ) -> None:
+    """Keep model and messages canonical when extra_body contains overrides."""
     questions_path = tmp_path / "questions.csv"
     questions_path.write_text("question\nWhat is EvalHub?\n", encoding="utf-8")
     client = StubClient([StubResponse()])
@@ -217,6 +231,7 @@ def test_collect_openai_chat_completions_preserves_canonical_request_fields(
 def test_collect_openai_chat_completions_records_redirect_errors(
     tmp_path: Path,
 ) -> None:
+    """Record redirect responses as row errors instead of following them."""
     questions_path = tmp_path / "questions.json"
     questions_path.write_text(
         json.dumps([{"question": "Will this redirect?"}]),
@@ -242,6 +257,7 @@ def test_collect_openai_chat_completions_retries_row_errors(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Retry transient row failures and keep backoff timing observable."""
     questions_path = tmp_path / "questions.json"
     questions_path.write_text(
         json.dumps([{"question": "Retry this?"}]),
@@ -276,6 +292,7 @@ def test_collect_openai_chat_completions_requires_configured_auth_env(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Reject authenticated collection when the configured env var is missing."""
     questions_path = tmp_path / "questions.csv"
     questions_path.write_text("question\nHello?\n", encoding="utf-8")
     monkeypatch.delenv("MISSING_CHAT_KEY", raising=False)
@@ -292,6 +309,7 @@ def test_collect_openai_chat_completions_requires_configured_auth_env(
 
 
 def test_live_collection_config_rejects_non_http_endpoint(tmp_path: Path) -> None:
+    """Require endpoint URLs to use HTTP or HTTPS."""
     with pytest.raises(ValueError, match="endpoint_url"):
         LiveCollectionConfig(
             questions_path=tmp_path / "questions.csv",
@@ -302,6 +320,7 @@ def test_live_collection_config_rejects_non_http_endpoint(tmp_path: Path) -> Non
 
 
 def test_collect_live_responses_from_parameters(tmp_path: Path) -> None:
+    """Build config from adapter parameters and collect one response."""
     questions_path = tmp_path / "questions.csv"
     questions_path.write_text("question\nHello?\n", encoding="utf-8")
     client = StubClient(
