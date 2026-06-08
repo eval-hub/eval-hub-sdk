@@ -2,6 +2,8 @@
 """Simple script to run eval-hub server with local config for debugging."""
 
 import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -12,6 +14,12 @@ def main() -> None:
 
     if not config_dir.exists():
         print(f"Error: Config directory not found: {config_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    binary_path = shutil.which("eval-hub-server")
+    if not binary_path:
+        print("Error: eval-hub-server not found in PATH.", file=sys.stderr)
+        print("Install it with: pip install 'eval-hub-sdk[server]'", file=sys.stderr)
         sys.exit(1)
 
     # Change to config directory
@@ -28,18 +36,12 @@ def main() -> None:
             print(f"  {rel}")
     print()
 
-    # Import and run the server
+    # Run the server
     print("Starting eval-hub server...")
     print("=" * 60)
 
     try:
-        from evalhub_server.main import main as server_main
-
-        server_main(["--local"])
-    except ImportError as e:
-        print(f"Error: Could not import evalhub_server: {e}", file=sys.stderr)
-        print("Make sure the evalhub-server package is installed.", file=sys.stderr)
-        sys.exit(1)
+        subprocess.run([binary_path, "--local"], check=True)
     except KeyboardInterrupt:
         print("\n\nServer stopped by user (Ctrl+C)")
         sys.exit(0)

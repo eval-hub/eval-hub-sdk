@@ -710,6 +710,9 @@ mcp = [
     { name = "httpx" },
     { name = "mcp" },
 ]
+server = [
+    { name = "eval-hub-server" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -738,6 +741,7 @@ requires-dist = [
     { name = "eval-hub-sdk", extras = ["core"], marker = "extra == 'client'" },
     { name = "eval-hub-sdk", extras = ["core"], marker = "extra == 'mcp'" },
     { name = "eval-hub-sdk", extras = ["mcp"], marker = "extra == 'cli'" },
+    { name = "eval-hub-server", marker = "extra == 'server'", specifier = ">=0.4.2" },
     { name = "httpx", marker = "extra == 'core'", specifier = ">=0.25.0" },
     { name = "importlib-metadata", specifier = ">=6.0.0" },
     { name = "lm-eval", marker = "extra == 'examples'", specifier = ">=0.4.0" },
@@ -756,7 +760,7 @@ requires-dist = [
     { name = "rich", marker = "extra == 'cli'", specifier = ">=13.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.1.6" },
 ]
-provides-extras = ["core", "adapter", "client", "cli", "mcp", "dev", "examples", "all"]
+provides-extras = ["core", "adapter", "client", "cli", "mcp", "dev", "examples", "server", "all"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -778,14 +782,14 @@ dev = [
 
 [[package]]
 name = "eval-hub-server"
-version = "0.4.0"
+version = "0.4.2"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/50/ad/0ae8c61cac7439e1172efbe2a49098a8a5a8600d7c923dba1989278c5bdd/eval_hub_server-0.4.0-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:b6ebed9e9d58ecb5f26f648d94dacbf6e2244fb195aff661a735112b1cba7e9c", size = 21896304, upload-time = "2026-05-15T12:58:17.502Z" },
-    { url = "https://files.pythonhosted.org/packages/30/df/2639e2bf7e532cdf7b4d600916e80a01616f7da0514a38d11663c3974d20/eval_hub_server-0.4.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:bf2ff369649fcc6912811cf1045885a6928bff09756c17143768fb99660c9c8f", size = 20116786, upload-time = "2026-05-15T12:58:21.206Z" },
-    { url = "https://files.pythonhosted.org/packages/0e/0a/722c46cc01572759e8ed72ce044c4dde573806d32b210323c3f7badddf80/eval_hub_server-0.4.0-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:452a26f5346f05ecf6de7356180568aaa501a7ace0873ff13c2808f32837b700", size = 19136093, upload-time = "2026-05-15T12:58:24.976Z" },
-    { url = "https://files.pythonhosted.org/packages/43/42/6d45ddc659830fcf476e1217462826a560e83611bc3de2259e9c55d6b5ec/eval_hub_server-0.4.0-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:f85d692345d5195960d81e7b31cfcc01355d6e471d20fed3d31f2625340cc33e", size = 21456571, upload-time = "2026-05-15T12:58:28.993Z" },
-    { url = "https://files.pythonhosted.org/packages/07/73/6e5a0344f3d3957b23c440a1037efe6c674de8e973aa13bfc064fa4cd68a/eval_hub_server-0.4.0-py3-none-win_amd64.whl", hash = "sha256:8942ba0c75df453cb2cae3afe40d8ea3e3360c47982200340505765e87bee755", size = 21917836, upload-time = "2026-05-15T12:58:32.608Z" },
+    { url = "https://files.pythonhosted.org/packages/22/0b/7d449e1fcfa4daa3745083f03c248d6c8f64360edecb1b4258142a302c00/eval_hub_server-0.4.2-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:7bbdfd656f8a3d087be44b348b4292532e4bbd21f3b3307e10e55218840ddddd", size = 22223739, upload-time = "2026-06-08T12:43:50.877Z" },
+    { url = "https://files.pythonhosted.org/packages/a9/b8/68280c77a48d3b6f2a7589765222b1952a9ecf20eb7e93c8e93aa12f8727/eval_hub_server-0.4.2-py3-none-macosx_11_0_arm64.whl", hash = "sha256:f263a2f71f59784cfbb9defa6614a48755af4188b107319ea155b5038229bebf", size = 20338577, upload-time = "2026-06-08T12:43:53.335Z" },
+    { url = "https://files.pythonhosted.org/packages/8b/55/a817cb02997fd3b39fbbdd1fe09e99c24f6f5e22017cbe26fb2559578bfe/eval_hub_server-0.4.2-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:389620b93a99f559781a2b7aeb9c0a823099361317e996213ec90d66db2406bd", size = 19368700, upload-time = "2026-06-08T12:43:55.718Z" },
+    { url = "https://files.pythonhosted.org/packages/6c/f5/c4eef9b006ff816b189bebf75d27cb1ababfed80b3fec78381f51eade5b2/eval_hub_server-0.4.2-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:615953ce27c48f5e6f50133bad401e84bec3c1d5050d4547e0bd934e2a9b91cf", size = 21792731, upload-time = "2026-06-08T12:43:58.074Z" },
+    { url = "https://files.pythonhosted.org/packages/f0/34/ab8812ece0024db60a017caefdd2d50c6fa5fc63e55e99d3ccefdc84b3d8/eval_hub_server-0.4.2-py3-none-win_amd64.whl", hash = "sha256:5332b5f25575e6bb1d59be94856f3be627775f092696f9ffd6dd4d697810f8c1", size = 22263779, upload-time = "2026-06-08T12:44:00.426Z" },
 ]
 
 [[package]]

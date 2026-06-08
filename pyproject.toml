@@ -81,6 +81,11 @@ examples = [
     "ragas>=0.1.0",    # For RAGAS example adapter
 ]
 
+# Server - eval-hub-server binary for local/embedded use
+server = [
+    "eval-hub-server>=0.4.2",
+]
+
 # All core functionality (excludes examples which are optional)
 all = ["eval-hub-sdk[core,adapter,client,cli,mcp,dev]"]
 
@@ -151,8 +156,6 @@ module = [
     "rich",
     "github",
     "github.*",
-    "evalhub_server.*",
-    "evalhub_server",
     "oras.*",
     "oras",
     "olot.*",
