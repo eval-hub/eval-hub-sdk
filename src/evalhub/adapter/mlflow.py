@@ -326,7 +326,7 @@ class MlflowClient:
 
     @staticmethod
     def _handle(resp: httpx.Response) -> dict[str, Any]:
-        if resp.status_code >= 400:
+        if not (200 <= resp.status_code < 300):
             try:
                 body = resp.json()
             except Exception:
@@ -530,34 +530,48 @@ class MlflowClient:
     # -- Artifact operations ------------------------------------------------
 
     @staticmethod
-    def _artifact_server_path(artifact_uri: str, artifact_path: str) -> str:
+    def _artifact_server_path(
+        artifact_uri: str,
+        artifact_path: str,
+        *,
+        experiment_id: str = "",
+        run_id: str = "",
+    ) -> str:
         """Compute the PUT path for the MLflow Artifacts server from a run's artifact_uri.
 
-        The standard MLflow artifact server derives the storage path from a
-        ``?run_id=`` query parameter on artifact upload requests. The ODH fork
-        ignores that parameter and instead resolves paths from the ``artifact_uri``
-        embedded in the run record, which has the form::
+        The ODH fork embeds workspace-scoped paths in ``artifact_uri``::
 
             mlflow-artifacts:/workspaces/{workspace}/{experiment_id}/{run_id}/artifacts
 
-        Stripping ``mlflow-artifacts:/workspaces/{workspace}/`` gives the path
-        within the workspace's artifact storage, which is what the ODH server
-        expects after ``/api/2.0/mlflow-artifacts/artifacts/`` — no ``?run_id=``
-        query string. The upstream library would send ``?run_id=``, which the ODH
-        server ignores for path resolution, potentially causing files to land in
-        the wrong location.
+        Upstream MLflow 3.x may instead return a local filesystem path or an HTTP
+        proxied artifact root. When the URI is not ``mlflow-artifacts:``, fall back
+        to ``{experiment_id}/{run_id}/artifacts/{path}`` from the run record.
         """
-        # Strip scheme
-        path = artifact_uri.removeprefix("mlflow-artifacts:/")
-        # path = "workspaces/{workspace}/{experiment_id}/{run_id}/artifacts"
-        # Strip "workspaces/{workspace}/" so the server doesn't double-prefix it
-        parts = path.split("/", 2)
-        if len(parts) == 3 and parts[0] == "workspaces":
-            run_root = parts[2]  # "{experiment_id}/{run_id}/artifacts"
-        else:
-            run_root = path  # fallback: use as-is
         artifact_path = artifact_path.lstrip("/")
-        return f"{_ARTIFACTS_API}/{run_root}/{artifact_path}"
+        anchor = f"{_ARTIFACTS_API}/"
+
+        if artifact_uri.startswith("mlflow-artifacts:/"):
+            path = artifact_uri.removeprefix("mlflow-artifacts:/")
+            parts = path.split("/", 2)
+            if len(parts) == 3 and parts[0] == "workspaces":
+                run_root = parts[2]
+            else:
+                run_root = path.lstrip("/")
+            return f"{_ARTIFACTS_API}/{run_root}/{artifact_path}"
+
+        if anchor in artifact_uri:
+            run_root = artifact_uri.split(anchor, 1)[1].rstrip("/")
+            return f"{_ARTIFACTS_API}/{run_root}/{artifact_path}"
+
+        if experiment_id and run_id:
+            return (
+                f"{_ARTIFACTS_API}/{experiment_id}/{run_id}/artifacts/{artifact_path}"
+            )
+
+        raise ValueError(
+            f"Cannot resolve artifact upload path from artifact_uri={artifact_uri!r}; "
+            "expected mlflow-artifacts URI or run experiment_id/run_id"
+        )
 
     def _put_artifact(
         self, path: str, content: bytes | Iterable[bytes], content_type: str
@@ -585,7 +599,12 @@ class MlflowClient:
         for storage path resolution).
         """
         run_info = self.get_run(run_id)
-        path = self._artifact_server_path(run_info.artifact_uri, artifact_path)
+        path = self._artifact_server_path(
+            run_info.artifact_uri,
+            artifact_path,
+            experiment_id=run_info.experiment_id,
+            run_id=run_info.run_id,
+        )
         self._put_artifact(path, content, content_type)
         logger.debug("Uploaded artifact %s for run %s", artifact_path, run_id)
 
@@ -640,26 +659,67 @@ class MlflowClient:
 # ---------------------------------------------------------------------------
 
 
+def _kv_list_to_dict(items: Any) -> dict[str, str]:
+    """Convert MLflow tag/metadata lists or dicts to a string map."""
+    if isinstance(items, dict):
+        return {str(k): str(v) for k, v in items.items()}
+    if not isinstance(items, list):
+        return {}
+    result: dict[str, str] = {}
+    for item in items:
+        if isinstance(item, dict):
+            result[str(item.get("key", ""))] = str(item.get("value", ""))
+    return result
+
+
 def _parse_trace(raw: dict[str, Any]) -> Trace:
-    """Build a ``Trace`` from the MLflow REST API JSON shape."""
-    info_raw = raw.get("info", {})
-    tags: dict[str, str] = {}
-    for t in info_raw.get("tags", []):
-        tags[t.get("key", "")] = t.get("value", "")
-    req_meta: dict[str, str] = {}
-    for m in info_raw.get("request_metadata", []):
-        req_meta[m.get("key", "")] = m.get("value", "")
+    """Build a ``Trace`` from the MLflow REST API JSON shape.
+
+    Accepts v2 search results (flat trace objects), wrapped ``info`` payloads,
+    and ``/traces/{id}/info`` responses (``trace_info`` envelope).
+    """
+    if "trace" in raw and isinstance(raw["trace"], dict):
+        raw = raw["trace"]
+
+    if "trace_info" in raw:
+        info_raw = raw["trace_info"]
+        data: dict[str, Any] = (
+            {"spans": raw["spans"]} if raw.get("spans") is not None else {}
+        )
+    elif "info" in raw:
+        info_raw = raw["info"]
+        data = raw.get("data", {})
+    elif "request_id" in raw or "trace_id" in raw:
+        info_raw = raw
+        data = raw.get("data", {})
+    else:
+        info_raw = {}
+        data = raw.get("data", {})
+
+    request_id = str(info_raw.get("request_id") or info_raw.get("trace_id") or "")
+
+    experiment_id = str(info_raw.get("experiment_id") or "")
+    if not experiment_id:
+        trace_location = info_raw.get("trace_location")
+        if isinstance(trace_location, dict):
+            mlflow_exp = trace_location.get("mlflow_experiment")
+            if isinstance(mlflow_exp, dict):
+                experiment_id = str(mlflow_exp.get("experiment_id") or "")
+
+    status = str(info_raw.get("status") or info_raw.get("state") or "")
 
     info = TraceInfo(
-        request_id=info_raw.get("request_id", ""),
-        experiment_id=info_raw.get("experiment_id", ""),
-        timestamp_ms=info_raw.get("timestamp_ms", 0),
-        execution_time_ms=info_raw.get("execution_time_ms", 0),
-        status=info_raw.get("status", ""),
-        tags=tags,
-        request_metadata=req_meta,
+        request_id=request_id,
+        experiment_id=experiment_id,
+        timestamp_ms=int(info_raw.get("timestamp_ms") or 0),
+        execution_time_ms=int(info_raw.get("execution_time_ms") or 0),
+        status=status,
+        tags=_kv_list_to_dict(info_raw.get("tags")),
+        request_metadata=_kv_list_to_dict(
+            info_raw.get("request_metadata") or info_raw.get("trace_metadata")
+        ),
     )
-    return Trace(info=info, data=raw.get("data", {}))
+    return Trace(info=info, data=data)
 
 
 def _now_ms() -> int:
@@ -723,12 +783,12 @@ class TracesNamespace:
         return traces, next_token
 
     def get(self, request_id: str, experiment_id: str) -> Trace:
-        """Fetch a single trace by request_id."""
+        """Fetch a single trace by request_id via ``GET /api/2.0/mlflow/traces/{id}/info``."""
         data = self._client._get(
-            f"/traces/{request_id}",
+            f"/traces/{request_id}/info",
             {"experiment_id": experiment_id},
         )
-        return _parse_trace(data.get("trace", data))
+        return _parse_trace(data)
 
     @staticmethod
     def is_source_configured(parameters: dict[str, Any] | None) -> bool:
@@ -777,7 +837,7 @@ class TracesNamespace:
         run_id = parameters.get(_TRACE_PARAM_RUN_ID)
         if isinstance(run_id, str) and run_id.strip():
             safe_run_id = run_id.strip().replace("'", "''")
-            run_filter = f"tags.mlflow.runId = '{safe_run_id}'"
+            run_filter = f"attribute.run_id = '{safe_run_id}'"
             filter_string = (
                 f"({filter_string}) AND ({run_filter})" if filter_string else run_filter
             )
