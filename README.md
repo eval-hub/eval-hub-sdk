@@ -96,6 +96,10 @@ cd eval-hub-sdk
 pip install -e .[dev]
 ```
 
+**Optional extras:** `core`, `adapter`, `client`, `cli`, `mcp`, `dev`, `server`, `all`.
+The `server` extra bundles the `eval-hub-server` binary for local/embedded use and is
+excluded from `all` due to its size (~20 MB).
+
 ### 2. Create Your Adapter
 
 Create a new Python file for your adapter:
