@@ -688,6 +688,27 @@ class TestEvalStatus:
         assert "running" in result.output
         assert "llama3" in result.output
 
+    def test_single_job_detail_with_phase(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        from evalhub.models.api import JobPhase
+
+        mock_client.jobs.get.return_value = _make_job(
+            state=JobStatus.RUNNING,
+            benchmark_statuses=[
+                BenchmarkStatus(
+                    id="mmlu",
+                    provider_id="lm_eval",
+                    status=JobStatus.RUNNING,
+                    phase=JobPhase.RUNNING_EVALUATION,
+                ),
+            ],
+        )
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(main, ["eval", "status", "eval-123"])
+        assert result.exit_code == 0
+        assert "running_evaluation" in result.output
+
     def test_single_job_json(
         self, runner: CliRunner, config_file: Path, mock_client: MagicMock
     ) -> None:

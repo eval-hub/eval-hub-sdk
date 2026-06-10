@@ -578,7 +578,13 @@ def _watch_job(client: Any, job_id: str, poll_interval: float) -> None:
         benchmarks_status = ""
         if job.status and job.status.benchmarks:
             done = sum(1 for b in job.status.benchmarks if b.state in terminal)
-            benchmarks_status = f" [{done}/{len(job.status.benchmarks)} benchmarks]"
+            phases = [
+                b.phase.value for b in job.status.benchmarks if b.phase is not None
+            ]
+            phase_info = f" phase={phases[0]}" if len(phases) == 1 else ""
+            benchmarks_status = (
+                f" [{done}/{len(job.status.benchmarks)} benchmarks{phase_info}]"
+            )
         click.echo(
             f"\r{job.id}: {job.effective_state.value}{benchmarks_status}", nl=False
         )
@@ -604,6 +610,8 @@ def _print_job_detail(job: Any) -> None:
         click.echo(f"\nBenchmarks ({len(job.status.benchmarks)}):")
         for b in job.status.benchmarks:
             line = f"  {b.id} ({b.provider_id}): {b.state.value}"
+            if b.phase:
+                line += f" [{b.phase.value}]"
             if b.error_message:
                 line += f" - {b.error_message.message}"
             click.echo(line)
