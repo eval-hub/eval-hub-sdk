@@ -36,6 +36,21 @@ class EvaluationStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class JobPhase(str, Enum):
+    """Job execution phases.
+
+    Represents the granular execution phase within a running benchmark job.
+    Sent by adapters via status events and surfaced in server responses.
+    """
+
+    INITIALIZING = "initializing"
+    LOADING_DATA = "loading_data"
+    RUNNING_EVALUATION = "running_evaluation"
+    POST_PROCESSING = "post_processing"
+    PERSISTING_ARTIFACTS = "persisting_artifacts"
+    COMPLETED = "completed"
+
+
 class ErrorInfo(BaseModel):
     """Error information with message and code.
 
@@ -180,6 +195,9 @@ class BenchmarkStatus(BaseModel):
     provider_id: str = Field(..., description="Provider identifier")
     benchmark_index: int | None = Field(default=None, description="Benchmark index")
     status: JobStatus = Field(..., description="Benchmark status")
+    phase: JobPhase | None = Field(
+        default=None, description="Current execution phase of the benchmark job"
+    )
     error_message: MessageInfo | None = Field(default=None, description="Error message")
     started_at: datetime | None = Field(
         default=None, description="When benchmark started"
