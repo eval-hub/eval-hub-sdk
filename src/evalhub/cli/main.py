@@ -35,6 +35,7 @@ from . import config as cfg
 from .client import get_client, handle_api_errors
 from .completion import completion
 from .formatter import format_option, output
+from .mcp_cmd import mcp
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
@@ -93,6 +94,7 @@ def main(
 
 
 main.add_command(completion)
+main.add_command(mcp)
 
 
 @main.command()
@@ -1264,53 +1266,3 @@ def config_use(profile: str) -> None:
     cfg.set_active_profile(data, profile)
     cfg.save_config(data)
     click.echo(f"Active profile set to '{profile}'")
-
-
-@main.command()
-@click.option(
-    "--tenant",
-    default=None,
-    envvar="EVALHUB_TENANT",
-    help="Kubernetes namespace / tenant identifier (overrides profile config).",
-)
-@click.pass_context
-def mcp(ctx: click.Context, tenant: str | None) -> None:
-    """Start the EvalHub MCP server (stdio transport)."""
-    try:
-        import mcp as _mcp  # noqa: F401
-    except ModuleNotFoundError:
-        raise click.ClickException(
-            "MCP server requires the 'mcp' extra.\n"
-            "Install it with: pip install 'eval-hub-sdk[mcp]'"
-        ) from None
-
-    data = cfg.load_config()
-    prof = cfg.get_profile(data, ctx.obj.get("profile"))
-
-    resolved_url = ctx.obj.get("base_url") or prof.get(
-        "base_url", "http://localhost:8080"
-    )
-    resolved_token = ctx.obj.get("token") or prof.get("token")
-    resolved_tenant = tenant or prof.get("tenant")
-    resolved_insecure = str(prof.get("insecure", "false")).lower() in (
-        "true",
-        "1",
-        "yes",
-    )
-    resolved_timeout = float(prof.get("timeout", 30.0))
-
-    import asyncio
-
-    from ..client.evalhub import AsyncEvalHubClient
-    from ..mcp.server import mcp as mcp_server
-    from ..mcp.server import set_client
-
-    client = AsyncEvalHubClient(
-        base_url=resolved_url,
-        auth_token=resolved_token,
-        tenant=resolved_tenant,
-        insecure=resolved_insecure,
-        timeout=resolved_timeout,
-    )
-    set_client(client)
-    asyncio.run(mcp_server.run_stdio_async())
