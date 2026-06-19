@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import shutil
 import sys
 import time
 from datetime import UTC, datetime, timedelta
@@ -577,17 +578,15 @@ def _watch_job(client: Any, job_id: str, poll_interval: float) -> None:
         job = client.jobs.get(job_id)
         benchmarks_status = ""
         if job.status and job.status.benchmarks:
-            done = sum(1 for b in job.status.benchmarks if b.state in terminal)
-            phases = {b.phase for b in job.status.benchmarks if b.phase}
-            phase_info = (
-                f" phase={next(iter(phases)).value}" if len(phases) == 1 else ""
-            )
-            benchmarks_status = (
-                f" [{done}/{len(job.status.benchmarks)} benchmarks{phase_info}]"
-            )
-        click.echo(
-            f"\r{job.id}: {job.effective_state.value}{benchmarks_status}", nl=False
-        )
+            benchmarks = job.status.benchmarks
+            done = sum(1 for b in benchmarks if b.state in terminal)
+            phase_info = ""
+            if len(benchmarks) == 1 and benchmarks[0].phase:
+                phase_info = f" phase={benchmarks[0].phase.value}"
+            benchmarks_status = f" [{done}/{len(benchmarks)} benchmarks{phase_info}]"
+        line = f"{job.id}: {job.effective_state.value}{benchmarks_status}"
+        cols = shutil.get_terminal_size().columns
+        click.echo(f"\r{line:<{cols}}", nl=False)
         sys.stdout.flush()
         if job.effective_state in terminal:
             click.echo()

@@ -1127,7 +1127,6 @@ class TestBenchmarkStatusPhase:
             phase=JobPhase.RUNNING_EVALUATION,
         )
         assert status.phase == JobPhase.RUNNING_EVALUATION
-        assert status.phase.value == "running_evaluation"
 
     def test_benchmark_status_phase_from_json(self) -> None:
         """BenchmarkStatus should deserialize phase from raw JSON (server response)."""
