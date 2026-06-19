@@ -578,10 +578,10 @@ def _watch_job(client: Any, job_id: str, poll_interval: float) -> None:
         benchmarks_status = ""
         if job.status and job.status.benchmarks:
             done = sum(1 for b in job.status.benchmarks if b.state in terminal)
-            phases = [
-                b.phase.value for b in job.status.benchmarks if b.phase is not None
-            ]
-            phase_info = f" phase={phases[0]}" if len(phases) == 1 else ""
+            phases = {b.phase for b in job.status.benchmarks if b.phase}
+            phase_info = (
+                f" phase={next(iter(phases)).value}" if len(phases) == 1 else ""
+            )
             benchmarks_status = (
                 f" [{done}/{len(job.status.benchmarks)} benchmarks{phase_info}]"
             )
