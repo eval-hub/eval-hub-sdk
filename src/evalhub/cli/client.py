@@ -34,7 +34,7 @@ def create_client(
     resolved_url = base_url or prof.get("base_url", "http://localhost:8080")
     resolved_token = token or prof.get("token")
     tenant = prof.get("tenant")
-    insecure = str(prof.get("insecure", "false")).lower() in ("true", "1", "yes")
+    insecure = cfg.parse_bool(prof.get("insecure"))
     timeout = float(prof.get("timeout", 30.0))
 
     return SyncEvalHubClient(

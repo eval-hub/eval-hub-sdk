@@ -27,7 +27,14 @@ DEFAULT_CONFIG_DIR = Path.home() / ".config" / "evalhub"
 DEFAULT_CONFIG_FILE = DEFAULT_CONFIG_DIR / "config.yaml"
 
 REQUIRED_KEYS = ("base_url", "token", "tenant")
-OPTIONAL_KEYS = ("provider", "insecure", "timeout")
+OPTIONAL_KEYS = (
+    "provider",
+    "insecure",
+    "timeout",
+    "mcp_transport",
+    "mcp_host",
+    "mcp_port",
+)
 KNOWN_KEYS = set(REQUIRED_KEYS) | set(OPTIONAL_KEYS)
 SENSITIVE_KEYS = frozenset({"token"})
 
@@ -112,6 +119,18 @@ def get_value(data: dict[str, Any], key: str, profile: str | None = None) -> str
     return prof.get(key)
 
 
+def unset_value(data: dict[str, Any], key: str, profile: str | None = None) -> None:
+    """Remove a key from a profile (noop if key or profile is absent)."""
+    name = profile or get_active_profile(data)
+    profiles = data.get("profiles")
+    if profiles is None:
+        return
+    prof = profiles.get(name)
+    if prof is None:
+        return
+    prof.pop(key, None)
+
+
 def missing_required_keys(
     data: dict[str, Any], profile: str | None = None
 ) -> list[str]:
@@ -129,3 +148,27 @@ def set_active_profile(data: dict[str, Any], profile: str) -> dict[str, Any]:
     """Switch the active profile."""
     data["active_profile"] = profile
     return data
+
+
+def parse_bool(value: Any, *, default: bool = False) -> bool:
+    """Parse a config value as a boolean."""
+    if value is None:
+        return default
+    return str(value).lower() in ("true", "1", "yes")
+
+
+def build_mcp_config(profile: dict[str, Any]) -> dict[str, Any]:
+    """Build the Go MCP binary config dict from a CLI profile."""
+    try:
+        port = int(profile.get("mcp_port", 3001))
+    except (TypeError, ValueError):
+        port = 3001
+    return {
+        "base_url": profile.get("base_url", "http://localhost:8080"),
+        "token": profile.get("token", ""),
+        "tenant": profile.get("tenant", ""),
+        "insecure": parse_bool(profile.get("insecure")),
+        "transport": profile.get("mcp_transport", "http"),
+        "host": profile.get("mcp_host", "localhost"),
+        "port": port,
+    }

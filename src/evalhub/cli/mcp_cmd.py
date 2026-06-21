@@ -1,22 +1,29 @@
-"""MCP command group — Python MCP server and Go binary lifecycle management."""
+"""MCP command group — Go binary lifecycle management."""
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import signal
 import subprocess
 import sys
 import time
-from pathlib import Path
+import urllib.error
+import urllib.request
+from typing import Any
 
 import click
+import yaml
+
+from evalhub import __version__
 
 from . import config as cfg
 
 MCP_STATE_DIR = cfg.DEFAULT_CONFIG_DIR / "mcp"
 PID_FILE = MCP_STATE_DIR / "pid"
-LOG_FILE = MCP_STATE_DIR / "log"
+LOG_FILE = MCP_STATE_DIR / "mcp.log"
+CONFIG_FILE = MCP_STATE_DIR / "config.yaml"
 
 _STARTUP_WAIT = 2.0
 _STOP_TIMEOUT = 5.0
@@ -33,11 +40,6 @@ def _find_mcp_binary() -> str:
         "Could not find the 'evalhub-mcp' binary.\n"
         "Install it and ensure it is on your PATH, or set EVALHUB_MCP_BIN."
     )
-
-
-def _build_mcp_env() -> dict[str, str]:
-    """Build environment for the Go binary. Inherits the current environment as-is."""
-    return dict(os.environ)
 
 
 def _is_process_alive(pid: int) -> bool:
@@ -70,96 +72,114 @@ def _read_pid() -> int | None:
     return pid
 
 
+def _generate_config(
+    ctx: click.Context,
+) -> tuple[list[str], dict[str, object]]:
+    """Build MCP config from the active CLI profile.
+
+    Returns (extra_cli_args, mcp_config_dict).
+    """
+    data = cfg.load_config()
+    profile = cfg.get_profile(data, ctx.obj.get("profile"))
+    mcp_config = cfg.build_mcp_config(profile)
+    cfg.save_config(mcp_config, CONFIG_FILE)
+    return ["--config", str(CONFIG_FILE)], mcp_config
+
+
+def _load_mcp_config() -> dict[str, Any]:
+    """Load the generated MCP config.yaml (host/port/transport)."""
+    if not CONFIG_FILE.exists():
+        return {}
+    with CONFIG_FILE.open("r") as f:
+        return yaml.safe_load(f) or {}
+
+
+def _fetch_server_info(
+    host: str = "localhost", port: int = 3001
+) -> dict[str, Any] | None:
+    """Send an MCP initialize request and return the serverInfo, or None on failure."""
+    url = f"http://{host}:{port}/mcp"
+    payload = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-03-26",
+                "capabilities": {},
+                "clientInfo": {"name": "evalhub-cli", "version": __version__},
+            },
+        }
+    ).encode()
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            raw = resp.read().decode()
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+    # Streamable HTTP may return SSE (event: …\ndata: …) or plain JSON.
+    data_line = raw
+    for line in raw.splitlines():
+        if line.startswith("data: "):
+            data_line = line[len("data: ") :]
+            break
+    try:
+        body = json.loads(data_line)
+    except (json.JSONDecodeError, ValueError):
+        return None
+    return body.get("result", {}).get("serverInfo")  # type: ignore[no-any-return]
+
+
 def _clean_stale_pid() -> None:
     pid = _read_pid()
     if pid is not None and not _is_process_alive(pid):
         PID_FILE.unlink(missing_ok=True)
 
 
-@click.group(invoke_without_command=True)
-@click.option(
-    "--tenant",
-    default=None,
-    envvar="EVALHUB_TENANT",
-    help="[DEPRECATED] Kubernetes namespace / tenant identifier (overrides profile config).",
-)
-@click.pass_context
-def mcp(ctx: click.Context, tenant: str | None) -> None:
-    """Start the EvalHub MCP server, or manage the Go MCP binary."""
-    if ctx.invoked_subcommand is not None:
-        return
-
-    try:
-        import mcp as _mcp  # noqa: F401
-    except ModuleNotFoundError:
-        raise click.ClickException(
-            "MCP server requires the 'mcp' extra.\n"
-            "Install it with: pip install 'eval-hub-sdk[mcp]'"
-        ) from None
-
-    data = cfg.load_config()
-    prof = cfg.get_profile(data, ctx.obj.get("profile"))
-
-    resolved_url = ctx.obj.get("base_url") or prof.get(
-        "base_url", "http://localhost:8080"
-    )
-    resolved_token = ctx.obj.get("token") or prof.get("token")
-    resolved_tenant = tenant or prof.get("tenant")
-    resolved_insecure = str(prof.get("insecure", "false")).lower() in (
-        "true",
-        "1",
-        "yes",
-    )
-    resolved_timeout = float(prof.get("timeout", 30.0))
-
-    import asyncio
-
-    from ..client.evalhub import AsyncEvalHubClient
-    from ..mcp.server import mcp as mcp_server
-    from ..mcp.server import set_client
-
-    client = AsyncEvalHubClient(
-        base_url=resolved_url,
-        auth_token=resolved_token,
-        tenant=resolved_tenant,
-        insecure=resolved_insecure,
-        timeout=resolved_timeout,
-    )
-    set_client(client)
-    asyncio.run(mcp_server.run_stdio_async())
+@click.group()
+def mcp() -> None:
+    """Manage the evalhub-mcp Go binary (run, start, stop, status)."""
 
 
 @mcp.command("run")
-@click.argument("go_args", nargs=-1, type=click.UNPROCESSED)
 @click.pass_context
-def mcp_run(ctx: click.Context, go_args: tuple[str, ...]) -> None:
-    """Run the Go MCP binary in the foreground.
+def mcp_run(ctx: click.Context) -> None:
+    """Run the evalhub-mcp binary in the foreground.
 
-    Any arguments after -- are passed directly to the evalhub-mcp binary.
+    The active CLI profile is used to generate
+    ~/.config/evalhub/mcp/config.yaml automatically.
     """
     binary = _find_mcp_binary()
-    env = _build_mcp_env()
-    cmd = [binary, *go_args]
+    env = dict(os.environ)
+    extra, _ = _generate_config(ctx)
+    cmd = [binary, *extra]
 
-    MCP_STATE_DIR.mkdir(parents=True, exist_ok=True)
-    with LOG_FILE.open("w") as log_fh:
-        result = subprocess.run(
-            cmd,
-            env=env,
-            stdin=sys.stdin,
-            stdout=sys.stdout,
-            stderr=log_fh,
-        )
+    result = subprocess.run(
+        cmd,
+        env=env,
+        stdin=sys.stdin,
+        stdout=sys.stdout,
+        stderr=sys.stderr,
+    )
     ctx.exit(result.returncode)
 
 
 @mcp.command("start")
-@click.argument("go_args", nargs=-1, type=click.UNPROCESSED)
-def mcp_start(go_args: tuple[str, ...]) -> None:
-    """Start the Go MCP binary as a background HTTP daemon.
+@click.pass_context
+def mcp_start(ctx: click.Context) -> None:
+    """Start the Go MCP binary as a background daemon.
 
-    Any arguments after -- are passed directly to the evalhub-mcp binary.
-    Automatically injects --transport http.
+    Transport is read from the active profile (default: http).
+    The active CLI profile is used to generate
+    ~/.config/evalhub/mcp/config.yaml automatically.
     """
     _clean_stale_pid()
     pid = _read_pid()
@@ -170,8 +190,15 @@ def mcp_start(go_args: tuple[str, ...]) -> None:
         )
 
     binary = _find_mcp_binary()
-    env = _build_mcp_env()
-    cmd = [binary, "--transport", "http", *go_args]
+    env = dict(os.environ)
+    extra, mcp_config = _generate_config(ctx)
+    if mcp_config.get("transport") == "stdio":
+        raise click.ClickException(
+            "Cannot start in background with stdio transport.\n"
+            "Use 'evalhub mcp run' for stdio, or set a network transport:\n"
+            "  evalhub config set mcp_transport http"
+        )
+    cmd = [binary, *extra]
 
     MCP_STATE_DIR.mkdir(parents=True, exist_ok=True)
     log_fh = LOG_FILE.open("w")
@@ -234,7 +261,20 @@ def mcp_status() -> None:
     """Check if the background MCP server is running."""
     _clean_stale_pid()
     pid = _read_pid()
-    if pid is not None and _is_process_alive(pid):
-        click.echo(f"MCP server is running (PID {pid}).")
-    else:
+    if pid is None or not _is_process_alive(pid):
         click.echo("MCP server is not running.")
+        return
+
+    click.echo(f"MCP server is running (PID {pid}).")
+
+    mcp_cfg = _load_mcp_config()
+    host = mcp_cfg.get("host", "localhost")
+    port = int(mcp_cfg.get("port", 3001))
+    info = _fetch_server_info(host, port)
+    if info:
+        name = info.get("name", "unknown")
+        version = info.get("version", "unknown")
+        click.echo(f"  Name:    {name}")
+        click.echo(f"  Version: {version}")
+    click.echo(f"  URL:     http://{host}:{port}")
+    click.echo(f"  Logs:    {LOG_FILE}")

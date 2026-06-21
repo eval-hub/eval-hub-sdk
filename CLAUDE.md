@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-EvalHub SDK is a Python SDK providing three components: **common models** (Pydantic v2 data models, always available), a **REST API client** (async/sync), and a **framework adapter SDK** for building custom evaluation adapters using a "Bring Your Own Framework" (BYOF) pattern. It also ships a Click-based CLI and an MCP server.
+EvalHub SDK is a Python SDK providing three components: **common models** (Pydantic v2 data models, always available), a **REST API client** (async/sync), and a **framework adapter SDK** for building custom evaluation adapters using a "Bring Your Own Framework" (BYOF) pattern. It also ships a Click-based CLI that manages the standalone Go-based MCP binary (`evalhub-mcp`).
 
 ## Commands
 
@@ -44,8 +44,7 @@ make test-e2e
 - **`models/`** — Pydantic v2 request/response models (JobStatus, EvaluationStatus, BenchmarkConfig, etc.). Always importable with zero optional deps.
 - **`adapter/`** — SDK for framework developers. `FrameworkAdapter` is the abstract base class; implementers override `run_benchmark_job(config, callbacks) -> JobResults`. Includes `DefaultCallbacks`, `AdapterSettings` (env-based config), and `OCIArtifactPersister`.
 - **`client/`** — `AsyncEvalHubClient` and `SyncEvalHubClient` with nested resource classes (providers, benchmarks, collections, jobs). Requires `httpx`.
-- **`cli/`** — Click command groups (`eval`, `provider`, `benchmark`, `collection`, `config`, `health`, `mcp`). Entry point: `evalhub.cli.bootstrap:main`.
-- **`mcp/`** — FastMCP server exposing EvalHub as tools and resources for AI agents.
+- **`cli/`** — Click command groups (`eval`, `provider`, `benchmark`, `collection`, `config`, `health`, `mcp`). Entry point: `evalhub.cli.bootstrap:main`. The `mcp` subcommand manages the standalone Go binary (`evalhub-mcp`).
 
 ### Adapter job lifecycle (Kubernetes)
 
@@ -57,7 +56,7 @@ make test-e2e
 
 ### Optional dependency extras
 
-Components are gated behind pip extras: `core`, `adapter`, `client`, `cli`, `mcp`, `dev`, `all`. The top-level `__init__.py` uses conditional imports — client classes only appear when `httpx` is installed.
+Components are gated behind pip extras: `core`, `adapter`, `client`, `cli`, `dev`, `all`. The `mcp` extra is a placeholder for the `evalhub-mcp` Go binary PyPI package. The top-level `__init__.py` uses conditional imports — client classes only appear when `httpx` is installed.
 
 ## Code Style
 

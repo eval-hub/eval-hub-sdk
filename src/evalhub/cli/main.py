@@ -1154,7 +1154,14 @@ def config_set(ctx: click.Context, key: str, value: str) -> None:
     """Set a configuration value in the active profile.
 
     \b
-    Known keys: base_url, token, tenant, provider, insecure, timeout.
+    Known keys: base_url, token, tenant, provider, insecure, timeout,
+    mcp_transport, mcp_host, mcp_port.
+
+    \b
+    mcp_transport values:
+      stdio    — default, launch as a child process
+      http     — Streamable HTTP
+      http-sse — legacy HTTP+SSE
 
     \b
     Examples:
@@ -1162,6 +1169,7 @@ def config_set(ctx: click.Context, key: str, value: str) -> None:
       evalhub config set token my-api-token
       evalhub config set tenant my-tenant
       evalhub config set insecure true
+      evalhub config set mcp_transport http
       evalhub --profile prod config set base_url https://evalhub.example.com
     """
     if not cfg.is_known_key(key):
@@ -1176,6 +1184,25 @@ def config_set(ctx: click.Context, key: str, value: str) -> None:
     cfg.save_config(data)
     profile_name = profile or cfg.get_active_profile(data)
     click.echo(f"Set '{key}' in profile '{profile_name}'")
+
+
+@config.command("unset")
+@click.argument("key")
+@click.pass_context
+def config_unset(ctx: click.Context, key: str) -> None:
+    """Remove a configuration key from the active profile.
+
+    \b
+    Examples:
+      evalhub config unset mcp_port
+      evalhub --profile prod config unset insecure
+    """
+    profile = ctx.obj.get("profile")
+    data = cfg.load_config()
+    cfg.unset_value(data, key, profile=profile)
+    cfg.save_config(data)
+    profile_name = profile or cfg.get_active_profile(data)
+    click.echo(f"Unset '{key}' from profile '{profile_name}'")
 
 
 @config.command("get")
