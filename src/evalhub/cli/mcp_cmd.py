@@ -241,17 +241,17 @@ def mcp_start(ctx: click.Context) -> None:
     if sys.platform == "win32":
         creationflags = subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
 
-    proc = subprocess.Popen(
-        cmd,
-        stdin=subprocess.DEVNULL,
-        stdout=log_fh,
-        stderr=subprocess.STDOUT,
-        creationflags=creationflags,
-    )
-
-    time.sleep(_STARTUP_WAIT)
-
-    log_fh.close()
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdin=subprocess.DEVNULL,
+            stdout=log_fh,
+            stderr=subprocess.STDOUT,
+            creationflags=creationflags,
+        )
+        time.sleep(_STARTUP_WAIT)
+    finally:
+        log_fh.close()
 
     if proc.poll() is not None:
         output = LOG_FILE.read_text().strip()
