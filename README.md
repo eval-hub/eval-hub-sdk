@@ -82,6 +82,15 @@ The SDK is organized into distinct, focused packages:
 6. **EnvironmentCardMetadata** - Operational context of an evaluation run: hardware, software, Kubernetes, model identity, and run provenance
 7. **Sidecar** - Container that handles service communication (provided by platform)
 
+## Breaking Changes
+
+### MCP command (> 0.4.1)
+
+The `evalhub mcp` command no longer starts a stdio MCP server directly. MCP
+hosts (Claude, etc.) that previously used `evalhub mcp` must switch to
+`evalhub mcp run`. The old `evalhub mcp` interface works only on versions
+<= 0.4.1.
+
 ## Quick Start
 
 ### 1. Installation

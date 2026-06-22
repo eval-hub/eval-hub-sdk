@@ -92,37 +92,38 @@ def _generate_config(
     return ["--config", str(CONFIG_FILE)], mcp_config
 
 
-def _fetch_server_info(
-    host: str = "localhost", port: int = 3001
-) -> dict[str, Any] | None:
-    """Send an MCP initialize request and return the serverInfo, or None on failure."""
-    url = f"http://{host}:{port}/mcp"
-    payload = json.dumps(
-        {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "initialize",
-            "params": {
-                "protocolVersion": "2025-03-26",
-                "capabilities": {},
-                "clientInfo": {"name": "evalhub-cli", "version": __version__},
-            },
-        }
-    ).encode()
+_JSONRPC_VERSION = "2.0"
+
+
+def _mcp_post(
+    url: str,
+    method: str,
+    *,
+    params: dict[str, Any] | None = None,
+    msg_id: int | None = 1,
+    session_id: str | None = None,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """POST a JSON-RPC request/notification and return (parsed result, session-id)."""
+    body: dict[str, Any] = {"jsonrpc": _JSONRPC_VERSION, "method": method}
+    if msg_id is not None:
+        body["id"] = msg_id
+    if params:
+        body["params"] = params
+    headers: dict[str, str] = {
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
+    }
+    if session_id:
+        headers["Mcp-Session-Id"] = session_id
     req = urllib.request.Request(
-        url,
-        data=payload,
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json, text/event-stream",
-        },
-        method="POST",
+        url, data=json.dumps(body).encode(), headers=headers, method="POST"
     )
     try:
         with urllib.request.urlopen(req, timeout=3) as resp:
+            sid = resp.headers.get("Mcp-Session-Id") or session_id
             raw = resp.read().decode()
     except (urllib.error.URLError, OSError, ValueError):
-        return None
+        return None, session_id
     # Streamable HTTP may return SSE (event: …\ndata: …) or plain JSON.
     data_line = raw
     for line in raw.splitlines():
@@ -130,10 +131,55 @@ def _fetch_server_info(
             data_line = line[len("data: ") :]
             break
     try:
-        body = json.loads(data_line)
+        return json.loads(data_line).get("result"), sid
     except (json.JSONDecodeError, ValueError):
+        return None, sid
+
+
+def _read_version_resource(url: str, session_id: str | None) -> dict[str, Any]:
+    """Read the evalhub://server/version resource and return parsed fields."""
+    ver, _ = _mcp_post(
+        url,
+        "resources/read",
+        params={"uri": "evalhub://server/version"},
+        msg_id=2,
+        session_id=session_id,
+    )
+    contents = (ver or {}).get("contents", [])
+    if not contents:
+        return {}
+    try:
+        return json.loads(contents[0].get("text", "{}"))  # type: ignore[no-any-return]
+    except (json.JSONDecodeError, ValueError):
+        return {}
+
+
+def _fetch_server_info(
+    host: str = "localhost", port: int = 3001
+) -> dict[str, Any] | None:
+    """Perform an MCP handshake and return serverInfo + version resource data."""
+    url = f"http://{host}:{port}/mcp"
+
+    result, sid = _mcp_post(
+        url,
+        "initialize",
+        params={
+            "protocolVersion": "2025-03-26",
+            "capabilities": {},
+            "clientInfo": {"name": "evalhub-cli", "version": __version__},
+        },
+    )
+    if result is None:
         return None
-    return body.get("result", {}).get("serverInfo")  # type: ignore[no-any-return]
+    info: dict[str, Any] = result.get("serverInfo", {})
+
+    _mcp_post(url, "notifications/initialized", msg_id=None, session_id=sid)
+
+    version_data = _read_version_resource(url, sid)
+    if "git_hash" in version_data:
+        info["git_hash"] = version_data["git_hash"]
+
+    return info
 
 
 @click.group()
@@ -262,7 +308,10 @@ def mcp_status() -> None:
     if info:
         name = info.get("name", "unknown")
         version = info.get("version", "unknown")
+        git_hash = info.get("git_hash", "")
         click.echo(f"  Name:    {name}")
         click.echo(f"  Version: {version}")
+        if git_hash:
+            click.echo(f"  Commit:  {git_hash}")
     click.echo(f"  URL:     http://{host}:{port}")
     click.echo(f"  Logs:    {LOG_FILE}")
