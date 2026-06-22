@@ -14,7 +14,6 @@ import urllib.request
 from typing import Any
 
 import click
-import yaml
 
 from evalhub import __version__
 
@@ -50,16 +49,12 @@ def _is_process_alive(pid: int) -> bool:
     return True
 
 
-def _graceful_signal() -> signal.Signals:
-    if sys.platform == "win32":
-        return signal.CTRL_BREAK_EVENT  # type: ignore[attr-defined,return-value]
-    return signal.SIGTERM
-
-
-def _force_signal() -> signal.Signals:
-    if sys.platform == "win32":
-        return signal.SIGTERM
-    return signal.SIGKILL
+_GRACEFUL_SIGNAL: signal.Signals = (
+    signal.CTRL_BREAK_EVENT if sys.platform == "win32" else signal.SIGTERM  # type: ignore[attr-defined]
+)
+_FORCE_SIGNAL: signal.Signals = (
+    signal.SIGTERM if sys.platform == "win32" else signal.SIGKILL
+)
 
 
 def _read_pid() -> int | None:
@@ -88,10 +83,7 @@ def _generate_config(
 
 def _load_mcp_config() -> dict[str, Any]:
     """Load the generated MCP config.yaml (host/port/transport)."""
-    if not CONFIG_FILE.exists():
-        return {}
-    with CONFIG_FILE.open("r") as f:
-        return yaml.safe_load(f) or {}
+    return cfg.load_config(CONFIG_FILE)
 
 
 def _fetch_server_info(
@@ -138,12 +130,6 @@ def _fetch_server_info(
     return body.get("result", {}).get("serverInfo")  # type: ignore[no-any-return]
 
 
-def _clean_stale_pid() -> None:
-    pid = _read_pid()
-    if pid is not None and not _is_process_alive(pid):
-        PID_FILE.unlink(missing_ok=True)
-
-
 @click.group()
 def mcp() -> None:
     """Manage the evalhub-mcp Go binary (run, start, stop, status)."""
@@ -158,13 +144,11 @@ def mcp_run(ctx: click.Context) -> None:
     ~/.config/evalhub/mcp/config.yaml automatically.
     """
     binary = _find_mcp_binary()
-    env = dict(os.environ)
     extra, _ = _generate_config(ctx)
     cmd = [binary, *extra]
 
     result = subprocess.run(
         cmd,
-        env=env,
         stdin=sys.stdin,
         stdout=sys.stdout,
         stderr=sys.stderr,
@@ -181,8 +165,10 @@ def mcp_start(ctx: click.Context) -> None:
     The active CLI profile is used to generate
     ~/.config/evalhub/mcp/config.yaml automatically.
     """
-    _clean_stale_pid()
     pid = _read_pid()
+    if pid is not None and not _is_process_alive(pid):
+        PID_FILE.unlink(missing_ok=True)
+        pid = None
     if pid is not None:
         raise click.ClickException(
             f"MCP server is already running (PID {pid}). "
@@ -190,7 +176,6 @@ def mcp_start(ctx: click.Context) -> None:
         )
 
     binary = _find_mcp_binary()
-    env = dict(os.environ)
     extra, mcp_config = _generate_config(ctx)
     if mcp_config.get("transport") == "stdio":
         raise click.ClickException(
@@ -209,7 +194,6 @@ def mcp_start(ctx: click.Context) -> None:
 
     proc = subprocess.Popen(
         cmd,
-        env=env,
         stdin=subprocess.DEVNULL,
         stdout=log_fh,
         stderr=subprocess.STDOUT,
@@ -241,7 +225,7 @@ def mcp_stop() -> None:
         click.echo("MCP server is not running.")
         return
 
-    os.kill(pid, _graceful_signal())
+    os.kill(pid, _GRACEFUL_SIGNAL)
 
     deadline = time.monotonic() + _STOP_TIMEOUT
     while time.monotonic() < deadline:
@@ -251,7 +235,7 @@ def mcp_stop() -> None:
             return
         time.sleep(0.2)
 
-    os.kill(pid, _force_signal())
+    os.kill(pid, _FORCE_SIGNAL)
     PID_FILE.unlink(missing_ok=True)
     click.echo("MCP server force-killed.")
 
@@ -259,9 +243,11 @@ def mcp_stop() -> None:
 @mcp.command("status")
 def mcp_status() -> None:
     """Check if the background MCP server is running."""
-    _clean_stale_pid()
     pid = _read_pid()
-    if pid is None or not _is_process_alive(pid):
+    if pid is not None and not _is_process_alive(pid):
+        PID_FILE.unlink(missing_ok=True)
+        pid = None
+    if pid is None:
         click.echo("MCP server is not running.")
         return
 

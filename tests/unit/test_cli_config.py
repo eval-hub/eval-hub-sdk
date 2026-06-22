@@ -523,7 +523,7 @@ class TestUnsetValue:
             "active_profile": "default",
             "profiles": {"default": {"base_url": "http://localhost", "token": "t"}},
         }
-        unset_value(data, "token")
+        assert unset_value(data, "token") is True
         assert "token" not in data["profiles"]["default"]
         assert "base_url" in data["profiles"]["default"]
 
@@ -532,7 +532,7 @@ class TestUnsetValue:
             "active_profile": "default",
             "profiles": {"default": {"base_url": "http://localhost"}},
         }
-        unset_value(data, "nonexistent")
+        assert unset_value(data, "nonexistent") is False
         assert data["profiles"]["default"] == {"base_url": "http://localhost"}
 
     def test_noop_when_profile_missing(self) -> None:
@@ -540,12 +540,12 @@ class TestUnsetValue:
             "active_profile": "default",
             "profiles": {"other": {"base_url": "http://localhost"}},
         }
-        unset_value(data, "base_url")
+        assert unset_value(data, "base_url") is False
         assert data["profiles"] == {"other": {"base_url": "http://localhost"}}
 
     def test_noop_when_no_profiles_key(self) -> None:
         data: dict[str, Any] = {"active_profile": "default"}
-        unset_value(data, "base_url")
+        assert unset_value(data, "base_url") is False
         assert "profiles" not in data
 
     def test_explicit_profile(self) -> None:
@@ -556,15 +556,22 @@ class TestUnsetValue:
                 "prod": {"base_url": "https://prod", "token": "secret"},
             },
         }
-        unset_value(data, "token", profile="prod")
+        assert unset_value(data, "token", profile="prod") is True
         assert "token" not in data["profiles"]["prod"]
         assert data["profiles"]["default"] == {"base_url": "http://localhost"}
 
 
 class TestConfigUnsetCommand:
     def test_unset_existing_key(self, runner: CliRunner, config_file: Path) -> None:
-        runner.invoke(main, ["config", "set", "base_url", "http://localhost:8080"])
-        runner.invoke(main, ["config", "set", "token", "my-token"])
+        assert (
+            runner.invoke(
+                main, ["config", "set", "base_url", "http://localhost:8080"]
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(main, ["config", "set", "token", "my-token"]).exit_code == 0
+        )
         result = runner.invoke(main, ["config", "unset", "token"])
         assert result.exit_code == 0
         assert "Unset 'token' from profile 'default'" in result.output
@@ -572,19 +579,27 @@ class TestConfigUnsetCommand:
         assert "token" not in data["profiles"]["default"]
         assert data["profiles"]["default"]["base_url"] == "http://localhost:8080"
 
-    def test_unset_missing_key_is_noop(
+    def test_unset_missing_key_errors(
         self, runner: CliRunner, config_file: Path
     ) -> None:
-        runner.invoke(main, ["config", "set", "base_url", "http://localhost:8080"])
+        assert (
+            runner.invoke(
+                main, ["config", "set", "base_url", "http://localhost:8080"]
+            ).exit_code
+            == 0
+        )
         result = runner.invoke(main, ["config", "unset", "nonexistent"])
-        assert result.exit_code == 0
-        assert "Unset 'nonexistent'" in result.output
+        assert result.exit_code != 0
+        assert "Key 'nonexistent' not found" in result.output
 
     def test_unset_with_profile_flag(
         self, runner: CliRunner, config_file: Path
     ) -> None:
-        runner.invoke(
-            main, ["--profile", "prod", "config", "set", "token", "prod-token"]
+        assert (
+            runner.invoke(
+                main, ["--profile", "prod", "config", "set", "token", "prod-token"]
+            ).exit_code
+            == 0
         )
         result = runner.invoke(main, ["--profile", "prod", "config", "unset", "token"])
         assert result.exit_code == 0

@@ -1199,10 +1199,13 @@ def config_unset(ctx: click.Context, key: str) -> None:
     """
     profile = ctx.obj.get("profile")
     data = cfg.load_config()
-    cfg.unset_value(data, key, profile=profile)
-    cfg.save_config(data)
+    removed = cfg.unset_value(data, key, profile=profile)
     profile_name = profile or cfg.get_active_profile(data)
-    click.echo(f"Unset '{key}' from profile '{profile_name}'")
+    if removed:
+        cfg.save_config(data)
+        click.echo(f"Unset '{key}' from profile '{profile_name}'")
+    else:
+        raise click.ClickException(f"Key '{key}' not found in profile '{profile_name}'")
 
 
 @config.command("get")

@@ -119,16 +119,19 @@ def get_value(data: dict[str, Any], key: str, profile: str | None = None) -> str
     return prof.get(key)
 
 
-def unset_value(data: dict[str, Any], key: str, profile: str | None = None) -> None:
-    """Remove a key from a profile (noop if key or profile is absent)."""
+def unset_value(data: dict[str, Any], key: str, profile: str | None = None) -> bool:
+    """Remove a key from a profile. Returns True if the key was present."""
     name = profile or get_active_profile(data)
     profiles = data.get("profiles")
     if profiles is None:
-        return
+        return False
     prof = profiles.get(name)
     if prof is None:
-        return
-    prof.pop(key, None)
+        return False
+    if key in prof:
+        del prof[key]
+        return True
+    return False
 
 
 def missing_required_keys(
