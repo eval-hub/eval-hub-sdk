@@ -128,10 +128,7 @@ def unset_value(data: dict[str, Any], key: str, profile: str | None = None) -> b
     prof = profiles.get(name)
     if prof is None:
         return False
-    if key in prof:
-        del prof[key]
-        return True
-    return False
+    return prof.pop(key, None) is not None
 
 
 def missing_required_keys(

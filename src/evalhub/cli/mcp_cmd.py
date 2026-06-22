@@ -9,7 +9,6 @@ import signal
 import subprocess
 import sys
 import time
-import urllib.error
 import urllib.request
 from typing import Any
 
@@ -122,7 +121,7 @@ def _mcp_post(
         with urllib.request.urlopen(req, timeout=3) as resp:
             sid = resp.headers.get("Mcp-Session-Id") or session_id
             raw = resp.read().decode()
-    except (urllib.error.URLError, OSError, ValueError):
+    except (OSError, ValueError):
         return None, session_id
     # Streamable HTTP may return SSE (event: …\ndata: …) or plain JSON.
     data_line = raw
@@ -302,8 +301,8 @@ def mcp_status() -> None:
     click.echo(f"MCP server is running (PID {pid}).")
 
     mcp_cfg = cfg.load_config(CONFIG_FILE)
-    host = mcp_cfg.get("host", "localhost")
-    port = mcp_cfg.get("port", 3001)
+    host = str(mcp_cfg.get("host", "localhost"))
+    port = int(mcp_cfg.get("port", 3001))
     info = _fetch_server_info(host, port)
     if info:
         name = info.get("name", "unknown")
