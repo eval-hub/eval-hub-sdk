@@ -128,6 +128,8 @@ def test_mcp_start_launches_background(
 
     assert result.exit_code == 0, result.output
     assert "12345" in result.output
+    assert "Transport: http" in result.output
+    assert "http://localhost:3001" in result.output
 
     cmd = mock_popen.call_args[0][0]
     assert "--config" in cmd

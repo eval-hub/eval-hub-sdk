@@ -146,8 +146,9 @@ def mcp() -> None:
 def mcp_run(ctx: click.Context) -> None:
     """Run the evalhub-mcp binary in the foreground.
 
-    The active CLI profile is used to generate
-    ~/.config/evalhub/mcp/config.yaml automatically.
+    Uses the mcp_transport value from the active profile if set,
+    otherwise defaults to stdio. The active CLI profile is used to
+    generate ~/.config/evalhub/mcp/config.yaml automatically.
     """
     binary = _find_mcp_binary()
     extra, _ = _generate_config(ctx, default_transport="stdio")
@@ -167,9 +168,9 @@ def mcp_run(ctx: click.Context) -> None:
 def mcp_start(ctx: click.Context) -> None:
     """Start the Go MCP binary as a background daemon.
 
-    Transport is read from the active profile (default: http).
-    The active CLI profile is used to generate
-    ~/.config/evalhub/mcp/config.yaml automatically.
+    Uses the mcp_transport value from the active profile if set,
+    otherwise defaults to http. The active CLI profile is used to
+    generate ~/.config/evalhub/mcp/config.yaml automatically.
     """
     pid = _live_pid()
     if pid is not None:
@@ -216,7 +217,9 @@ def mcp_start(ctx: click.Context) -> None:
 
     PID_FILE.write_text(str(proc.pid))
     click.echo(f"MCP server started (PID {proc.pid}).")
-    click.echo(f"Logs: {LOG_FILE}")
+    click.echo(f"  Transport: {mcp_config['transport']}")
+    click.echo(f"  URL:       http://{mcp_config['host']}:{mcp_config['port']}")
+    click.echo(f"  Logs:      {LOG_FILE}")
 
 
 @mcp.command("stop")
@@ -254,7 +257,7 @@ def mcp_status() -> None:
 
     mcp_cfg = cfg.load_config(CONFIG_FILE)
     host = mcp_cfg.get("host", "localhost")
-    port = int(mcp_cfg.get("port", 3001))
+    port = mcp_cfg.get("port", 3001)
     info = _fetch_server_info(host, port)
     if info:
         name = info.get("name", "unknown")

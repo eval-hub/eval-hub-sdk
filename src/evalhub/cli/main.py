@@ -1159,9 +1159,12 @@ def config_set(ctx: click.Context, key: str, value: str) -> None:
 
     \b
     mcp_transport values:
-      stdio    — default, launch as a child process
-      http     — Streamable HTTP
+      stdio    — default for 'evalhub mcp run'
+      http     — Streamable HTTP, default for 'evalhub mcp start'
       http-sse — legacy HTTP+SSE
+    When mcp_transport is not set, each command uses its own default.
+    mcp_host default: localhost
+    mcp_port default: 3001
 
     \b
     Examples:
