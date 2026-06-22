@@ -67,8 +67,19 @@ def _read_pid() -> int | None:
     return pid
 
 
+def _live_pid() -> int | None:
+    """Return the PID if the process is alive, cleaning up stale pidfile otherwise."""
+    pid = _read_pid()
+    if pid is not None and not _is_process_alive(pid):
+        PID_FILE.unlink(missing_ok=True)
+        return None
+    return pid
+
+
 def _generate_config(
     ctx: click.Context,
+    *,
+    default_transport: str = "http",
 ) -> tuple[list[str], dict[str, object]]:
     """Build MCP config from the active CLI profile.
 
@@ -76,14 +87,9 @@ def _generate_config(
     """
     data = cfg.load_config()
     profile = cfg.get_profile(data, ctx.obj.get("profile"))
-    mcp_config = cfg.build_mcp_config(profile)
+    mcp_config = cfg.build_mcp_config(profile, default_transport=default_transport)
     cfg.save_config(mcp_config, CONFIG_FILE)
     return ["--config", str(CONFIG_FILE)], mcp_config
-
-
-def _load_mcp_config() -> dict[str, Any]:
-    """Load the generated MCP config.yaml (host/port/transport)."""
-    return cfg.load_config(CONFIG_FILE)
 
 
 def _fetch_server_info(
@@ -144,7 +150,7 @@ def mcp_run(ctx: click.Context) -> None:
     ~/.config/evalhub/mcp/config.yaml automatically.
     """
     binary = _find_mcp_binary()
-    extra, _ = _generate_config(ctx)
+    extra, _ = _generate_config(ctx, default_transport="stdio")
     cmd = [binary, *extra]
 
     result = subprocess.run(
@@ -165,10 +171,7 @@ def mcp_start(ctx: click.Context) -> None:
     The active CLI profile is used to generate
     ~/.config/evalhub/mcp/config.yaml automatically.
     """
-    pid = _read_pid()
-    if pid is not None and not _is_process_alive(pid):
-        PID_FILE.unlink(missing_ok=True)
-        pid = None
+    pid = _live_pid()
     if pid is not None:
         raise click.ClickException(
             f"MCP server is already running (PID {pid}). "
@@ -219,9 +222,8 @@ def mcp_start(ctx: click.Context) -> None:
 @mcp.command("stop")
 def mcp_stop() -> None:
     """Stop the background MCP server."""
-    pid = _read_pid()
-    if pid is None or not _is_process_alive(pid):
-        PID_FILE.unlink(missing_ok=True)
+    pid = _live_pid()
+    if pid is None:
         click.echo("MCP server is not running.")
         return
 
@@ -243,17 +245,14 @@ def mcp_stop() -> None:
 @mcp.command("status")
 def mcp_status() -> None:
     """Check if the background MCP server is running."""
-    pid = _read_pid()
-    if pid is not None and not _is_process_alive(pid):
-        PID_FILE.unlink(missing_ok=True)
-        pid = None
+    pid = _live_pid()
     if pid is None:
         click.echo("MCP server is not running.")
         return
 
     click.echo(f"MCP server is running (PID {pid}).")
 
-    mcp_cfg = _load_mcp_config()
+    mcp_cfg = cfg.load_config(CONFIG_FILE)
     host = mcp_cfg.get("host", "localhost")
     port = int(mcp_cfg.get("port", 3001))
     info = _fetch_server_info(host, port)

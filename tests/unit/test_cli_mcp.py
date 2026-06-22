@@ -287,7 +287,7 @@ def test_mcp_run_generates_config_from_profile(
     assert loaded["token"] == "prod-token"
     assert loaded["tenant"] == "team-a"
     assert loaded["insecure"] is True
-    assert loaded["transport"] == "http"
+    assert loaded["transport"] == "stdio"
     assert loaded["host"] == "localhost"
     assert loaded["port"] == 3001
 

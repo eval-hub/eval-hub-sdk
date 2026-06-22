@@ -160,7 +160,9 @@ def parse_bool(value: Any, *, default: bool = False) -> bool:
     return str(value).lower() in ("true", "1", "yes")
 
 
-def build_mcp_config(profile: dict[str, Any]) -> dict[str, Any]:
+def build_mcp_config(
+    profile: dict[str, Any], *, default_transport: str = "http"
+) -> dict[str, Any]:
     """Build the Go MCP binary config dict from a CLI profile."""
     try:
         port = int(profile.get("mcp_port", 3001))
@@ -171,7 +173,7 @@ def build_mcp_config(profile: dict[str, Any]) -> dict[str, Any]:
         "token": profile.get("token", ""),
         "tenant": profile.get("tenant", ""),
         "insecure": parse_bool(profile.get("insecure")),
-        "transport": profile.get("mcp_transport", "http"),
+        "transport": profile.get("mcp_transport", default_transport),
         "host": profile.get("mcp_host", "localhost"),
         "port": port,
     }
