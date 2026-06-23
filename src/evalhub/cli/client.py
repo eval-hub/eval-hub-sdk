@@ -36,6 +36,7 @@ def create_client(
     tenant = prof.get("tenant")
     insecure = cfg.parse_bool(prof.get("insecure"))
     timeout = float(prof.get("timeout", 30.0))
+    ca_bundle_path = prof.get("ca_bundle_path")
 
     return SyncEvalHubClient(
         base_url=resolved_url,
@@ -43,6 +44,7 @@ def create_client(
         tenant=tenant,
         insecure=insecure,
         timeout=timeout,
+        ca_bundle_path=ca_bundle_path,
     )
 
 

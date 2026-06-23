@@ -1162,7 +1162,18 @@ def config_set(ctx: click.Context, key: str, value: str) -> None:
 
     \b
     Known keys: base_url, token, tenant, provider, insecure, timeout,
+    tls_cert_file, tls_key_file, ca_bundle_path,
     mcp_transport, mcp_host, mcp_port.
+
+    \b
+    TLS (local server — used by 'evalhub mcp start'):
+      tls_cert_file  — path to TLS certificate
+      tls_key_file   — path to TLS private key
+
+    \b
+    TLS (remote cluster):
+      ca_bundle_path — CA bundle to verify the remote EvalHub server
+      insecure       — skip TLS verification (true/false)
 
     \b
     mcp_transport values:
@@ -1179,6 +1190,9 @@ def config_set(ctx: click.Context, key: str, value: str) -> None:
       evalhub config set token my-api-token
       evalhub config set tenant my-tenant
       evalhub config set insecure true
+      evalhub config set tls_cert_file /path/to/server.crt
+      evalhub config set tls_key_file /path/to/server.key
+      evalhub config set ca_bundle_path /path/to/ca-bundle.crt
       evalhub config set mcp_transport http
       evalhub --profile prod config set base_url https://evalhub.example.com
     """

@@ -443,13 +443,22 @@ class TestConfigMasking:
         assert "longtoken123" not in result.output
 
 
-class TestMcpConfigKeys:
-    def test_mcp_keys_in_optional_keys(self) -> None:
-        for key in ("mcp_transport", "mcp_host", "mcp_port"):
+class TestOptionalConfigKeys:
+    _EXPECTED = (
+        "mcp_transport",
+        "mcp_host",
+        "mcp_port",
+        "tls_cert_file",
+        "tls_key_file",
+        "ca_bundle_path",
+    )
+
+    def test_in_optional_keys(self) -> None:
+        for key in self._EXPECTED:
             assert key in OPTIONAL_KEYS
 
-    def test_mcp_keys_in_known_keys(self) -> None:
-        for key in ("mcp_transport", "mcp_host", "mcp_port"):
+    def test_in_known_keys(self) -> None:
+        for key in self._EXPECTED:
             assert key in KNOWN_KEYS
 
 
@@ -499,6 +508,28 @@ class TestBuildMcpConfig:
     def test_invalid_port_falls_back_to_default(self) -> None:
         result = build_mcp_config({"mcp_port": "not-a-number"})
         assert result["port"] == 3001
+
+    def test_tls_fields_forwarded_when_set(self) -> None:
+        profile = {
+            "base_url": "https://evalhub.example.com",
+            "token": "t",
+            "tenant": "ns",
+            "tls_cert_file": "/path/to/server.crt",
+            "tls_key_file": "/path/to/server.key",
+        }
+        result = build_mcp_config(profile)
+        assert result["tls_cert_file"] == "/path/to/server.crt"
+        assert result["tls_key_file"] == "/path/to/server.key"
+
+    def test_tls_fields_omitted_when_not_set(self) -> None:
+        result = build_mcp_config({})
+        assert "tls_cert_file" not in result
+        assert "tls_key_file" not in result
+
+    def test_ca_bundle_path_not_in_mcp_config(self) -> None:
+        profile = {"ca_bundle_path": "/path/to/ca-bundle.crt"}
+        result = build_mcp_config(profile)
+        assert "ca_bundle_path" not in result
 
 
 class TestParseBool:

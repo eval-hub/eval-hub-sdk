@@ -31,6 +31,9 @@ OPTIONAL_KEYS = (
     "provider",
     "insecure",
     "timeout",
+    "tls_cert_file",
+    "tls_key_file",
+    "ca_bundle_path",
     "mcp_transport",
     "mcp_host",
     "mcp_port",
@@ -165,7 +168,7 @@ def build_mcp_config(
         port = int(profile.get("mcp_port", 3001))
     except (TypeError, ValueError):
         port = 3001
-    return {
+    mcp_cfg: dict[str, Any] = {
         "base_url": profile.get("base_url", "http://localhost:8080"),
         "token": profile.get("token", ""),
         "tenant": profile.get("tenant", ""),
@@ -174,3 +177,8 @@ def build_mcp_config(
         "host": profile.get("mcp_host", "localhost"),
         "port": port,
     }
+    for key in ("tls_cert_file", "tls_key_file"):
+        val = profile.get(key)
+        if val:
+            mcp_cfg[key] = val
+    return mcp_cfg
