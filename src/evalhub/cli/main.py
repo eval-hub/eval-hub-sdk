@@ -1166,14 +1166,17 @@ def config_set(ctx: click.Context, key: str, value: str) -> None:
     mcp_transport, mcp_host, mcp_port.
 
     \b
-    TLS (local server — used by 'evalhub mcp start'):
-      tls_cert_file  — path to TLS certificate
-      tls_key_file   — path to TLS private key
+    TLS (local MCP server — used by 'evalhub mcp start'):
+      tls_cert_file  — path to PEM-encoded TLS certificate
+      tls_key_file   — path to PEM-encoded TLS private key
 
     \b
-    TLS (remote cluster):
-      ca_bundle_path — CA bundle to verify the remote EvalHub server
-      insecure       — skip TLS verification (true/false)
+    TLS (remote EvalHub server verification):
+      ca_bundle_path — CA bundle (.pem) to verify the remote server
+      insecure       — skip TLS verification (true/false, default: false)
+    When insecure is true, ca_bundle_path is ignored.
+    When insecure is false or unset, ca_bundle_path is used if provided,
+    otherwise system CA certificates are used.
 
     \b
     mcp_transport values:
@@ -1192,7 +1195,7 @@ def config_set(ctx: click.Context, key: str, value: str) -> None:
       evalhub config set insecure true
       evalhub config set tls_cert_file /path/to/server.crt
       evalhub config set tls_key_file /path/to/server.key
-      evalhub config set ca_bundle_path /path/to/ca-bundle.crt
+      evalhub config set ca_bundle_path /path/to/ca-bundle.pem
       evalhub config set mcp_transport http
       evalhub --profile prod config set base_url https://evalhub.example.com
     """

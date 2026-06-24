@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import signal
+import ssl
 import subprocess
 import sys
 import time
@@ -91,6 +92,21 @@ def _generate_config(
     return ["--config", str(CONFIG_FILE)], mcp_config
 
 
+def _tls_enabled(mcp_config: dict[str, Any]) -> bool:
+    return bool(mcp_config.get("tls_cert_file") and mcp_config.get("tls_key_file"))
+
+
+def _scheme(mcp_config: dict[str, Any]) -> str:
+    return "https" if _tls_enabled(mcp_config) else "http"
+
+
+def _insecure_ssl_context() -> ssl.SSLContext:
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+
 _JSONRPC_VERSION = "2.0"
 
 
@@ -117,8 +133,9 @@ def _mcp_post(
     req = urllib.request.Request(
         url, data=json.dumps(body).encode(), headers=headers, method="POST"
     )
+    ssl_ctx = _insecure_ssl_context() if url.startswith("https://") else None
     try:
-        with urllib.request.urlopen(req, timeout=3) as resp:
+        with urllib.request.urlopen(req, timeout=3, context=ssl_ctx) as resp:
             sid = resp.headers.get("Mcp-Session-Id") or session_id
             raw = resp.read().decode()
     except (OSError, ValueError):
@@ -154,10 +171,10 @@ def _read_version_resource(url: str, session_id: str | None) -> dict[str, Any]:
 
 
 def _fetch_server_info(
-    host: str = "localhost", port: int = 3001
+    host: str = "localhost", port: int = 3001, *, scheme: str = "http"
 ) -> dict[str, Any] | None:
     """Perform an MCP handshake and return serverInfo + version resource data."""
-    url = f"http://{host}:{port}/mcp"
+    url = f"{scheme}://{host}:{port}/mcp"
 
     result, sid = _mcp_post(
         url,
@@ -261,9 +278,10 @@ def mcp_start(ctx: click.Context) -> None:
         raise click.ClickException(msg)
 
     PID_FILE.write_text(str(proc.pid))
+    scheme = _scheme(mcp_config)
     click.echo(f"MCP server started (PID {proc.pid}).")
     click.echo(f"  Transport: {mcp_config['transport']}")
-    click.echo(f"  URL:       http://{mcp_config['host']}:{mcp_config['port']}")
+    click.echo(f"  URL:       {scheme}://{mcp_config['host']}:{mcp_config['port']}")
     click.echo(f"  Logs:      {LOG_FILE}")
 
 
@@ -303,7 +321,8 @@ def mcp_status() -> None:
     mcp_cfg = cfg.load_config(CONFIG_FILE)
     host = str(mcp_cfg.get("host", "localhost"))
     port = int(mcp_cfg.get("port", 3001))
-    info = _fetch_server_info(host, port)
+    scheme = _scheme(mcp_cfg)
+    info = _fetch_server_info(host, port, scheme=scheme)
     if info:
         name = info.get("name", "unknown")
         version = info.get("version", "unknown")
@@ -312,5 +331,5 @@ def mcp_status() -> None:
         click.echo(f"  Version: {version}")
         if git_hash:
             click.echo(f"  Commit:  {git_hash}")
-    click.echo(f"  URL:     http://{host}:{port}")
+    click.echo(f"  URL:     {scheme}://{host}:{port}")
     click.echo(f"  Logs:    {LOG_FILE}")
