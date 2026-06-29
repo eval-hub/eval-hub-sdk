@@ -113,7 +113,10 @@ def test_parse_trace_info_endpoint_response() -> None:
 def test_artifact_server_path_odh_workspace() -> None:
     uri = "mlflow-artifacts:/workspaces/ws/1/run-abc/artifacts"
     path = MlflowClient._artifact_server_path(uri, "results/out.json")
-    assert path == "/api/2.0/mlflow-artifacts/artifacts/1/run-abc/artifacts/results/out.json"
+    assert (
+        path
+        == "/api/2.0/mlflow-artifacts/artifacts/1/run-abc/artifacts/results/out.json"
+    )
 
 
 def test_artifact_server_path_upstream_run_ids() -> None:
