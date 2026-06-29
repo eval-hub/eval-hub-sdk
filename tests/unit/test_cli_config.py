@@ -13,8 +13,11 @@ import yaml
 from click.testing import CliRunner
 from evalhub.cli.config import (
     DEFAULT_PROFILE,
+    KNOWN_KEYS,
+    OPTIONAL_KEYS,
     REQUIRED_KEYS,
     SENSITIVE_KEYS,
+    build_mcp_config,
     get_active_profile,
     get_profile,
     get_value,
@@ -22,9 +25,11 @@ from evalhub.cli.config import (
     load_config,
     mask_value,
     missing_required_keys,
+    parse_bool,
     save_config,
     set_active_profile,
     set_value,
+    unset_value,
 )
 from evalhub.cli.main import main
 
@@ -436,3 +441,168 @@ class TestConfigMasking:
         assert result.exit_code == 0
         assert "token: lon***23" in result.output
         assert "longtoken123" not in result.output
+
+
+class TestMcpConfigKeys:
+    def test_mcp_keys_in_optional_keys(self) -> None:
+        for key in ("mcp_transport", "mcp_host", "mcp_port"):
+            assert key in OPTIONAL_KEYS
+
+    def test_mcp_keys_in_known_keys(self) -> None:
+        for key in ("mcp_transport", "mcp_host", "mcp_port"):
+            assert key in KNOWN_KEYS
+
+
+class TestBuildMcpConfig:
+    def test_defaults_from_empty_profile(self) -> None:
+        result = build_mcp_config({})
+        assert result == {
+            "base_url": "http://localhost:8080",
+            "token": "",
+            "tenant": "",
+            "insecure": False,
+            "transport": "http",
+            "host": "localhost",
+            "port": 3001,
+        }
+
+    def test_maps_profile_values(self) -> None:
+        profile = {
+            "base_url": "https://evalhub.example.com",
+            "token": "my-token",
+            "tenant": "team-a",
+            "insecure": "true",
+        }
+        result = build_mcp_config(profile)
+        assert result["base_url"] == "https://evalhub.example.com"
+        assert result["token"] == "my-token"
+        assert result["tenant"] == "team-a"
+        assert result["insecure"] is True
+        assert result["transport"] == "http"
+        assert result["host"] == "localhost"
+        assert result["port"] == 3001
+
+    def test_mcp_specific_overrides(self) -> None:
+        profile = {
+            "base_url": "http://localhost:8080",
+            "token": "t",
+            "tenant": "x",
+            "mcp_transport": "http-sse",
+            "mcp_host": "0.0.0.0",
+            "mcp_port": "9999",
+        }
+        result = build_mcp_config(profile)
+        assert result["transport"] == "http-sse"
+        assert result["host"] == "0.0.0.0"
+        assert result["port"] == 9999
+
+    def test_invalid_port_falls_back_to_default(self) -> None:
+        result = build_mcp_config({"mcp_port": "not-a-number"})
+        assert result["port"] == 3001
+
+
+class TestParseBool:
+    def test_true_values(self) -> None:
+        for val in ("true", "True", "TRUE", "1", "yes", "Yes"):
+            assert parse_bool(val) is True
+
+    def test_false_values(self) -> None:
+        for val in ("false", "False", "0", "no", "anything", ""):
+            assert parse_bool(val) is False
+
+    def test_none_returns_default_false(self) -> None:
+        assert parse_bool(None) is False
+
+    def test_none_returns_custom_default(self) -> None:
+        assert parse_bool(None, default=True) is True
+
+
+class TestUnsetValue:
+    def test_removes_existing_key(self) -> None:
+        data: dict[str, Any] = {
+            "active_profile": "default",
+            "profiles": {"default": {"base_url": "http://localhost", "token": "t"}},
+        }
+        assert unset_value(data, "token") is True
+        assert "token" not in data["profiles"]["default"]
+        assert "base_url" in data["profiles"]["default"]
+
+    def test_noop_when_key_missing(self) -> None:
+        data: dict[str, Any] = {
+            "active_profile": "default",
+            "profiles": {"default": {"base_url": "http://localhost"}},
+        }
+        assert unset_value(data, "nonexistent") is False
+        assert data["profiles"]["default"] == {"base_url": "http://localhost"}
+
+    def test_noop_when_profile_missing(self) -> None:
+        data: dict[str, Any] = {
+            "active_profile": "default",
+            "profiles": {"other": {"base_url": "http://localhost"}},
+        }
+        assert unset_value(data, "base_url") is False
+        assert data["profiles"] == {"other": {"base_url": "http://localhost"}}
+
+    def test_noop_when_no_profiles_key(self) -> None:
+        data: dict[str, Any] = {"active_profile": "default"}
+        assert unset_value(data, "base_url") is False
+        assert "profiles" not in data
+
+    def test_explicit_profile(self) -> None:
+        data: dict[str, Any] = {
+            "active_profile": "default",
+            "profiles": {
+                "default": {"base_url": "http://localhost"},
+                "prod": {"base_url": "https://prod", "token": "secret"},
+            },
+        }
+        assert unset_value(data, "token", profile="prod") is True
+        assert "token" not in data["profiles"]["prod"]
+        assert data["profiles"]["default"] == {"base_url": "http://localhost"}
+
+
+class TestConfigUnsetCommand:
+    def test_unset_existing_key(self, runner: CliRunner, config_file: Path) -> None:
+        assert (
+            runner.invoke(
+                main, ["config", "set", "base_url", "http://localhost:8080"]
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(main, ["config", "set", "token", "my-token"]).exit_code == 0
+        )
+        result = runner.invoke(main, ["config", "unset", "token"])
+        assert result.exit_code == 0
+        assert "Unset 'token' from profile 'default'" in result.output
+        data = load_config()
+        assert "token" not in data["profiles"]["default"]
+        assert data["profiles"]["default"]["base_url"] == "http://localhost:8080"
+
+    def test_unset_missing_key_errors(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
+        assert (
+            runner.invoke(
+                main, ["config", "set", "base_url", "http://localhost:8080"]
+            ).exit_code
+            == 0
+        )
+        result = runner.invoke(main, ["config", "unset", "nonexistent"])
+        assert result.exit_code != 0
+        assert "Key 'nonexistent' not found" in result.output
+
+    def test_unset_with_profile_flag(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
+        assert (
+            runner.invoke(
+                main, ["--profile", "prod", "config", "set", "token", "prod-token"]
+            ).exit_code
+            == 0
+        )
+        result = runner.invoke(main, ["--profile", "prod", "config", "unset", "token"])
+        assert result.exit_code == 0
+        assert "profile 'prod'" in result.output
+        data = load_config()
+        assert "token" not in data["profiles"]["prod"]

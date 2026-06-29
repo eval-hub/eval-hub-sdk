@@ -31,6 +31,7 @@ from .api import (
     FrameworkInfo,
     HealthResponse,
     # Status and metadata
+    JobPhase,
     JobsList,
     JobStatus,
     JobSubmissionRequest,
@@ -51,6 +52,7 @@ from .api import (
 
 __all__ = [
     # Job & Evaluation models
+    "JobPhase",
     "JobStatus",
     "EvaluationExports",
     "EvaluationExportsOCI",

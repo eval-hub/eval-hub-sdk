@@ -57,16 +57,16 @@ cli = [
     "rich>=13.0.0",
 ]
 
-# MCP server - for AI agent access to EvalHub
+# MCP — installs the evalhub-mcp Go binary via PyPI
 mcp = [
     "eval-hub-sdk[core]",
-    "mcp>=1.0.0",
+    # "eval-hub-mcp",  # uncomment when the package is published to PyPI
 ]
 
 # Development dependencies
 # NOTE: Versions should match .pre-commit-config.yaml and .github/workflows/pre-commit.yml
 dev = [
-    "eval-hub-sdk[cli,mcp]",
+    "eval-hub-sdk[cli]",
     "pytest>=7.4.0",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.1.0",
@@ -160,8 +160,6 @@ module = [
     "oras",
     "olot.*",
     "olot",
-    "mcp",
-    "mcp.*",
     # Optional runtime deps detected by EnvironmentCardMetadata.capture()
     "torch",
     "torch.*",

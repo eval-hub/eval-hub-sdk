@@ -26,51 +26,24 @@ def read_model_auth_key(key_name: str) -> str | None:
 
 @dataclass
 class ModelCredentials:
-    """Resolved model credentials from environment."""
+    """Resolved model credentials from the pod environment.
+
+    api_key holds the ref token (e.g. 'api-key:ref') that the sidecar
+    proxy resolves to the real credential. CA cert and SA token injection
+    are handled transparently by the sidecar — not the adapter.
+    """
 
     api_key: str | None = field(default=None, repr=False)
-    ca_cert_path: str | None = None
-    _service_account_token: str | None = field(default=None, repr=False)
-
-    @property
-    def auth_headers(self) -> dict[str, str]:
-        """Auth headers derived from the ServiceAccount token only.
-
-        The API key is intentionally excluded and must be consumed separately
-        by the adapter.
-        """
-        if self._service_account_token:
-            return {"Authorization": f"Bearer {self._service_account_token}"}
-        return {}
 
 
 def resolve_model_credentials() -> ModelCredentials:
     """Resolve model authentication from the pod environment.
 
-    Reads credentials from the mounted model auth secret path.
+    Reads the api-key ref token from the mounted model auth secret.
+    CA cert and SA token injection are handled by the sidecar proxy.
     """
     creds = ModelCredentials()
-
     api_key = read_model_auth_key("api-key")
     if api_key:
         creds.api_key = api_key
-
-    if not creds.api_key:
-        sa_token_path = "/var/run/secrets/kubernetes.io/serviceaccount/token"
-        path = Path(sa_token_path)
-        if path.is_file():
-            try:
-                sa_token = path.read_text(encoding="utf-8").strip()
-            except (OSError, UnicodeDecodeError, ValueError) as exc:
-                logger.warning(
-                    "Failed to read service account token file", exc_info=exc
-                )
-            else:
-                if sa_token:
-                    creds._service_account_token = sa_token
-
-    ca_cert = read_model_auth_key("ca_cert")
-    if ca_cert:
-        creds.ca_cert_path = str(_MODEL_AUTH_DIR / "ca_cert")
-
     return creds

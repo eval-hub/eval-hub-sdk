@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import shutil
 import sys
 import time
 from datetime import UTC, datetime, timedelta
@@ -35,6 +36,7 @@ from . import config as cfg
 from .client import get_client, handle_api_errors
 from .completion import completion
 from .formatter import format_option, output
+from .mcp_cmd import mcp
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
@@ -93,6 +95,7 @@ def main(
 
 
 main.add_command(completion)
+main.add_command(mcp)
 
 
 @main.command()
@@ -577,11 +580,15 @@ def _watch_job(client: Any, job_id: str, poll_interval: float) -> None:
         job = client.jobs.get(job_id)
         benchmarks_status = ""
         if job.status and job.status.benchmarks:
-            done = sum(1 for b in job.status.benchmarks if b.state in terminal)
-            benchmarks_status = f" [{done}/{len(job.status.benchmarks)} benchmarks]"
-        click.echo(
-            f"\r{job.id}: {job.effective_state.value}{benchmarks_status}", nl=False
-        )
+            benchmarks = job.status.benchmarks
+            done = sum(1 for b in benchmarks if b.state in terminal)
+            phase_info = ""
+            if len(benchmarks) == 1 and benchmarks[0].phase:
+                phase_info = f" phase={benchmarks[0].phase.value}"
+            benchmarks_status = f" [{done}/{len(benchmarks)} benchmarks{phase_info}]"
+        line = f"{job.id}: {job.effective_state.value}{benchmarks_status}"
+        cols = shutil.get_terminal_size().columns
+        click.echo(f"\r{line:<{cols}}", nl=False)
         sys.stdout.flush()
         if job.effective_state in terminal:
             click.echo()
@@ -604,6 +611,8 @@ def _print_job_detail(job: Any) -> None:
         click.echo(f"\nBenchmarks ({len(job.status.benchmarks)}):")
         for b in job.status.benchmarks:
             line = f"  {b.id} ({b.provider_id}): {b.state.value}"
+            if b.phase:
+                line += f" [{b.phase.value}]"
             if b.error_message:
                 line += f" - {b.error_message.message}"
             click.echo(line)
@@ -1152,7 +1161,17 @@ def config_set(ctx: click.Context, key: str, value: str) -> None:
     """Set a configuration value in the active profile.
 
     \b
-    Known keys: base_url, token, tenant, provider, insecure, timeout.
+    Known keys: base_url, token, tenant, provider, insecure, timeout,
+    mcp_transport, mcp_host, mcp_port.
+
+    \b
+    mcp_transport values:
+      stdio    — default for 'evalhub mcp run'
+      http     — Streamable HTTP, default for 'evalhub mcp start'
+      http-sse — legacy HTTP+SSE
+    When mcp_transport is not set, each command uses its own default.
+    mcp_host default: localhost
+    mcp_port default: 3001
 
     \b
     Examples:
@@ -1160,6 +1179,7 @@ def config_set(ctx: click.Context, key: str, value: str) -> None:
       evalhub config set token my-api-token
       evalhub config set tenant my-tenant
       evalhub config set insecure true
+      evalhub config set mcp_transport http
       evalhub --profile prod config set base_url https://evalhub.example.com
     """
     if not cfg.is_known_key(key):
@@ -1174,6 +1194,28 @@ def config_set(ctx: click.Context, key: str, value: str) -> None:
     cfg.save_config(data)
     profile_name = profile or cfg.get_active_profile(data)
     click.echo(f"Set '{key}' in profile '{profile_name}'")
+
+
+@config.command("unset")
+@click.argument("key")
+@click.pass_context
+def config_unset(ctx: click.Context, key: str) -> None:
+    """Remove a configuration key from the active profile.
+
+    \b
+    Examples:
+      evalhub config unset mcp_port
+      evalhub --profile prod config unset insecure
+    """
+    profile = ctx.obj.get("profile")
+    data = cfg.load_config()
+    removed = cfg.unset_value(data, key, profile=profile)
+    profile_name = profile or cfg.get_active_profile(data)
+    if removed:
+        cfg.save_config(data)
+        click.echo(f"Unset '{key}' from profile '{profile_name}'")
+    else:
+        raise click.ClickException(f"Key '{key}' not found in profile '{profile_name}'")
 
 
 @config.command("get")
@@ -1264,53 +1306,3 @@ def config_use(profile: str) -> None:
     cfg.set_active_profile(data, profile)
     cfg.save_config(data)
     click.echo(f"Active profile set to '{profile}'")
-
-
-@main.command()
-@click.option(
-    "--tenant",
-    default=None,
-    envvar="EVALHUB_TENANT",
-    help="Kubernetes namespace / tenant identifier (overrides profile config).",
-)
-@click.pass_context
-def mcp(ctx: click.Context, tenant: str | None) -> None:
-    """Start the EvalHub MCP server (stdio transport)."""
-    try:
-        import mcp as _mcp  # noqa: F401
-    except ModuleNotFoundError:
-        raise click.ClickException(
-            "MCP server requires the 'mcp' extra.\n"
-            "Install it with: pip install 'eval-hub-sdk[mcp]'"
-        ) from None
-
-    data = cfg.load_config()
-    prof = cfg.get_profile(data, ctx.obj.get("profile"))
-
-    resolved_url = ctx.obj.get("base_url") or prof.get(
-        "base_url", "http://localhost:8080"
-    )
-    resolved_token = ctx.obj.get("token") or prof.get("token")
-    resolved_tenant = tenant or prof.get("tenant")
-    resolved_insecure = str(prof.get("insecure", "false")).lower() in (
-        "true",
-        "1",
-        "yes",
-    )
-    resolved_timeout = float(prof.get("timeout", 30.0))
-
-    import asyncio
-
-    from ..client.evalhub import AsyncEvalHubClient
-    from ..mcp.server import mcp as mcp_server
-    from ..mcp.server import set_client
-
-    client = AsyncEvalHubClient(
-        base_url=resolved_url,
-        auth_token=resolved_token,
-        tenant=resolved_tenant,
-        insecure=resolved_insecure,
-        timeout=resolved_timeout,
-    )
-    set_client(client)
-    asyncio.run(mcp_server.run_stdio_async())

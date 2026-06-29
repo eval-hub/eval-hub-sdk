@@ -6,13 +6,18 @@ import json
 import warnings
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
-from enum import Enum
 from pathlib import Path
 from typing import Any, Self
 
 from pydantic import BaseModel, Field, model_validator
 
-from ...models.api import EvaluationResult, JobStatus, ModelConfig, OCICoordinates
+from ...models.api import (
+    EvaluationResult,
+    JobPhase,
+    JobStatus,
+    ModelConfig,
+    OCICoordinates,
+)
 from .cards import EnvironmentCardMetadata, EvalCardMetadata
 
 
@@ -34,17 +39,6 @@ class ErrorInfo(BaseModel):
 
     message: str = Field(..., description="Error message")
     message_code: str = Field(..., description="Error code identifier")
-
-
-class JobPhase(str, Enum):
-    """Job execution phases."""
-
-    INITIALIZING = "initializing"
-    LOADING_DATA = "loading_data"
-    RUNNING_EVALUATION = "running_evaluation"
-    POST_PROCESSING = "post_processing"
-    PERSISTING_ARTIFACTS = "persisting_artifacts"
-    COMPLETED = "completed"
 
 
 class JobSpec(BaseModel):

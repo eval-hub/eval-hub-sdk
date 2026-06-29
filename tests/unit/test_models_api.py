@@ -1100,3 +1100,96 @@ class TestQueueConfig:
         )
         assert req.queue is None
         assert "queue" not in req.model_dump(exclude_none=True)
+
+
+class TestBenchmarkStatusPhase:
+    """Test cases for JobPhase support on BenchmarkStatus."""
+
+    def test_benchmark_status_without_phase(self) -> None:
+        """BenchmarkStatus should default phase to None for backward compat."""
+        from evalhub.models.api import BenchmarkStatus
+
+        status = BenchmarkStatus(
+            id="mmlu",
+            provider_id="lm_eval",
+            status=JobStatus.RUNNING,
+        )
+        assert status.phase is None
+
+    def test_benchmark_status_with_phase(self) -> None:
+        """BenchmarkStatus should accept and expose a JobPhase value."""
+        from evalhub.models.api import BenchmarkStatus, JobPhase
+
+        status = BenchmarkStatus(
+            id="mmlu",
+            provider_id="lm_eval",
+            status=JobStatus.RUNNING,
+            phase=JobPhase.RUNNING_EVALUATION,
+        )
+        assert status.phase == JobPhase.RUNNING_EVALUATION
+
+    def test_benchmark_status_phase_from_json(self) -> None:
+        """BenchmarkStatus should deserialize phase from raw JSON (server response)."""
+        from evalhub.models.api import BenchmarkStatus, JobPhase
+
+        data: dict[str, Any] = {
+            "id": "mmlu",
+            "provider_id": "lm_eval",
+            "status": "running",
+            "phase": "loading_data",
+        }
+        status = BenchmarkStatus(**data)
+        assert status.phase == JobPhase.LOADING_DATA
+
+    def test_benchmark_status_phase_serializes(self) -> None:
+        """BenchmarkStatus should serialize phase in model_dump output."""
+        from evalhub.models.api import BenchmarkStatus, JobPhase
+
+        status = BenchmarkStatus(
+            id="mmlu",
+            provider_id="lm_eval",
+            status=JobStatus.RUNNING,
+            phase=JobPhase.POST_PROCESSING,
+        )
+        data = status.model_dump(mode="json")
+        assert data["phase"] == "post_processing"
+
+    def test_benchmark_status_phase_excluded_when_none(self) -> None:
+        """Phase should be absent from exclude_none dumps when unset."""
+        from evalhub.models.api import BenchmarkStatus
+
+        status = BenchmarkStatus(
+            id="mmlu",
+            provider_id="lm_eval",
+            status=JobStatus.RUNNING,
+        )
+        data = status.model_dump(exclude_none=True)
+        assert "phase" not in data
+
+    def test_job_phase_enum_values(self) -> None:
+        """Verify all expected JobPhase values exist in the common models."""
+        from evalhub.models.api import JobPhase
+
+        expected = {
+            "initializing",
+            "loading_data",
+            "running_evaluation",
+            "post_processing",
+            "persisting_artifacts",
+            "completed",
+        }
+        actual = {p.value for p in JobPhase}
+        assert actual == expected
+
+    def test_job_phase_importable_from_models_package(self) -> None:
+        """JobPhase should be importable from evalhub.models."""
+        from evalhub.models import JobPhase
+
+        assert JobPhase.RUNNING_EVALUATION.value == "running_evaluation"
+
+    def test_adapter_job_phase_is_same_as_common(self) -> None:
+        """Adapter JobPhase should be the same class as the common models JobPhase."""
+        from evalhub.adapter.models import JobPhase as AdapterJobPhase
+        from evalhub.models import JobPhase as CommonJobPhase
+
+        assert AdapterJobPhase is CommonJobPhase
