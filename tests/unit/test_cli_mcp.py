@@ -63,7 +63,7 @@ def test_mcp_subcommands_appear_in_help(runner: CliRunner) -> None:
 
 
 @patch("evalhub.cli.mcp_cmd.subprocess.run")
-@patch("evalhub.cli.mcp_cmd._find_mcp_binary", return_value="/usr/bin/evalhub-mcp")
+@patch("evalhub.cli.mcp_cmd.find_binary", return_value="/usr/bin/evalhub-mcp")
 def test_mcp_run_stdio(
     mock_find: MagicMock,
     mock_run: MagicMock,
@@ -85,7 +85,7 @@ def test_mcp_run_stdio(
     assert str(gen_cfg) in cmd
 
 
-@patch("evalhub.cli.mcp_cmd._find_mcp_binary")
+@patch("evalhub.cli.mcp_cmd.find_binary")
 def test_mcp_run_binary_not_found(
     mock_find: MagicMock,
     runner: CliRunner,
@@ -104,8 +104,8 @@ def test_mcp_run_binary_not_found(
 
 
 @patch("evalhub.cli.mcp_cmd.time.sleep")
-@patch("evalhub.cli.mcp_cmd.subprocess.Popen")
-@patch("evalhub.cli.mcp_cmd._find_mcp_binary", return_value="/usr/bin/evalhub-mcp")
+@patch("evalhub.cli._process.subprocess.Popen")
+@patch("evalhub.cli.mcp_cmd.find_binary", return_value="/usr/bin/evalhub-mcp")
 def test_mcp_start_launches_background(
     mock_find: MagicMock,
     mock_popen: MagicMock,
@@ -143,8 +143,8 @@ def test_mcp_start_launches_background(
 
 
 @patch("evalhub.cli.mcp_cmd.time.sleep")
-@patch("evalhub.cli.mcp_cmd.subprocess.Popen")
-@patch("evalhub.cli.mcp_cmd._find_mcp_binary", return_value="/usr/bin/evalhub-mcp")
+@patch("evalhub.cli._process.subprocess.Popen")
+@patch("evalhub.cli.mcp_cmd.find_binary", return_value="/usr/bin/evalhub-mcp")
 def test_mcp_start_already_running(
     mock_find: MagicMock,
     mock_popen: MagicMock,
@@ -160,7 +160,7 @@ def test_mcp_start_already_running(
         "evalhub.cli.mcp_cmd.PID_FILE", pid_file
     ), patch("evalhub.cli.mcp_cmd.LOG_FILE", tmp_path / "mcp.log"), patch(
         "evalhub.cli.mcp_cmd.CONFIG_FILE", tmp_path / "config.yaml"
-    ), patch("evalhub.cli.mcp_cmd._is_process_alive", return_value=True):
+    ), patch("evalhub.cli._process.is_process_alive", return_value=True):
         result = runner.invoke(main, ["mcp", "start"])
 
     assert result.exit_code != 0
@@ -169,7 +169,7 @@ def test_mcp_start_already_running(
     mock_popen.assert_not_called()
 
 
-@patch("evalhub.cli.mcp_cmd.os.kill")
+@patch("evalhub.cli._process.os.kill")
 def test_mcp_stop(
     mock_kill: MagicMock,
     runner: CliRunner,
@@ -182,8 +182,8 @@ def test_mcp_stop(
     alive_calls = iter([True, False])
 
     with patch("evalhub.cli.mcp_cmd.PID_FILE", pid_file), patch(
-        "evalhub.cli.mcp_cmd._is_process_alive", side_effect=alive_calls
-    ), patch("evalhub.cli.mcp_cmd.time.sleep"):
+        "evalhub.cli._process.is_process_alive", side_effect=alive_calls
+    ), patch("evalhub.cli._process.time.sleep"):
         result = runner.invoke(main, ["mcp", "stop"])
 
     assert result.exit_code == 0, result.output
@@ -218,7 +218,7 @@ def test_mcp_status_running_with_server_info(
     with patch("evalhub.cli.mcp_cmd.PID_FILE", pid_file), patch(
         "evalhub.cli.mcp_cmd.CONFIG_FILE", cfg_file
     ), patch("evalhub.cli.mcp_cmd.LOG_FILE", tmp_path / "mcp.log"), patch(
-        "evalhub.cli.mcp_cmd._is_process_alive", return_value=True
+        "evalhub.cli._process.is_process_alive", return_value=True
     ), patch("evalhub.cli.mcp_cmd._fetch_server_info", return_value=server_info):
         result = runner.invoke(main, ["mcp", "status"])
 
@@ -243,7 +243,7 @@ def test_mcp_status_running_server_info_unavailable(
     with patch("evalhub.cli.mcp_cmd.PID_FILE", pid_file), patch(
         "evalhub.cli.mcp_cmd.CONFIG_FILE", cfg_file
     ), patch("evalhub.cli.mcp_cmd.LOG_FILE", tmp_path / "mcp.log"), patch(
-        "evalhub.cli.mcp_cmd._is_process_alive", return_value=True
+        "evalhub.cli._process.is_process_alive", return_value=True
     ), patch("evalhub.cli.mcp_cmd._fetch_server_info", return_value=None):
         result = runner.invoke(main, ["mcp", "status"])
 
@@ -260,7 +260,7 @@ def test_mcp_status_running_server_info_unavailable(
 
 
 @patch("evalhub.cli.mcp_cmd.subprocess.run")
-@patch("evalhub.cli.mcp_cmd._find_mcp_binary", return_value="/usr/bin/evalhub-mcp")
+@patch("evalhub.cli.mcp_cmd.find_binary", return_value="/usr/bin/evalhub-mcp")
 def test_mcp_run_generates_config_from_profile(
     mock_find: MagicMock,
     mock_run: MagicMock,
@@ -295,8 +295,8 @@ def test_mcp_run_generates_config_from_profile(
 
 
 @patch("evalhub.cli.mcp_cmd.time.sleep")
-@patch("evalhub.cli.mcp_cmd.subprocess.Popen")
-@patch("evalhub.cli.mcp_cmd._find_mcp_binary", return_value="/usr/bin/evalhub-mcp")
+@patch("evalhub.cli._process.subprocess.Popen")
+@patch("evalhub.cli.mcp_cmd.find_binary", return_value="/usr/bin/evalhub-mcp")
 def test_mcp_start_generates_config_from_profile(
     mock_find: MagicMock,
     mock_popen: MagicMock,
@@ -337,8 +337,8 @@ def test_mcp_start_generates_config_from_profile(
 
 
 @patch("evalhub.cli.mcp_cmd.time.sleep")
-@patch("evalhub.cli.mcp_cmd.subprocess.Popen")
-@patch("evalhub.cli.mcp_cmd._find_mcp_binary", return_value="/usr/bin/evalhub-mcp")
+@patch("evalhub.cli._process.subprocess.Popen")
+@patch("evalhub.cli.mcp_cmd.find_binary", return_value="/usr/bin/evalhub-mcp")
 def test_mcp_start_rejects_stdio_transport(
     mock_find: MagicMock,
     mock_popen: MagicMock,
@@ -369,7 +369,7 @@ def test_mcp_start_rejects_stdio_transport(
 
 
 @patch("evalhub.cli.mcp_cmd.subprocess.run")
-@patch("evalhub.cli.mcp_cmd._find_mcp_binary", return_value="/usr/bin/evalhub-mcp")
+@patch("evalhub.cli.mcp_cmd.find_binary", return_value="/usr/bin/evalhub-mcp")
 def test_mcp_run_respects_profile_flag(
     mock_find: MagicMock,
     mock_run: MagicMock,

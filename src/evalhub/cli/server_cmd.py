@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import os
-import shutil
-import signal
 import ssl
 import subprocess
 import sys
@@ -16,6 +13,7 @@ import click
 import yaml
 
 from . import config as cfg
+from ._process import find_binary, graceful_stop, live_pid, spawn_background
 
 SERVER_STATE_DIR = cfg.DEFAULT_CONFIG_DIR / "server"
 PID_FILE = SERVER_STATE_DIR / "pid"
@@ -26,84 +24,25 @@ _STARTUP_POLL = 0.5
 _STOP_TIMEOUT = 5.0
 _DEFAULT_PORT = 8080
 
-_GRACEFUL_SIGNAL: signal.Signals = (
-    signal.CTRL_BREAK_EVENT if sys.platform == "win32" else signal.SIGTERM  # type: ignore[attr-defined]
-)
-_FORCE_SIGNAL: signal.Signals = (
-    signal.SIGTERM if sys.platform == "win32" else signal.SIGKILL
-)
 
-
-def _find_server_binary() -> str:
-    env = os.environ.get("EVALHUB_SERVER_BIN")
-    if env:
-        return env
-    found = shutil.which("eval-hub-server")
-    if found:
-        return found
-    raise click.ClickException(
-        "Could not find the 'eval-hub-server' binary.\n"
-        "Install it and ensure it is on your PATH, or set EVALHUB_SERVER_BIN."
-    )
-
-
-def _is_process_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except OSError:
-        return False
-    return True
-
-
-def _read_pid() -> int | None:
-    if not PID_FILE.exists():
-        return None
-    try:
-        pid = int(PID_FILE.read_text().strip())
-    except (ValueError, OSError):
-        return None
-    return pid
-
-
-def _live_pid() -> int | None:
-    pid = _read_pid()
-    if pid is not None and not _is_process_alive(pid):
-        PID_FILE.unlink(missing_ok=True)
-        return None
-    return pid
-
-
-def _read_server_port(config_dir: Path) -> int:
+def _read_server_config(config_dir: Path) -> tuple[int, bool]:
     config_path = config_dir / "config.yaml"
     if not config_path.exists():
-        return _DEFAULT_PORT
-    try:
-        data = yaml.safe_load(config_path.read_text())
-        return int(data.get("service", {}).get("port", _DEFAULT_PORT))
-    except (yaml.YAMLError, TypeError, ValueError, AttributeError):
-        return _DEFAULT_PORT
-
-
-def _is_tls_enabled(config_dir: Path) -> bool:
-    config_path = config_dir / "config.yaml"
-    if not config_path.exists():
-        return False
+        return _DEFAULT_PORT, False
     try:
         data = yaml.safe_load(config_path.read_text())
         svc = data.get("service", {})
+        port = int(svc.get("port", _DEFAULT_PORT))
         cert = str(svc.get("tls_cert_file", ""))
         key = str(svc.get("tls_key_file", ""))
-        return cert != "" and key != ""
-    except (yaml.YAMLError, TypeError, AttributeError):
-        return False
-
-
-def _server_scheme(tls: bool) -> str:
-    return "https" if tls else "http"
+        tls = cert != "" and key != ""
+        return port, tls
+    except (yaml.YAMLError, TypeError, ValueError, AttributeError):
+        return _DEFAULT_PORT, False
 
 
 def _health_check(port: int, *, tls: bool = False) -> bool:
-    scheme = _server_scheme(tls)
+    scheme = "https" if tls else "http"
     url = f"{scheme}://localhost:{port}/api/v1/health"
     req = urllib.request.Request(url, method="GET")
     try:
@@ -176,7 +115,7 @@ def server_run(ctx: click.Context, config_dir: str | None) -> None:
       evalhub server run --config-dir /path/to/config
       evalhub --profile staging server run
     """
-    binary = _find_server_binary()
+    binary = find_binary("eval-hub-server", "EVALHUB_SERVER_BIN")
     cfg_dir = Path(config_dir) if config_dir else _resolve_config_dir(ctx)
     _require_config(cfg_dir)
 
@@ -207,39 +146,22 @@ def server_start(ctx: click.Context, config_dir: str | None) -> None:
       evalhub server start --config-dir /path/to/config
       evalhub --profile staging server start
     """
-    pid = _live_pid()
+    pid = live_pid(PID_FILE)
     if pid is not None:
         raise click.ClickException(
             f"Server is already running (PID {pid}). "
             "Stop it first with: evalhub server stop"
         )
 
-    binary = _find_server_binary()
+    binary = find_binary("eval-hub-server", "EVALHUB_SERVER_BIN")
     cfg_dir = Path(config_dir) if config_dir else _resolve_config_dir(ctx)
     _require_config(cfg_dir)
 
-    port = _read_server_port(cfg_dir)
-    tls = _is_tls_enabled(cfg_dir)
-    scheme = _server_scheme(tls)
+    port, tls = _read_server_config(cfg_dir)
+    scheme = "https" if tls else "http"
     cmd = [binary, "-local", "-configdir", str(cfg_dir)]
 
-    SERVER_STATE_DIR.mkdir(parents=True, exist_ok=True)
-    log_fh = LOG_FILE.open("w")
-
-    creationflags = 0
-    if sys.platform == "win32":
-        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
-
-    try:
-        proc = subprocess.Popen(
-            cmd,
-            stdin=subprocess.DEVNULL,
-            stdout=log_fh,
-            stderr=subprocess.STDOUT,
-            creationflags=creationflags,
-        )
-    finally:
-        log_fh.close()
+    proc = spawn_background(cmd, SERVER_STATE_DIR, LOG_FILE)
 
     if not _wait_for_healthy(port, _STARTUP_TIMEOUT, tls=tls):
         if proc.poll() is not None:
@@ -268,51 +190,43 @@ def server_stop() -> None:
     Examples:
       evalhub server stop
     """
-    pid = _live_pid()
+    pid = live_pid(PID_FILE)
     if pid is None:
         click.echo("Server is not running.")
         return
 
-    os.kill(pid, _GRACEFUL_SIGNAL)
-
-    deadline = time.monotonic() + _STOP_TIMEOUT
-    while time.monotonic() < deadline:
-        if not _is_process_alive(pid):
-            PID_FILE.unlink(missing_ok=True)
-            click.echo("Server stopped.")
-            return
-        time.sleep(0.2)
-
-    os.kill(pid, _FORCE_SIGNAL)
-    PID_FILE.unlink(missing_ok=True)
-    click.echo("Server force-killed.")
+    graceful_stop(pid, PID_FILE, _STOP_TIMEOUT, "Server")
 
 
 @server.command("status")
 @click.pass_context
 def server_status(ctx: click.Context) -> None:
-    """Check if the background eval-hub-server is running.
+    """Check if eval-hub-server is running.
+
+    Works for both background (server start) and foreground (server run)
+    by probing the health endpoint directly.
 
     \b
     Examples:
       evalhub server status
     """
-    pid = _live_pid()
-    if pid is None:
+    cfg_dir = _resolve_config_dir(ctx)
+    port, tls = _read_server_config(cfg_dir)
+    scheme = "https" if tls else "http"
+
+    pid = live_pid(PID_FILE)
+    healthy = _health_check(port, tls=tls)
+
+    if not healthy and pid is None:
         click.echo("Server is not running.")
         return
 
-    click.echo(f"Server is running (PID {pid}).")
-
-    cfg_dir = _resolve_config_dir(ctx)
-    port = _read_server_port(cfg_dir)
-    tls = _is_tls_enabled(cfg_dir)
-    scheme = _server_scheme(tls)
-
-    if _health_check(port, tls=tls):
-        click.echo("  Health: healthy")
+    if pid is not None:
+        click.echo(f"Server is running (PID {pid}).")
     else:
-        click.echo("  Health: not responding")
+        click.echo("Server is running.")
 
+    click.echo(f"  Health: {'healthy' if healthy else 'not responding'}")
     click.echo(f"  URL:    {scheme}://localhost:{port}")
-    click.echo(f"  Logs:   {LOG_FILE}")
+    if pid is not None:
+        click.echo(f"  Logs:   {LOG_FILE}")

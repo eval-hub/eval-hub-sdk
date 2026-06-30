@@ -117,7 +117,7 @@ def _setup_server_config(
 
 @patch("evalhub.cli.server_cmd.subprocess.run")
 @patch(
-    "evalhub.cli.server_cmd._find_server_binary",
+    "evalhub.cli.server_cmd.find_binary",
     return_value="/usr/bin/eval-hub-server",
 )
 def test_server_run_foreground(
@@ -144,7 +144,7 @@ def test_server_run_foreground(
 
 @patch("evalhub.cli.server_cmd.subprocess.run")
 @patch(
-    "evalhub.cli.server_cmd._find_server_binary",
+    "evalhub.cli.server_cmd.find_binary",
     return_value="/usr/bin/eval-hub-server",
 )
 def test_server_run_config_dir_override(
@@ -168,7 +168,7 @@ def test_server_run_config_dir_override(
 
 
 @patch(
-    "evalhub.cli.server_cmd._find_server_binary",
+    "evalhub.cli.server_cmd.find_binary",
     return_value="/usr/bin/eval-hub-server",
 )
 def test_server_run_no_config_errors(
@@ -195,7 +195,7 @@ def test_server_run_binary_not_found(
     _seed_profile(config_file)
 
     with patch(
-        "evalhub.cli.server_cmd._find_server_binary",
+        "evalhub.cli.server_cmd.find_binary",
         side_effect=ClickException(
             "Could not find the 'eval-hub-server' binary.\n"
             "Install it and ensure it is on your PATH, or set EVALHUB_SERVER_BIN."
@@ -213,9 +213,9 @@ def test_server_run_binary_not_found(
 
 
 @patch("evalhub.cli.server_cmd._wait_for_healthy", return_value=True)
-@patch("evalhub.cli.server_cmd.subprocess.Popen")
+@patch("evalhub.cli._process.subprocess.Popen")
 @patch(
-    "evalhub.cli.server_cmd._find_server_binary",
+    "evalhub.cli.server_cmd.find_binary",
     return_value="/usr/bin/eval-hub-server",
 )
 def test_server_start_launches_background(
@@ -252,9 +252,9 @@ def test_server_start_launches_background(
     assert pid_file.read_text().strip() == "12345"
 
 
-@patch("evalhub.cli.server_cmd.subprocess.Popen")
+@patch("evalhub.cli._process.subprocess.Popen")
 @patch(
-    "evalhub.cli.server_cmd._find_server_binary",
+    "evalhub.cli.server_cmd.find_binary",
     return_value="/usr/bin/eval-hub-server",
 )
 def test_server_start_already_running(
@@ -271,7 +271,7 @@ def test_server_start_already_running(
     with patch("evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path), patch(
         "evalhub.cli.server_cmd.PID_FILE", pid_file
     ), patch("evalhub.cli.server_cmd.LOG_FILE", tmp_path / "server.log"), patch(
-        "evalhub.cli.server_cmd._is_process_alive", return_value=True
+        "evalhub.cli._process.is_process_alive", return_value=True
     ):
         result = runner.invoke(main, ["server", "start"])
 
@@ -282,9 +282,9 @@ def test_server_start_already_running(
 
 
 @patch("evalhub.cli.server_cmd._wait_for_healthy", return_value=False)
-@patch("evalhub.cli.server_cmd.subprocess.Popen")
+@patch("evalhub.cli._process.subprocess.Popen")
 @patch(
-    "evalhub.cli.server_cmd._find_server_binary",
+    "evalhub.cli.server_cmd.find_binary",
     return_value="/usr/bin/eval-hub-server",
 )
 def test_server_start_crash_on_startup(
@@ -314,9 +314,9 @@ def test_server_start_crash_on_startup(
 
 
 @patch("evalhub.cli.server_cmd._wait_for_healthy", return_value=False)
-@patch("evalhub.cli.server_cmd.subprocess.Popen")
+@patch("evalhub.cli._process.subprocess.Popen")
 @patch(
-    "evalhub.cli.server_cmd._find_server_binary",
+    "evalhub.cli.server_cmd.find_binary",
     return_value="/usr/bin/eval-hub-server",
 )
 def test_server_start_health_check_timeout(
@@ -345,9 +345,9 @@ def test_server_start_health_check_timeout(
 
 
 @patch("evalhub.cli.server_cmd._wait_for_healthy", return_value=True)
-@patch("evalhub.cli.server_cmd.subprocess.Popen")
+@patch("evalhub.cli._process.subprocess.Popen")
 @patch(
-    "evalhub.cli.server_cmd._find_server_binary",
+    "evalhub.cli.server_cmd.find_binary",
     return_value="/usr/bin/eval-hub-server",
 )
 def test_server_start_tls_uses_https_scheme(
@@ -379,7 +379,7 @@ def test_server_start_tls_uses_https_scheme(
 
 
 @patch(
-    "evalhub.cli.server_cmd._find_server_binary",
+    "evalhub.cli.server_cmd.find_binary",
     return_value="/usr/bin/eval-hub-server",
 )
 def test_server_start_no_config_errors(
@@ -404,7 +404,7 @@ def test_server_start_no_config_errors(
 # ---------------------------------------------------------------------------
 
 
-@patch("evalhub.cli.server_cmd.os.kill")
+@patch("evalhub.cli._process.os.kill")
 def test_server_stop_success(
     mock_kill: MagicMock,
     runner: CliRunner,
@@ -418,8 +418,8 @@ def test_server_stop_success(
     alive_calls = iter([True, False])
 
     with patch("evalhub.cli.server_cmd.PID_FILE", pid_file), patch(
-        "evalhub.cli.server_cmd._is_process_alive", side_effect=alive_calls
-    ), patch("evalhub.cli.server_cmd.time.sleep"):
+        "evalhub.cli._process.is_process_alive", side_effect=alive_calls
+    ), patch("evalhub.cli._process.time.sleep"):
         result = runner.invoke(main, ["server", "stop"])
 
     assert result.exit_code == 0, result.output
@@ -441,7 +441,7 @@ def test_server_stop_not_running(
     assert "not running" in result.output
 
 
-@patch("evalhub.cli.server_cmd.os.kill")
+@patch("evalhub.cli._process.os.kill")
 def test_server_stop_force_kill(
     mock_kill: MagicMock,
     runner: CliRunner,
@@ -453,8 +453,8 @@ def test_server_stop_force_kill(
     pid_file.write_text("12345")
 
     with patch("evalhub.cli.server_cmd.PID_FILE", pid_file), patch(
-        "evalhub.cli.server_cmd._is_process_alive", return_value=True
-    ), patch("evalhub.cli.server_cmd.time.sleep"), patch(
+        "evalhub.cli._process.is_process_alive", return_value=True
+    ), patch("evalhub.cli._process.time.sleep"), patch(
         "evalhub.cli.server_cmd._STOP_TIMEOUT", 0
     ):
         result = runner.invoke(main, ["server", "stop"])
@@ -475,8 +475,11 @@ def test_server_status_not_running(
     config_file: Path,
 ) -> None:
     _seed_profile(config_file)
+    _setup_server_config(tmp_path, config_file)
 
-    with patch("evalhub.cli.server_cmd.PID_FILE", tmp_path / "pid"):
+    with patch("evalhub.cli.server_cmd.PID_FILE", tmp_path / "pid"), patch(
+        "evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path
+    ), patch("evalhub.cli.server_cmd._health_check", return_value=False):
         result = runner.invoke(main, ["server", "status"])
 
     assert result.exit_code == 0, result.output
@@ -496,7 +499,7 @@ def test_server_status_running_healthy(
     with patch("evalhub.cli.server_cmd.PID_FILE", pid_file), patch(
         "evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path
     ), patch("evalhub.cli.server_cmd.LOG_FILE", tmp_path / "server.log"), patch(
-        "evalhub.cli.server_cmd._is_process_alive", return_value=True
+        "evalhub.cli._process.is_process_alive", return_value=True
     ), patch("evalhub.cli.server_cmd._health_check", return_value=True):
         result = runner.invoke(main, ["server", "status"])
 
@@ -505,6 +508,29 @@ def test_server_status_running_healthy(
     assert "12345" in result.output
     assert "healthy" in result.output
     assert "http://localhost:8080" in result.output
+    assert "Logs:" in result.output
+
+
+def test_server_status_healthy_no_pid(
+    runner: CliRunner,
+    tmp_path: Path,
+    config_file: Path,
+) -> None:
+    """Status detects a foreground server via health endpoint even without a PID file."""
+    _seed_profile(config_file)
+    _setup_server_config(tmp_path, config_file)
+
+    with patch("evalhub.cli.server_cmd.PID_FILE", tmp_path / "pid"), patch(
+        "evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path
+    ), patch("evalhub.cli.server_cmd._health_check", return_value=True):
+        result = runner.invoke(main, ["server", "status"])
+
+    assert result.exit_code == 0, result.output
+    assert "running" in result.output
+    assert "healthy" in result.output
+    assert "http://localhost:8080" in result.output
+    assert "PID" not in result.output
+    assert "Logs:" not in result.output
 
 
 def test_server_status_tls_uses_https_scheme(
@@ -520,7 +546,7 @@ def test_server_status_tls_uses_https_scheme(
     with patch("evalhub.cli.server_cmd.PID_FILE", pid_file), patch(
         "evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path
     ), patch("evalhub.cli.server_cmd.LOG_FILE", tmp_path / "server.log"), patch(
-        "evalhub.cli.server_cmd._is_process_alive", return_value=True
+        "evalhub.cli._process.is_process_alive", return_value=True
     ), patch("evalhub.cli.server_cmd._health_check", return_value=True) as mock_hc:
         result = runner.invoke(main, ["server", "status"])
 
@@ -543,7 +569,7 @@ def test_server_status_running_unhealthy(
     with patch("evalhub.cli.server_cmd.PID_FILE", pid_file), patch(
         "evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path
     ), patch("evalhub.cli.server_cmd.LOG_FILE", tmp_path / "server.log"), patch(
-        "evalhub.cli.server_cmd._is_process_alive", return_value=True
+        "evalhub.cli._process.is_process_alive", return_value=True
     ), patch("evalhub.cli.server_cmd._health_check", return_value=False):
         result = runner.invoke(main, ["server", "status"])
 
