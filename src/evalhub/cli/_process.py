@@ -39,7 +39,7 @@ def read_pid(pid_file: Path) -> int | None:
         pid = int(pid_file.read_text().strip())
     except (ValueError, OSError):
         return None
-    return pid
+    return pid if pid > 0 else None
 
 
 def live_pid(pid_file: Path) -> int | None:
@@ -53,6 +53,10 @@ def live_pid(pid_file: Path) -> int | None:
 def find_binary(name: str, env_var: str) -> str:
     env = os.environ.get(env_var)
     if env:
+        if not Path(env).is_file():
+            raise click.ClickException(
+                f"{env_var} is set to '{env}' but that file does not exist."
+            )
         return env
     found = shutil.which(name)
     if found:

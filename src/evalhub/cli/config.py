@@ -186,6 +186,7 @@ def store_file_key(key: str, src: Path, profile_name: str) -> str:
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / "config.yaml"
     shutil.copy2(str(src), str(dest))
+    dest.chmod(stat.S_IRUSR | stat.S_IWUSR)
     return str(dest)
 
 

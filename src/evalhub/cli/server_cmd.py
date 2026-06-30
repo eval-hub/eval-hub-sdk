@@ -149,6 +149,12 @@ def server_start(ctx: click.Context) -> None:
             if output:
                 msg += f"\nLog output:\n{output}"
             raise click.ClickException(msg)
+        proc.terminate()
+        try:
+            proc.wait(timeout=_STOP_TIMEOUT)
+        except Exception:
+            proc.kill()
+            proc.wait(timeout=2)
         raise click.ClickException(
             f"Server did not become healthy within {_STARTUP_TIMEOUT}s.\n"
             f"Health check: {scheme}://localhost:{port}/api/v1/health\n"

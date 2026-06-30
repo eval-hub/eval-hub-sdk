@@ -13,6 +13,8 @@ import yaml
 from click.testing import CliRunner
 from evalhub.cli.main import main
 
+pytestmark = pytest.mark.unit
+
 
 @pytest.fixture()
 def config_file(tmp_path: Path) -> Iterator[Path]:
@@ -29,6 +31,8 @@ def config_file(tmp_path: Path) -> Iterator[Path]:
         os.environ.pop("EVALHUB_CONFIG", None)
     if saved_token is not None:
         os.environ["EVALHUB_TOKEN"] = saved_token
+    else:
+        os.environ.pop("EVALHUB_TOKEN", None)
 
 
 def _seed_profile(config_file: Path, profile: str = "default", **kwargs: str) -> None:
