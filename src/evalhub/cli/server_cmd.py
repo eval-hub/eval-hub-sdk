@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import ssl
-import subprocess
-import sys
 import time
 import urllib.request
 from pathlib import Path
@@ -13,7 +11,14 @@ import click
 import yaml
 
 from . import config as cfg
-from ._process import find_binary, graceful_stop, live_pid, spawn_background
+from ._process import (
+    find_binary,
+    live_pid,
+    require_not_running,
+    run_foreground,
+    spawn_background,
+    stop_daemon,
+)
 
 SERVER_STATE_DIR = cfg.DEFAULT_CONFIG_DIR / "server"
 PID_FILE = SERVER_STATE_DIR / "pid"
@@ -33,9 +38,9 @@ def _read_server_config(config_dir: Path) -> tuple[int, bool]:
         data = yaml.safe_load(config_path.read_text())
         svc = data.get("service", {})
         port = int(svc.get("port", _DEFAULT_PORT))
-        cert = str(svc.get("tls_cert_file", ""))
-        key = str(svc.get("tls_key_file", ""))
-        tls = cert != "" and key != ""
+        cert = svc.get("tls_cert_file", "")
+        key = svc.get("tls_key_file", "")
+        tls = bool(cert and key)
         return port, tls
     except (yaml.YAMLError, TypeError, ValueError, AttributeError):
         return _DEFAULT_PORT, False
@@ -52,7 +57,7 @@ def _health_check(port: int, *, tls: bool = False) -> bool:
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
         with urllib.request.urlopen(req, timeout=2, context=ctx) as resp:
-            return int(resp.status) == 200
+            return bool(resp.status == 200)
     except Exception:
         return False
 
@@ -99,62 +104,36 @@ def server() -> None:
 
 
 @server.command("run")
-@click.option(
-    "--config-dir",
-    type=click.Path(exists=True, file_okay=False),
-    default=None,
-    help="Override the config directory (default: profile-based).",
-)
 @click.pass_context
-def server_run(ctx: click.Context, config_dir: str | None) -> None:
+def server_run(ctx: click.Context) -> None:
     """Run eval-hub-server in the foreground.
 
     \b
     Examples:
       evalhub server run
-      evalhub server run --config-dir /path/to/config
       evalhub --profile staging server run
     """
     binary = find_binary("eval-hub-server", "EVALHUB_SERVER_BIN")
-    cfg_dir = Path(config_dir) if config_dir else _resolve_config_dir(ctx)
+    cfg_dir = _resolve_config_dir(ctx)
     _require_config(cfg_dir)
 
-    cmd = [binary, "-local", "-configdir", str(cfg_dir)]
-    result = subprocess.run(
-        cmd,
-        stdin=sys.stdin,
-        stdout=sys.stdout,
-        stderr=sys.stderr,
-    )
-    ctx.exit(result.returncode)
+    run_foreground([binary, "-local", "-configdir", str(cfg_dir)], ctx)
 
 
 @server.command("start")
-@click.option(
-    "--config-dir",
-    type=click.Path(exists=True, file_okay=False),
-    default=None,
-    help="Override the config directory (default: profile-based).",
-)
 @click.pass_context
-def server_start(ctx: click.Context, config_dir: str | None) -> None:
+def server_start(ctx: click.Context) -> None:
     """Start eval-hub-server as a background daemon.
 
     \b
     Examples:
       evalhub server start
-      evalhub server start --config-dir /path/to/config
       evalhub --profile staging server start
     """
-    pid = live_pid(PID_FILE)
-    if pid is not None:
-        raise click.ClickException(
-            f"Server is already running (PID {pid}). "
-            "Stop it first with: evalhub server stop"
-        )
+    require_not_running(PID_FILE, "Server", "evalhub server stop")
 
     binary = find_binary("eval-hub-server", "EVALHUB_SERVER_BIN")
-    cfg_dir = Path(config_dir) if config_dir else _resolve_config_dir(ctx)
+    cfg_dir = _resolve_config_dir(ctx)
     _require_config(cfg_dir)
 
     port, tls = _read_server_config(cfg_dir)
@@ -190,12 +169,7 @@ def server_stop() -> None:
     Examples:
       evalhub server stop
     """
-    pid = live_pid(PID_FILE)
-    if pid is None:
-        click.echo("Server is not running.")
-        return
-
-    graceful_stop(pid, PID_FILE, _STOP_TIMEOUT, "Server")
+    stop_daemon(PID_FILE, _STOP_TIMEOUT, "Server")
 
 
 @server.command("status")

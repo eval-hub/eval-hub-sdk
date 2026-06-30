@@ -22,6 +22,7 @@ import stat
 from pathlib import Path
 from typing import Any
 
+import click
 import yaml
 
 DEFAULT_CONFIG_DIR = Path.home() / ".config" / "evalhub"
@@ -162,8 +163,6 @@ def validate_config_file(path: Path) -> None:
 
     Raises ``click.ClickException`` on any validation failure.
     """
-    import click  # deferred to avoid circular import at module level
-
     if not path.is_file():
         raise click.ClickException(f"File not found: {path}")
     try:

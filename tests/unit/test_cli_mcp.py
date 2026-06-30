@@ -62,7 +62,7 @@ def test_mcp_subcommands_appear_in_help(runner: CliRunner) -> None:
 # ---------------------------------------------------------------------------
 
 
-@patch("evalhub.cli.mcp_cmd.subprocess.run")
+@patch("evalhub.cli._process.subprocess.run")
 @patch("evalhub.cli.mcp_cmd.find_binary", return_value="/usr/bin/evalhub-mcp")
 def test_mcp_run_stdio(
     mock_find: MagicMock,
@@ -259,7 +259,7 @@ def test_mcp_status_running_server_info_unavailable(
 # ---------------------------------------------------------------------------
 
 
-@patch("evalhub.cli.mcp_cmd.subprocess.run")
+@patch("evalhub.cli._process.subprocess.run")
 @patch("evalhub.cli.mcp_cmd.find_binary", return_value="/usr/bin/evalhub-mcp")
 def test_mcp_run_generates_config_from_profile(
     mock_find: MagicMock,
@@ -368,7 +368,7 @@ def test_mcp_start_rejects_stdio_transport(
     mock_popen.assert_not_called()
 
 
-@patch("evalhub.cli.mcp_cmd.subprocess.run")
+@patch("evalhub.cli._process.subprocess.run")
 @patch("evalhub.cli.mcp_cmd.find_binary", return_value="/usr/bin/evalhub-mcp")
 def test_mcp_run_respects_profile_flag(
     mock_find: MagicMock,

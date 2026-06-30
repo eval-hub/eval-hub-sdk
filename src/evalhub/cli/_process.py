@@ -12,6 +12,10 @@ from pathlib import Path
 
 import click
 
+# ---------------------------------------------------------------------------
+# Signals
+# ---------------------------------------------------------------------------
+
 GRACEFUL_SIGNAL: signal.Signals = (
     signal.CTRL_BREAK_EVENT if sys.platform == "win32" else signal.SIGTERM  # type: ignore[attr-defined]
 )
@@ -91,3 +95,38 @@ def spawn_background(
         )
     finally:
         log_fh.close()
+
+
+# ---------------------------------------------------------------------------
+# High-level daemon lifecycle helpers
+# ---------------------------------------------------------------------------
+
+
+def run_foreground(cmd: list[str], ctx: click.Context) -> None:
+    """Run *cmd* in the foreground, forwarding stdio and exit code."""
+    result = subprocess.run(
+        cmd,
+        stdin=sys.stdin,
+        stdout=sys.stdout,
+        stderr=sys.stderr,
+    )
+    ctx.exit(result.returncode)
+
+
+def require_not_running(pid_file: Path, label: str, stop_hint: str) -> None:
+    """Raise if a daemon tracked by *pid_file* is already alive."""
+    pid = live_pid(pid_file)
+    if pid is not None:
+        raise click.ClickException(
+            f"{label} is already running (PID {pid}). "
+            f"Stop it first with: {stop_hint}"
+        )
+
+
+def stop_daemon(pid_file: Path, timeout: float, label: str) -> None:
+    """Stop a daemon tracked by *pid_file*, or report that it is not running."""
+    pid = live_pid(pid_file)
+    if pid is None:
+        click.echo(f"{label} is not running.")
+        return
+    graceful_stop(pid, pid_file, timeout, label)

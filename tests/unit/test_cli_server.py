@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -64,7 +65,7 @@ def test_server_subcommands_appear_in_help(runner: CliRunner) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _patch_server_state(tmp_path: Path):
+def _patch_server_state(tmp_path: Path) -> tuple[Any, Any, Any]:
     """Context manager that patches all server state dir paths to tmp_path."""
     return (
         patch("evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path),
@@ -73,7 +74,7 @@ def _patch_server_state(tmp_path: Path):
     )
 
 
-def _apply_patches(*patches):
+def _apply_patches(*patches: Any) -> list[Any]:
     """Enter multiple patches; return list to exit later. Not a context manager."""
     started = []
     for p in patches:
@@ -115,7 +116,7 @@ def _setup_server_config(
 # ---------------------------------------------------------------------------
 
 
-@patch("evalhub.cli.server_cmd.subprocess.run")
+@patch("evalhub.cli._process.subprocess.run")
 @patch(
     "evalhub.cli.server_cmd.find_binary",
     return_value="/usr/bin/eval-hub-server",
@@ -140,31 +141,6 @@ def test_server_run_foreground(
     assert cmd[0] == "/usr/bin/eval-hub-server"
     assert "-local" in cmd
     assert "-configdir" in cmd
-
-
-@patch("evalhub.cli.server_cmd.subprocess.run")
-@patch(
-    "evalhub.cli.server_cmd.find_binary",
-    return_value="/usr/bin/eval-hub-server",
-)
-def test_server_run_config_dir_override(
-    mock_find: MagicMock,
-    mock_run: MagicMock,
-    runner: CliRunner,
-    tmp_path: Path,
-    config_file: Path,
-) -> None:
-    _seed_profile(config_file)
-    custom_dir = tmp_path / "custom"
-    custom_dir.mkdir()
-    (custom_dir / "config.yaml").write_text(yaml.safe_dump({"service": {"port": 9999}}))
-    mock_run.return_value = MagicMock(returncode=0)
-
-    result = runner.invoke(main, ["server", "run", "--config-dir", str(custom_dir)])
-
-    assert result.exit_code == 0, result.output
-    cmd = mock_run.call_args[0][0]
-    assert str(custom_dir) in cmd
 
 
 @patch(
@@ -583,7 +559,7 @@ def test_server_status_running_unhealthy(
 # ---------------------------------------------------------------------------
 
 
-def _patch_store_dir(tmp_path: Path):
+def _patch_store_dir(tmp_path: Path) -> Any:
     """Patch _FILE_KEY_STORE_DIRS so file keys write under tmp_path."""
     return patch(
         "evalhub.cli.config._FILE_KEY_STORE_DIRS",

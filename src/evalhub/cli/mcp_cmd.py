@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
-import sys
 import time
 import urllib.request
 from typing import Any
@@ -14,7 +12,14 @@ import click
 from evalhub import __version__
 
 from . import config as cfg
-from ._process import find_binary, graceful_stop, live_pid, spawn_background
+from ._process import (
+    find_binary,
+    live_pid,
+    require_not_running,
+    run_foreground,
+    spawn_background,
+    stop_daemon,
+)
 
 MCP_STATE_DIR = cfg.DEFAULT_CONFIG_DIR / "mcp"
 PID_FILE = MCP_STATE_DIR / "pid"
@@ -147,15 +152,7 @@ def mcp_run(ctx: click.Context) -> None:
     """
     binary = find_binary("evalhub-mcp", "EVALHUB_MCP_BIN")
     extra, _ = _generate_config(ctx, default_transport="stdio")
-    cmd = [binary, *extra]
-
-    result = subprocess.run(
-        cmd,
-        stdin=sys.stdin,
-        stdout=sys.stdout,
-        stderr=sys.stderr,
-    )
-    ctx.exit(result.returncode)
+    run_foreground([binary, *extra], ctx)
 
 
 @mcp.command("start")
@@ -167,12 +164,7 @@ def mcp_start(ctx: click.Context) -> None:
     otherwise defaults to http. The active CLI profile is used to
     generate ~/.config/evalhub/mcp/config.yaml automatically.
     """
-    pid = live_pid(PID_FILE)
-    if pid is not None:
-        raise click.ClickException(
-            f"MCP server is already running (PID {pid}). "
-            "Stop it first with: evalhub mcp stop"
-        )
+    require_not_running(PID_FILE, "MCP server", "evalhub mcp stop")
 
     binary = find_binary("evalhub-mcp", "EVALHUB_MCP_BIN")
     extra, mcp_config = _generate_config(ctx)
@@ -204,12 +196,7 @@ def mcp_start(ctx: click.Context) -> None:
 @mcp.command("stop")
 def mcp_stop() -> None:
     """Stop the background MCP server."""
-    pid = live_pid(PID_FILE)
-    if pid is None:
-        click.echo("MCP server is not running.")
-        return
-
-    graceful_stop(pid, PID_FILE, _STOP_TIMEOUT, "MCP server")
+    stop_daemon(PID_FILE, _STOP_TIMEOUT, "MCP server")
 
 
 @mcp.command("status")
