@@ -17,6 +17,7 @@ Config is stored at ~/.config/evalhub/config.yaml with structure:
 from __future__ import annotations
 
 import os
+import shutil
 import stat
 from pathlib import Path
 from typing import Any
@@ -34,9 +35,11 @@ OPTIONAL_KEYS = (
     "mcp_transport",
     "mcp_host",
     "mcp_port",
+    "server_config_file",
 )
 KNOWN_KEYS = set(REQUIRED_KEYS) | set(OPTIONAL_KEYS)
 SENSITIVE_KEYS = frozenset({"token"})
+FILE_KEYS = frozenset({"server_config_file"})
 
 DEFAULT_PROFILE = "default"
 
@@ -142,6 +145,62 @@ def missing_required_keys(
 def is_known_key(key: str) -> bool:
     """Check whether a key is a recognised config key."""
     return key in KNOWN_KEYS
+
+
+def is_file_key(key: str) -> bool:
+    """Check whether a key references an external file."""
+    return key in FILE_KEYS
+
+
+_FILE_KEY_STORE_DIRS: dict[str, Path] = {
+    "server_config_file": DEFAULT_CONFIG_DIR / "server",
+}
+
+
+def validate_config_file(path: Path) -> None:
+    """Validate that *path* exists and contains a YAML mapping.
+
+    Raises ``click.ClickException`` on any validation failure.
+    """
+    import click  # deferred to avoid circular import at module level
+
+    if not path.is_file():
+        raise click.ClickException(f"File not found: {path}")
+    try:
+        with path.open() as f:
+            parsed = yaml.safe_load(f)
+    except yaml.YAMLError as exc:
+        raise click.ClickException(f"Invalid YAML: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise click.ClickException(
+            f"Config file must contain a YAML mapping, got {type(parsed).__name__}"
+        )
+
+
+def store_file_key(key: str, src: Path, profile_name: str) -> str:
+    """Copy *src* into the profile-specific storage dir for *key*.
+
+    Returns the absolute path of the stored copy.
+    """
+    base = _FILE_KEY_STORE_DIRS[key]
+    dest_dir = base / profile_name
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / "config.yaml"
+    shutil.copy2(str(src), str(dest))
+    return str(dest)
+
+
+def remove_file_key(key: str, profile_name: str) -> None:
+    """Delete the stored file for *key* and clean up the directory if empty."""
+    base = _FILE_KEY_STORE_DIRS[key]
+    dest_dir = base / profile_name
+    dest = dest_dir / "config.yaml"
+    if dest.exists():
+        dest.unlink()
+    try:
+        dest_dir.rmdir()
+    except OSError:
+        pass
 
 
 def set_active_profile(data: dict[str, Any], profile: str) -> dict[str, Any]:

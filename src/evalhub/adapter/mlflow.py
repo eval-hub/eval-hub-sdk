@@ -354,15 +354,12 @@ class MlflowClient:
                 return None
             raise
         exp = data.get("experiment", {})
-        tags: dict[str, str] = {}
-        for t in exp.get("tags", []):
-            tags[t["key"]] = t["value"]
         return Experiment(
             experiment_id=exp.get("experiment_id", ""),
             name=exp.get("name", ""),
             artifact_location=exp.get("artifact_location", ""),
             lifecycle_stage=exp.get("lifecycle_stage", ""),
-            tags=tags,
+            tags=_kv_list_to_dict(exp.get("tags")),
         )
 
     def get_or_create_experiment(self, name: str) -> str:

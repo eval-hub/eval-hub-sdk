@@ -183,7 +183,7 @@ def _fetch_server_info(
 
 @click.group()
 def mcp() -> None:
-    """Manage the evalhub-mcp Go binary (run, start, stop, status)."""
+    """Manage the local evalhub-mcp Go binary."""
 
 
 @mcp.command("run")

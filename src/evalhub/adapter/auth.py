@@ -42,8 +42,4 @@ def resolve_model_credentials() -> ModelCredentials:
     Reads the api-key ref token from the mounted model auth secret.
     CA cert and SA token injection are handled by the sidecar proxy.
     """
-    creds = ModelCredentials()
-    api_key = read_model_auth_key("api-key")
-    if api_key:
-        creds.api_key = api_key
-    return creds
+    return ModelCredentials(api_key=read_model_auth_key("api-key"))

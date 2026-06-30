@@ -9,6 +9,7 @@ import shutil
 import sys
 import time
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any, cast
 
 import click
@@ -37,6 +38,7 @@ from .client import get_client, handle_api_errors
 from .completion import completion
 from .formatter import format_option, output
 from .mcp_cmd import mcp
+from .server_cmd import server
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
@@ -96,6 +98,7 @@ def main(
 
 main.add_command(completion)
 main.add_command(mcp)
+main.add_command(server)
 
 
 @main.command()
@@ -1145,9 +1148,15 @@ def config(ctx: click.Context) -> None:
     profile, and 'config use' to switch profiles.
 
     \b
+    File-based keys (e.g. server_config_file) store a path to a
+    YAML file. Use 'config get <key> --unfold' to view the file
+    contents.
+
+    \b
     Examples:
       evalhub config set base_url http://localhost:8080
-      evalhub config get base_url
+      evalhub config set server_config_file myserver-config.yaml
+      evalhub config get server_config_file --unfold
       evalhub config list
       evalhub config use prod
     """
@@ -1162,7 +1171,11 @@ def config_set(ctx: click.Context, key: str, value: str) -> None:
 
     \b
     Known keys: base_url, token, tenant, provider, insecure, timeout,
-    mcp_transport, mcp_host, mcp_port.
+    mcp_transport, mcp_host, mcp_port, server_config_file.
+
+    \b
+    File-based keys (server_config_file) accept a path to a YAML file.
+    The file is validated and copied into the CLI config directory.
 
     \b
     mcp_transport values:
@@ -1178,8 +1191,7 @@ def config_set(ctx: click.Context, key: str, value: str) -> None:
       evalhub config set base_url http://localhost:8080
       evalhub config set token my-api-token
       evalhub config set tenant my-tenant
-      evalhub config set insecure true
-      evalhub config set mcp_transport http
+      evalhub config set server_config_file myserver-config.yaml
       evalhub --profile prod config set base_url https://evalhub.example.com
     """
     if not cfg.is_known_key(key):
@@ -1190,9 +1202,13 @@ def config_set(ctx: click.Context, key: str, value: str) -> None:
         )
     profile = ctx.obj.get("profile")
     data = cfg.load_config()
+    profile_name = profile or cfg.get_active_profile(data)
+    if cfg.is_file_key(key):
+        src = Path(value)
+        cfg.validate_config_file(src)
+        value = cfg.store_file_key(key, src, profile_name)
     cfg.set_value(data, key, value, profile=profile)
     cfg.save_config(data)
-    profile_name = profile or cfg.get_active_profile(data)
     click.echo(f"Set '{key}' in profile '{profile_name}'")
 
 
@@ -1203,16 +1219,23 @@ def config_unset(ctx: click.Context, key: str) -> None:
     """Remove a configuration key from the active profile.
 
     \b
+    For file-based keys (e.g. server_config_file), also deletes the
+    stored config file.
+
+    \b
     Examples:
       evalhub config unset mcp_port
+      evalhub config unset server_config_file
       evalhub --profile prod config unset insecure
     """
     profile = ctx.obj.get("profile")
     data = cfg.load_config()
-    removed = cfg.unset_value(data, key, profile=profile)
     profile_name = profile or cfg.get_active_profile(data)
+    removed = cfg.unset_value(data, key, profile=profile)
     if removed:
         cfg.save_config(data)
+        if cfg.is_file_key(key):
+            cfg.remove_file_key(key, profile_name)
         click.echo(f"Unset '{key}' from profile '{profile_name}'")
     else:
         raise click.ClickException(f"Key '{key}' not found in profile '{profile_name}'")
@@ -1223,28 +1246,48 @@ def config_unset(ctx: click.Context, key: str) -> None:
 @click.option(
     "--unmask", is_flag=True, default=False, help="Show the raw value without masking."
 )
+@click.option(
+    "--unfold",
+    is_flag=True,
+    default=False,
+    help="Print the contents of a file-based config key.",
+)
 @click.pass_context
-def config_get(ctx: click.Context, key: str, unmask: bool) -> None:
+def config_get(ctx: click.Context, key: str, unmask: bool, unfold: bool) -> None:
     """Get a configuration value from the active profile.
 
     \b
     Sensitive values (e.g. token) are masked by default.
     Use --unmask to reveal the full value.
+    Use --unfold with file-based keys (e.g. server_config_file) to
+    print the referenced file's contents.
 
     \b
     Examples:
       evalhub config get base_url
-      evalhub config get token
       evalhub config get token --unmask
-      evalhub --profile prod config get base_url
+      evalhub config get server_config_file
+      evalhub config get server_config_file --unfold
     """
+    if unmask and unfold:
+        raise click.ClickException("--unmask and --unfold are mutually exclusive.")
     profile = ctx.obj.get("profile")
     data = cfg.load_config()
     value = cfg.get_value(data, key, profile=profile)
     if value is None:
         profile_name = profile or cfg.get_active_profile(data)
         raise click.ClickException(f"Key '{key}' not found in profile '{profile_name}'")
-    if key in cfg.SENSITIVE_KEYS and not unmask:
+    if unfold:
+        if not cfg.is_file_key(key):
+            raise click.ClickException(
+                f"--unfold is only valid for file-based config keys "
+                f"({', '.join(sorted(cfg.FILE_KEYS))})"
+            )
+        p = Path(str(value))
+        if not p.is_file():
+            raise click.ClickException(f"File not found: {value}")
+        click.echo(p.read_text(), nl=False)
+    elif key in cfg.SENSITIVE_KEYS and not unmask:
         click.echo(cfg.mask_value(str(value)))
     else:
         click.echo(value)
