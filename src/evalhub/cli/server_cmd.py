@@ -42,8 +42,10 @@ def _read_server_config(config_dir: Path) -> tuple[int, bool]:
         key = svc.get("tls_key_file", "")
         tls = bool(cert and key)
         return port, tls
-    except (yaml.YAMLError, TypeError, ValueError, AttributeError):
-        return _DEFAULT_PORT, False
+    except (yaml.YAMLError, TypeError, ValueError, AttributeError) as exc:
+        raise click.ClickException(
+            f"Failed to parse server config {config_path}: {exc}"
+        ) from exc
 
 
 def _health_check(port: int, *, tls: bool = False) -> bool:
