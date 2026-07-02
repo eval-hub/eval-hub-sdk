@@ -34,6 +34,16 @@ _STOP_TIMEOUT = 5.0
 _DEFAULT_PORT = 3001
 
 
+def _resolve_mcp_config(ctx: click.Context) -> tuple[dict[str, Any], Path]:
+    """Return (profile_dict, config_dir) for the active MCP profile."""
+    data = cfg.load_config()
+    profile_name = ctx.obj.get("profile")
+    cfg_dir = cfg.resolve_component_config_dir(
+        data, MCP_STATE_DIR, profile=profile_name
+    )
+    return cfg.get_profile(data, profile_name), cfg_dir
+
+
 def _generate_merged_config(
     profile: dict[str, Any],
     config_dir: Path,
@@ -191,15 +201,9 @@ def mcp_run(ctx: click.Context) -> None:
       evalhub --profile staging mcp run
     """
     binary = find_binary("evalhub-mcp", "EVALHUB_MCP_BIN")
-    data = cfg.load_config()
-    profile_name = ctx.obj.get("profile")
-    cfg_dir = cfg.resolve_component_config_dir(
-        data, MCP_STATE_DIR, profile=profile_name
-    )
+    profile, cfg_dir = _resolve_mcp_config(ctx)
     _, config_path = _generate_merged_config(
-        cfg.get_profile(data, profile_name),
-        cfg_dir,
-        defaults={"transport": "stdio"},
+        profile, cfg_dir, defaults={"transport": "stdio"}
     )
     run_foreground([binary, "--config", str(config_path)], ctx)
 
@@ -222,16 +226,9 @@ def mcp_start(ctx: click.Context) -> None:
     require_not_running(PID_FILE, "MCP server", "evalhub mcp stop")
 
     binary = find_binary("evalhub-mcp", "EVALHUB_MCP_BIN")
-    data = cfg.load_config()
-    profile_name = ctx.obj.get("profile")
-    cfg_dir = cfg.resolve_component_config_dir(
-        data, MCP_STATE_DIR, profile=profile_name
-    )
-
+    profile, cfg_dir = _resolve_mcp_config(ctx)
     merged, config_path = _generate_merged_config(
-        cfg.get_profile(data, profile_name),
-        cfg_dir,
-        defaults={"transport": "http"},
+        profile, cfg_dir, defaults={"transport": "http"}
     )
     transport = merged["transport"]
     host = merged.get("host", "localhost")
@@ -282,12 +279,12 @@ def mcp_status(ctx: click.Context) -> None:
 
     click.echo(f"MCP server is running (PID {pid}).")
 
-    data = cfg.load_config()
-    profile_name = ctx.obj.get("profile")
-    cfg_dir = cfg.resolve_component_config_dir(
-        data, MCP_STATE_DIR, profile=profile_name
-    )
-    merged, _ = _generate_merged_config(cfg.get_profile(data, profile_name), cfg_dir)
+    _, cfg_dir = _resolve_mcp_config(ctx)
+    config_path = cfg_dir / GENERATED_CONFIG
+    try:
+        merged = yaml.safe_load(config_path.read_text()) or {}
+    except (FileNotFoundError, yaml.YAMLError):
+        merged = {}
     host = merged.get("host", "localhost")
     port = merged.get("port", _DEFAULT_PORT)
 

@@ -377,6 +377,9 @@ def test_mcp_status_running_server_info_unavailable(
     cfg_dir = _write_mcp_config(
         tmp_path / "mcp" / "default", host="127.0.0.1", port=4000
     )
+    (cfg_dir / "mcp-config.yaml").write_text(
+        yaml.safe_dump({"host": "127.0.0.1", "port": 4000})
+    )
 
     with patch("evalhub.cli.mcp_cmd.PID_FILE", pid_file), patch(
         "evalhub.cli.config.resolve_component_config_dir", return_value=cfg_dir
