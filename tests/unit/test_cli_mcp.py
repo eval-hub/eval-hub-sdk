@@ -507,6 +507,51 @@ def test_merge_respects_profile_flag(
 
 
 # ---------------------------------------------------------------------------
+# Merge error handling
+# ---------------------------------------------------------------------------
+
+
+@patch("evalhub.cli._process.subprocess.run")
+@patch("evalhub.cli.mcp_cmd.find_binary", return_value="/usr/bin/evalhub-mcp")
+def test_merge_rejects_malformed_mcp_config(
+    mock_find: MagicMock,
+    mock_run: MagicMock,
+    runner: CliRunner,
+    config_file: Path,
+    tmp_path: Path,
+) -> None:
+    """A MCP config.yaml with invalid YAML produces a clear error."""
+    cfg_dir = tmp_path / "mcp" / "default"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    (cfg_dir / "config.yaml").write_text(": invalid: yaml: [")
+
+    with patch("evalhub.cli.config.resolve_component_config_dir", return_value=cfg_dir):
+        result = runner.invoke(main, ["mcp", "run"])
+
+    assert result.exit_code != 0
+    assert "Failed to parse MCP config" in result.output
+
+
+@patch("evalhub.cli._process.subprocess.run")
+@patch("evalhub.cli.mcp_cmd.find_binary", return_value="/usr/bin/evalhub-mcp")
+def test_merge_rejects_invalid_port(
+    mock_find: MagicMock,
+    mock_run: MagicMock,
+    runner: CliRunner,
+    config_file: Path,
+    tmp_path: Path,
+) -> None:
+    """A non-numeric port in MCP config produces a clear error."""
+    cfg_dir = _write_mcp_config(tmp_path / "mcp" / "default", port="not-a-number")
+
+    with patch("evalhub.cli.config.resolve_component_config_dir", return_value=cfg_dir):
+        result = runner.invoke(main, ["mcp", "run"])
+
+    assert result.exit_code != 0
+    assert "Invalid port value" in result.output
+
+
+# ---------------------------------------------------------------------------
 # _fetch_server_info tests
 # ---------------------------------------------------------------------------
 

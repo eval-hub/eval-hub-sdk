@@ -71,7 +71,9 @@ def _generate_merged_config(
         try:
             merged["port"] = int(merged["port"])
         except (TypeError, ValueError):
-            merged["port"] = _DEFAULT_PORT
+            raise click.ClickException(
+                f"Invalid port value: {merged['port']!r} (must be an integer)"
+            )
 
     dest = config_dir / GENERATED_CONFIG
     cfg.save_config(merged, dest)

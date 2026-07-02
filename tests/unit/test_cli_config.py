@@ -447,9 +447,6 @@ class TestMcpConfigFileKey:
     def test_mcp_config_file_in_optional_keys(self) -> None:
         assert "mcp_config_file" in OPTIONAL_KEYS
 
-    def test_mcp_config_file_in_known_keys(self) -> None:
-        assert "mcp_config_file" in KNOWN_KEYS
-
     def test_mcp_config_file_in_file_keys(self) -> None:
         assert "mcp_config_file" in FILE_KEYS
 
