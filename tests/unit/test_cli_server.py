@@ -725,14 +725,46 @@ def test_config_get_unfold_non_file_key_errors(
     assert "file-based" in result.output
 
 
-def test_config_get_unmask_and_unfold_mutually_exclusive(
+def test_config_get_unfold_masks_sensitive_keys(
     runner: CliRunner,
+    tmp_path: Path,
     config_file: Path,
 ) -> None:
-    _seed_profile(config_file, token="secret")
-    result = runner.invoke(main, ["config", "get", "token", "--unmask", "--unfold"])
-    assert result.exit_code != 0
-    assert "mutually exclusive" in result.output
+    _seed_profile(config_file)
+    src = tmp_path / "myconfig.yaml"
+    src.write_text(
+        yaml.safe_dump({"base_url": "http://localhost", "token": "super-secret-tok"})
+    )
+
+    with _patch_store_dir(tmp_path):
+        runner.invoke(main, ["config", "set", "server_config_file", str(src)])
+
+    result = runner.invoke(main, ["config", "get", "server_config_file", "--unfold"])
+    assert result.exit_code == 0, result.output
+    assert "super-secret-tok" not in result.output
+    assert "sup***ok" in result.output
+    assert "http://localhost" in result.output
+
+
+def test_config_get_unfold_with_unmask(
+    runner: CliRunner,
+    tmp_path: Path,
+    config_file: Path,
+) -> None:
+    _seed_profile(config_file)
+    src = tmp_path / "myconfig.yaml"
+    src.write_text(
+        yaml.safe_dump({"base_url": "http://localhost", "token": "super-secret-tok"})
+    )
+
+    with _patch_store_dir(tmp_path):
+        runner.invoke(main, ["config", "set", "server_config_file", str(src)])
+
+    result = runner.invoke(
+        main, ["config", "get", "server_config_file", "--unfold", "--unmask"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "super-secret-tok" in result.output
 
 
 def test_config_unset_server_config_file_deletes_stored_copy(

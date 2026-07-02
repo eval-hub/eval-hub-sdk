@@ -52,6 +52,13 @@ def mask_value(
     return f"{value[:prefix_len]}***{value[-suffix_len:]}"
 
 
+def mask_mapping(mapping: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of *mapping* with sensitive values masked."""
+    return {
+        k: mask_value(str(v)) if k in SENSITIVE_KEYS else v for k, v in mapping.items()
+    }
+
+
 def _config_path() -> Path:
     """Return the config file path, respecting EVALHUB_CONFIG env var."""
     env = os.environ.get("EVALHUB_CONFIG")

@@ -1253,18 +1253,17 @@ def config_get(ctx: click.Context, key: str, unmask: bool, unfold: bool) -> None
     \b
     Sensitive values (e.g. token) are masked by default.
     Use --unmask to reveal the full value.
-    Use --unfold with file-based keys (e.g. server_config_file) to
-    print the referenced file's contents.
+    Use --unfold with file-based keys (e.g. mcp_config_file) to
+    print the referenced file's contents (sensitive values masked
+    by default; combine with --unmask to reveal them).
 
     \b
     Examples:
       evalhub config get base_url
       evalhub config get token --unmask
       evalhub config get mcp_config_file --unfold
-      evalhub config get server_config_file --unfold
+      evalhub config get mcp_config_file --unfold --unmask
     """
-    if unmask and unfold:
-        raise click.ClickException("--unmask and --unfold are mutually exclusive.")
     profile = ctx.obj.get("profile")
     data = cfg.load_config()
     value = cfg.get_value(data, key, profile=profile)
@@ -1280,7 +1279,15 @@ def config_get(ctx: click.Context, key: str, unmask: bool, unfold: bool) -> None
         p = Path(str(value))
         if not p.is_file():
             raise click.ClickException(f"File not found: {value}")
-        click.echo(p.read_text(), nl=False)
+        text = p.read_text()
+        if unmask:
+            click.echo(text, nl=False)
+        else:
+            parsed = cfg.mask_mapping(yaml.safe_load(text))
+            click.echo(
+                yaml.safe_dump(parsed, default_flow_style=False, sort_keys=False),
+                nl=False,
+            )
     elif key in cfg.SENSITIVE_KEYS and not unmask:
         click.echo(cfg.mask_value(str(value)))
     else:
@@ -1308,9 +1315,8 @@ def config_list(ctx: click.Context) -> None:
     if not prof:
         click.echo("  (no configuration values)")
     else:
-        for k, v in prof.items():
-            display = cfg.mask_value(str(v)) if k in cfg.SENSITIVE_KEYS else v
-            click.echo(f"  {k}: {display}")
+        for k, v in cfg.mask_mapping(prof).items():
+            click.echo(f"  {k}: {v}")
     missing = cfg.missing_required_keys(data, profile=profile)
     if missing:
         click.echo(f"\n  Missing required keys: {', '.join(missing)}")

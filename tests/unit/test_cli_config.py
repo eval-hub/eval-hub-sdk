@@ -23,6 +23,7 @@ from evalhub.cli.config import (
     get_value,
     is_known_key,
     load_config,
+    mask_mapping,
     mask_value,
     missing_required_keys,
     parse_bool,
@@ -405,6 +406,21 @@ class TestMaskValue:
 
     def test_sensitive_keys_contains_token(self) -> None:
         assert "token" in SENSITIVE_KEYS
+
+
+class TestMaskMapping:
+    def test_masks_sensitive_keys(self) -> None:
+        mapping = {"base_url": "http://localhost", "token": "super-secret-tok"}
+        result = mask_mapping(mapping)
+        assert result["base_url"] == "http://localhost"
+        assert result["token"] == "sup***ok"
+
+    def test_leaves_non_sensitive_keys_unchanged(self) -> None:
+        mapping = {"host": "localhost", "port": 3001}
+        assert mask_mapping(mapping) == mapping
+
+    def test_empty_mapping(self) -> None:
+        assert mask_mapping({}) == {}
 
 
 class TestConfigMasking:
