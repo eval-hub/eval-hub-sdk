@@ -1148,15 +1148,16 @@ def config(ctx: click.Context) -> None:
     profile, and 'config use' to switch profiles.
 
     \b
-    File-based keys (e.g. server_config_file) store a path to a
-    YAML file. Use 'config get <key> --unfold' to view the file
-    contents.
+    File-based keys (e.g. mcp_config_file, server_config_file) store
+    a path to a YAML file. Use 'config get <key> --unfold' to view
+    the file contents.
 
     \b
     Examples:
       evalhub config set base_url http://localhost:8080
+      evalhub config set mcp_config_file mcp-config.yaml
       evalhub config set server_config_file myserver-config.yaml
-      evalhub config get server_config_file --unfold
+      evalhub config get mcp_config_file --unfold
       evalhub config list
       evalhub config use prod
     """
@@ -1171,26 +1172,19 @@ def config_set(ctx: click.Context, key: str, value: str) -> None:
 
     \b
     Known keys: base_url, token, tenant, provider, insecure, timeout,
-    mcp_transport, mcp_host, mcp_port, server_config_file.
+    mcp_config_file, server_config_file.
 
     \b
-    File-based keys (server_config_file) accept a path to a YAML file.
-    The file is validated and copied into the CLI config directory.
-
-    \b
-    mcp_transport values:
-      stdio    — default for 'evalhub mcp run'
-      http     — Streamable HTTP, default for 'evalhub mcp start'
-      http-sse — legacy HTTP+SSE
-    When mcp_transport is not set, each command uses its own default.
-    mcp_host default: localhost
-    mcp_port default: 3001
+    File-based keys (mcp_config_file, server_config_file) accept a
+    path to a YAML file. The file is validated and copied into the
+    CLI config directory.
 
     \b
     Examples:
       evalhub config set base_url http://localhost:8080
       evalhub config set token my-api-token
       evalhub config set tenant my-tenant
+      evalhub config set mcp_config_file mcp-config.yaml
       evalhub config set server_config_file myserver-config.yaml
       evalhub --profile prod config set base_url https://evalhub.example.com
     """
@@ -1224,7 +1218,7 @@ def config_unset(ctx: click.Context, key: str) -> None:
 
     \b
     Examples:
-      evalhub config unset mcp_port
+      evalhub config unset mcp_config_file
       evalhub config unset server_config_file
       evalhub --profile prod config unset insecure
     """
@@ -1266,7 +1260,7 @@ def config_get(ctx: click.Context, key: str, unmask: bool, unfold: bool) -> None
     Examples:
       evalhub config get base_url
       evalhub config get token --unmask
-      evalhub config get server_config_file
+      evalhub config get mcp_config_file --unfold
       evalhub config get server_config_file --unfold
     """
     if unmask and unfold:

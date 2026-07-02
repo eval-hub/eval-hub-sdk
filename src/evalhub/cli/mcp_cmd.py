@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 import time
 import urllib.request
+from pathlib import Path
 from typing import Any
 
 import click
+import yaml
 
 from evalhub import __version__
 
@@ -24,26 +26,56 @@ from ._process import (
 MCP_STATE_DIR = cfg.DEFAULT_CONFIG_DIR / "mcp"
 PID_FILE = MCP_STATE_DIR / "pid"
 LOG_FILE = MCP_STATE_DIR / "mcp.log"
-CONFIG_FILE = MCP_STATE_DIR / "config.yaml"
+GENERATED_CONFIG = "mcp-config.yaml"
 
 _STARTUP_WAIT = 2.0
 _STOP_TIMEOUT = 5.0
 
+_DEFAULT_PORT = 3001
 
-def _generate_config(
-    ctx: click.Context,
-    *,
-    default_transport: str = "http",
-) -> tuple[list[str], dict[str, object]]:
-    """Build MCP config from the active CLI profile.
 
-    Returns (extra_cli_args, mcp_config_dict).
+def _generate_merged_config(
+    profile: dict[str, Any],
+    config_dir: Path,
+    defaults: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], Path]:
+    """Merge root profile connection keys with MCP config.
+
+    If ``config_dir / "config.yaml"`` does not exist it is treated as
+    empty — the generated config will contain only values sourced from
+    the root CLI profile (if any).  MCP config keys take precedence.
+    *defaults* are applied first and overridden by both profile and
+    MCP config values.  The merged result is written to
+    ``config_dir / GENERATED_CONFIG`` and returned along with the path.
     """
-    data = cfg.load_config()
-    profile = cfg.get_profile(data, ctx.obj.get("profile"))
-    mcp_config = cfg.build_mcp_config(profile, default_transport=default_transport)
-    cfg.save_config(mcp_config, CONFIG_FILE)
-    return ["--config", str(CONFIG_FILE)], mcp_config
+    merged: dict[str, Any] = dict(defaults) if defaults else {}
+    for key in ("base_url", "token", "tenant", "insecure"):
+        val = profile.get(key)
+        if val is not None:
+            merged[key] = val
+
+    mcp_path = config_dir / "config.yaml"
+    if mcp_path.exists():
+        try:
+            mcp_data = yaml.safe_load(mcp_path.read_text()) or {}
+        except (yaml.YAMLError, TypeError) as exc:
+            raise click.ClickException(
+                f"Failed to parse MCP config {mcp_path}: {exc}"
+            ) from exc
+        merged.update(mcp_data)
+
+    if "insecure" in merged:
+        merged["insecure"] = cfg.parse_bool(merged["insecure"])
+
+    if "port" in merged:
+        try:
+            merged["port"] = int(merged["port"])
+        except (TypeError, ValueError):
+            merged["port"] = _DEFAULT_PORT
+
+    dest = config_dir / GENERATED_CONFIG
+    cfg.save_config(merged, dest)
+    return merged, dest
 
 
 _JSONRPC_VERSION = "2.0"
@@ -146,13 +178,26 @@ def mcp() -> None:
 def mcp_run(ctx: click.Context) -> None:
     """Run the evalhub-mcp binary in the foreground.
 
-    Uses the mcp_transport value from the active profile if set,
-    otherwise defaults to stdio. The active CLI profile is used to
-    generate ~/.config/evalhub/mcp/config.yaml automatically.
+    \b
+    Reads MCP-specific settings from the MCP config file and merges
+    connection keys (base_url, token, tenant, insecure) from the
+    active CLI profile. MCP config values take precedence.
+
+    \b
+    Examples:
+      evalhub mcp run
+      evalhub --profile staging mcp run
     """
     binary = find_binary("evalhub-mcp", "EVALHUB_MCP_BIN")
-    extra, _ = _generate_config(ctx, default_transport="stdio")
-    run_foreground([binary, *extra], ctx)
+    data = cfg.load_config()
+    profile_name = ctx.obj.get("profile")
+    cfg_dir = cfg.resolve_component_config_dir(
+        data, "mcp_config_file", MCP_STATE_DIR, profile=profile_name
+    )
+    _, config_path = _generate_merged_config(
+        cfg.get_profile(data, profile_name), cfg_dir
+    )
+    run_foreground([binary, "--config", str(config_path)], ctx)
 
 
 @mcp.command("start")
@@ -160,21 +205,44 @@ def mcp_run(ctx: click.Context) -> None:
 def mcp_start(ctx: click.Context) -> None:
     """Start the Go MCP binary as a background daemon.
 
-    Uses the mcp_transport value from the active profile if set,
-    otherwise defaults to http. The active CLI profile is used to
-    generate ~/.config/evalhub/mcp/config.yaml automatically.
+    \b
+    Reads MCP-specific settings from the MCP config file and merges
+    connection keys (base_url, token, tenant, insecure) from the
+    active CLI profile. MCP config values take precedence.
+
+    \b
+    Examples:
+      evalhub mcp start
+      evalhub --profile staging mcp start
     """
     require_not_running(PID_FILE, "MCP server", "evalhub mcp stop")
 
     binary = find_binary("evalhub-mcp", "EVALHUB_MCP_BIN")
-    extra, mcp_config = _generate_config(ctx)
-    if mcp_config.get("transport") == "stdio":
+    data = cfg.load_config()
+    profile_name = ctx.obj.get("profile")
+    cfg_dir = cfg.resolve_component_config_dir(
+        data, "mcp_config_file", MCP_STATE_DIR, profile=profile_name
+    )
+
+    merged, config_path = _generate_merged_config(
+        cfg.get_profile(data, profile_name),
+        cfg_dir,
+        defaults={"transport": "http"},
+    )
+    transport = merged["transport"]
+    host = merged.get("host", "localhost")
+    port = merged.get("port", _DEFAULT_PORT)
+
+    if transport == "stdio":
         raise click.ClickException(
-            "Cannot start in background with stdio transport.\n"
-            "Use 'evalhub mcp run' for stdio, or set a network transport:\n"
-            "  evalhub config set mcp_transport http"
+            "'evalhub mcp start' can be used only in non-stdio transport mode.\n"
+            "Use 'evalhub mcp run' for stdio, or update your MCP config\n"
+            "to use a different transport:\n"
+            "  evalhub config set mcp_config_file <myconfig.yaml>\n"
+            "where myconfig.yaml contains:\n"
+            "  transport: http"
         )
-    cmd = [binary, *extra]
+    cmd = [binary, "--config", str(config_path)]
 
     proc = spawn_background(cmd, MCP_STATE_DIR, LOG_FILE)
     time.sleep(_STARTUP_WAIT)
@@ -188,8 +256,8 @@ def mcp_start(ctx: click.Context) -> None:
 
     PID_FILE.write_text(str(proc.pid))
     click.echo(f"MCP server started (PID {proc.pid}).")
-    click.echo(f"  Transport: {mcp_config['transport']}")
-    click.echo(f"  URL:       http://{mcp_config['host']}:{mcp_config['port']}")
+    click.echo(f"  Transport: {transport}")
+    click.echo(f"  URL:       http://{host}:{port}")
     click.echo(f"  Logs:      {LOG_FILE}")
 
 
@@ -200,7 +268,8 @@ def mcp_stop() -> None:
 
 
 @mcp.command("status")
-def mcp_status() -> None:
+@click.pass_context
+def mcp_status(ctx: click.Context) -> None:
     """Check if the background MCP server is running."""
     pid = live_pid(PID_FILE)
     if pid is None:
@@ -209,9 +278,15 @@ def mcp_status() -> None:
 
     click.echo(f"MCP server is running (PID {pid}).")
 
-    mcp_cfg = cfg.load_config(CONFIG_FILE)
-    host = str(mcp_cfg.get("host", "localhost"))
-    port = int(mcp_cfg.get("port", 3001))
+    data = cfg.load_config()
+    profile_name = ctx.obj.get("profile")
+    cfg_dir = cfg.resolve_component_config_dir(
+        data, "mcp_config_file", MCP_STATE_DIR, profile=profile_name
+    )
+    merged, _ = _generate_merged_config(cfg.get_profile(data, profile_name), cfg_dir)
+    host = merged.get("host", "localhost")
+    port = merged.get("port", _DEFAULT_PORT)
+
     info = _fetch_server_info(host, port)
     if info:
         name = info.get("name", "unknown")

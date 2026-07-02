@@ -13,11 +13,11 @@ import yaml
 from click.testing import CliRunner
 from evalhub.cli.config import (
     DEFAULT_PROFILE,
+    FILE_KEYS,
     KNOWN_KEYS,
     OPTIONAL_KEYS,
     REQUIRED_KEYS,
     SENSITIVE_KEYS,
-    build_mcp_config,
     get_active_profile,
     get_profile,
     get_value,
@@ -443,62 +443,15 @@ class TestConfigMasking:
         assert "longtoken123" not in result.output
 
 
-class TestMcpConfigKeys:
-    def test_mcp_keys_in_optional_keys(self) -> None:
-        for key in ("mcp_transport", "mcp_host", "mcp_port"):
-            assert key in OPTIONAL_KEYS
+class TestMcpConfigFileKey:
+    def test_mcp_config_file_in_optional_keys(self) -> None:
+        assert "mcp_config_file" in OPTIONAL_KEYS
 
-    def test_mcp_keys_in_known_keys(self) -> None:
-        for key in ("mcp_transport", "mcp_host", "mcp_port"):
-            assert key in KNOWN_KEYS
+    def test_mcp_config_file_in_known_keys(self) -> None:
+        assert "mcp_config_file" in KNOWN_KEYS
 
-
-class TestBuildMcpConfig:
-    def test_defaults_from_empty_profile(self) -> None:
-        result = build_mcp_config({})
-        assert result == {
-            "base_url": "http://localhost:8080",
-            "token": "",
-            "tenant": "",
-            "insecure": False,
-            "transport": "http",
-            "host": "localhost",
-            "port": 3001,
-        }
-
-    def test_maps_profile_values(self) -> None:
-        profile = {
-            "base_url": "https://evalhub.example.com",
-            "token": "my-token",
-            "tenant": "team-a",
-            "insecure": "true",
-        }
-        result = build_mcp_config(profile)
-        assert result["base_url"] == "https://evalhub.example.com"
-        assert result["token"] == "my-token"
-        assert result["tenant"] == "team-a"
-        assert result["insecure"] is True
-        assert result["transport"] == "http"
-        assert result["host"] == "localhost"
-        assert result["port"] == 3001
-
-    def test_mcp_specific_overrides(self) -> None:
-        profile = {
-            "base_url": "http://localhost:8080",
-            "token": "t",
-            "tenant": "x",
-            "mcp_transport": "http-sse",
-            "mcp_host": "0.0.0.0",
-            "mcp_port": "9999",
-        }
-        result = build_mcp_config(profile)
-        assert result["transport"] == "http-sse"
-        assert result["host"] == "0.0.0.0"
-        assert result["port"] == 9999
-
-    def test_invalid_port_falls_back_to_default(self) -> None:
-        result = build_mcp_config({"mcp_port": "not-a-number"})
-        assert result["port"] == 3001
+    def test_mcp_config_file_in_file_keys(self) -> None:
+        assert "mcp_config_file" in FILE_KEYS
 
 
 class TestParseBool:

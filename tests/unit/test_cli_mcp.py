@@ -13,7 +13,7 @@ import pytest
 import yaml
 from click.testing import CliRunner
 from evalhub.cli.main import main
-from evalhub.cli.mcp_cmd import _fetch_server_info
+from evalhub.cli.mcp_cmd import GENERATED_CONFIG, _fetch_server_info
 
 
 @pytest.fixture()
@@ -39,6 +39,19 @@ def _seed_profile(config_file: Path, profile: str = "default", **kwargs: str) ->
     config_file.write_text(yaml.safe_dump(data))
 
 
+def _write_mcp_config(cfg_dir: Path, **overrides: object) -> Path:
+    """Write an MCP config.yaml into *cfg_dir* and return the directory."""
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    data: dict[str, object] = {
+        "transport": "http",
+        "host": "localhost",
+        "port": 3001,
+    }
+    data.update(overrides)
+    (cfg_dir / "config.yaml").write_text(yaml.safe_dump(data))
+    return cfg_dir
+
+
 @pytest.fixture()
 def runner() -> CliRunner:
     return CliRunner()
@@ -58,13 +71,68 @@ def test_mcp_subcommands_appear_in_help(runner: CliRunner) -> None:
 
 
 # ---------------------------------------------------------------------------
+# No MCP config.yaml — generated from root profile only
+# ---------------------------------------------------------------------------
+
+
+@patch("evalhub.cli._process.subprocess.run")
+@patch("evalhub.cli.mcp_cmd.find_binary", return_value="/usr/bin/evalhub-mcp")
+def test_mcp_run_no_mcp_config_uses_root_profile(
+    mock_find: MagicMock,
+    mock_run: MagicMock,
+    runner: CliRunner,
+    config_file: Path,
+    tmp_path: Path,
+) -> None:
+    """When no MCP config.yaml exists, mcp-config.yaml is generated from root profile."""
+    _seed_profile(
+        config_file,
+        base_url="https://prod.example.com",
+        token="prod-token",
+        tenant="team-a",
+    )
+    cfg_dir = tmp_path / "mcp" / "default"
+    mock_run.return_value = MagicMock(returncode=0)
+
+    with patch("evalhub.cli.config.resolve_component_config_dir", return_value=cfg_dir):
+        result = runner.invoke(main, ["mcp", "run"])
+    assert result.exit_code == 0, result.output
+
+    generated = yaml.safe_load((cfg_dir / GENERATED_CONFIG).read_text())
+    assert generated["base_url"] == "https://prod.example.com"
+    assert generated["token"] == "prod-token"
+    assert generated["tenant"] == "team-a"
+
+
+@patch("evalhub.cli._process.subprocess.run")
+@patch("evalhub.cli.mcp_cmd.find_binary", return_value="/usr/bin/evalhub-mcp")
+def test_mcp_run_no_config_at_all_generates_empty(
+    mock_find: MagicMock,
+    mock_run: MagicMock,
+    runner: CliRunner,
+    config_file: Path,
+    tmp_path: Path,
+) -> None:
+    """When neither MCP config nor root profile keys exist, mcp-config.yaml is empty."""
+    cfg_dir = tmp_path / "mcp" / "default"
+    mock_run.return_value = MagicMock(returncode=0)
+
+    with patch("evalhub.cli.config.resolve_component_config_dir", return_value=cfg_dir):
+        result = runner.invoke(main, ["mcp", "run"])
+    assert result.exit_code == 0, result.output
+
+    generated = yaml.safe_load((cfg_dir / GENERATED_CONFIG).read_text()) or {}
+    assert generated == {}
+
+
+# ---------------------------------------------------------------------------
 # Go binary subcommands
 # ---------------------------------------------------------------------------
 
 
 @patch("evalhub.cli._process.subprocess.run")
 @patch("evalhub.cli.mcp_cmd.find_binary", return_value="/usr/bin/evalhub-mcp")
-def test_mcp_run_stdio(
+def test_mcp_run(
     mock_find: MagicMock,
     mock_run: MagicMock,
     runner: CliRunner,
@@ -72,9 +140,9 @@ def test_mcp_run_stdio(
     tmp_path: Path,
 ) -> None:
     mock_run.return_value = MagicMock(returncode=0)
-    gen_cfg = tmp_path / "mcp" / "config.yaml"
+    cfg_dir = _write_mcp_config(tmp_path / "mcp" / "default", transport="stdio")
 
-    with patch("evalhub.cli.mcp_cmd.CONFIG_FILE", gen_cfg):
+    with patch("evalhub.cli.config.resolve_component_config_dir", return_value=cfg_dir):
         result = runner.invoke(main, ["mcp", "run"])
     assert result.exit_code == 0, result.output
 
@@ -82,7 +150,7 @@ def test_mcp_run_stdio(
     cmd = mock_run.call_args[0][0]
     assert cmd[0] == "/usr/bin/evalhub-mcp"
     assert "--config" in cmd
-    assert str(gen_cfg) in cmd
+    assert str(cfg_dir / GENERATED_CONFIG) in cmd
 
 
 @patch("evalhub.cli.mcp_cmd.find_binary")
@@ -119,11 +187,15 @@ def test_mcp_start_launches_background(
     mock_proc.poll.return_value = None
     mock_popen.return_value = mock_proc
 
-    with patch("evalhub.cli.mcp_cmd.MCP_STATE_DIR", tmp_path), patch(
+    cfg_dir = _write_mcp_config(
+        tmp_path / "mcp" / "default", transport="http", host="localhost", port=3001
+    )
+
+    with patch(
+        "evalhub.cli.config.resolve_component_config_dir", return_value=cfg_dir
+    ), patch("evalhub.cli.mcp_cmd.MCP_STATE_DIR", tmp_path), patch(
         "evalhub.cli.mcp_cmd.PID_FILE", tmp_path / "pid"
-    ), patch("evalhub.cli.mcp_cmd.LOG_FILE", tmp_path / "mcp.log"), patch(
-        "evalhub.cli.mcp_cmd.CONFIG_FILE", tmp_path / "config.yaml"
-    ):
+    ), patch("evalhub.cli.mcp_cmd.LOG_FILE", tmp_path / "mcp.log"):
         result = runner.invoke(main, ["mcp", "start"])
 
     assert result.exit_code == 0, result.output
@@ -133,10 +205,7 @@ def test_mcp_start_launches_background(
 
     cmd = mock_popen.call_args[0][0]
     assert "--config" in cmd
-
-    gen_cfg = tmp_path / "config.yaml"
-    loaded = yaml.safe_load(gen_cfg.read_text())
-    assert loaded["transport"] == "http"
+    assert str(cfg_dir / GENERATED_CONFIG) in cmd
 
     pid_content = (tmp_path / "pid").read_text().strip()
     assert pid_content == "12345"
@@ -159,13 +228,78 @@ def test_mcp_start_already_running(
     with patch("evalhub.cli.mcp_cmd.MCP_STATE_DIR", tmp_path), patch(
         "evalhub.cli.mcp_cmd.PID_FILE", pid_file
     ), patch("evalhub.cli.mcp_cmd.LOG_FILE", tmp_path / "mcp.log"), patch(
-        "evalhub.cli.mcp_cmd.CONFIG_FILE", tmp_path / "config.yaml"
-    ), patch("evalhub.cli._process.is_process_alive", return_value=True):
+        "evalhub.cli._process.is_process_alive", return_value=True
+    ):
         result = runner.invoke(main, ["mcp", "start"])
 
     assert result.exit_code != 0
     assert "already running" in result.output
     assert "evalhub mcp stop" in result.output
+    mock_popen.assert_not_called()
+
+
+@patch("evalhub.cli.mcp_cmd.time.sleep")
+@patch("evalhub.cli._process.subprocess.Popen")
+@patch("evalhub.cli.mcp_cmd.find_binary", return_value="/usr/bin/evalhub-mcp")
+def test_mcp_start_defaults_to_http_when_no_transport(
+    mock_find: MagicMock,
+    mock_popen: MagicMock,
+    mock_sleep: MagicMock,
+    runner: CliRunner,
+    config_file: Path,
+    tmp_path: Path,
+) -> None:
+    """When no transport is configured, mcp start defaults to http."""
+    mock_proc = MagicMock()
+    mock_proc.pid = 12345
+    mock_proc.poll.return_value = None
+    mock_popen.return_value = mock_proc
+
+    cfg_dir = _write_mcp_config(
+        tmp_path / "mcp" / "default", host="localhost", port=3001
+    )
+    mcp_cfg = cfg_dir / "config.yaml"
+    data = yaml.safe_load(mcp_cfg.read_text())
+    del data["transport"]
+    mcp_cfg.write_text(yaml.safe_dump(data))
+
+    with patch(
+        "evalhub.cli.config.resolve_component_config_dir", return_value=cfg_dir
+    ), patch("evalhub.cli.mcp_cmd.MCP_STATE_DIR", tmp_path), patch(
+        "evalhub.cli.mcp_cmd.PID_FILE", tmp_path / "pid"
+    ), patch("evalhub.cli.mcp_cmd.LOG_FILE", tmp_path / "mcp.log"):
+        result = runner.invoke(main, ["mcp", "start"])
+
+    assert result.exit_code == 0, result.output
+    assert "Transport: http" in result.output
+
+    generated = yaml.safe_load((cfg_dir / GENERATED_CONFIG).read_text())
+    assert generated["transport"] == "http"
+
+
+@patch("evalhub.cli.mcp_cmd.time.sleep")
+@patch("evalhub.cli._process.subprocess.Popen")
+@patch("evalhub.cli.mcp_cmd.find_binary", return_value="/usr/bin/evalhub-mcp")
+def test_mcp_start_rejects_stdio_transport(
+    mock_find: MagicMock,
+    mock_popen: MagicMock,
+    mock_sleep: MagicMock,
+    runner: CliRunner,
+    config_file: Path,
+    tmp_path: Path,
+) -> None:
+    cfg_dir = _write_mcp_config(tmp_path / "mcp" / "default", transport="stdio")
+
+    with patch(
+        "evalhub.cli.config.resolve_component_config_dir", return_value=cfg_dir
+    ), patch("evalhub.cli.mcp_cmd.MCP_STATE_DIR", tmp_path), patch(
+        "evalhub.cli.mcp_cmd.PID_FILE", tmp_path / "pid"
+    ), patch("evalhub.cli.mcp_cmd.LOG_FILE", tmp_path / "mcp.log"):
+        result = runner.invoke(main, ["mcp", "start"])
+
+    assert result.exit_code != 0
+    assert "stdio" in result.output
+    assert "evalhub mcp run" in result.output
     mock_popen.assert_not_called()
 
 
@@ -210,13 +344,15 @@ def test_mcp_status_running_with_server_info(
 ) -> None:
     pid_file = tmp_path / "pid"
     pid_file.write_text("12345")
-    cfg_file = tmp_path / "config.yaml"
-    cfg_file.write_text(yaml.safe_dump({"host": "localhost", "port": 3001}))
+
+    cfg_dir = _write_mcp_config(
+        tmp_path / "mcp" / "default", host="localhost", port=3001
+    )
 
     server_info = {"name": "evalhub-mcp", "version": "1.2.3"}
 
     with patch("evalhub.cli.mcp_cmd.PID_FILE", pid_file), patch(
-        "evalhub.cli.mcp_cmd.CONFIG_FILE", cfg_file
+        "evalhub.cli.config.resolve_component_config_dir", return_value=cfg_dir
     ), patch("evalhub.cli.mcp_cmd.LOG_FILE", tmp_path / "mcp.log"), patch(
         "evalhub.cli._process.is_process_alive", return_value=True
     ), patch("evalhub.cli.mcp_cmd._fetch_server_info", return_value=server_info):
@@ -237,11 +373,13 @@ def test_mcp_status_running_server_info_unavailable(
 ) -> None:
     pid_file = tmp_path / "pid"
     pid_file.write_text("12345")
-    cfg_file = tmp_path / "config.yaml"
-    cfg_file.write_text(yaml.safe_dump({"host": "127.0.0.1", "port": 4000}))
+
+    cfg_dir = _write_mcp_config(
+        tmp_path / "mcp" / "default", host="127.0.0.1", port=4000
+    )
 
     with patch("evalhub.cli.mcp_cmd.PID_FILE", pid_file), patch(
-        "evalhub.cli.mcp_cmd.CONFIG_FILE", cfg_file
+        "evalhub.cli.config.resolve_component_config_dir", return_value=cfg_dir
     ), patch("evalhub.cli.mcp_cmd.LOG_FILE", tmp_path / "mcp.log"), patch(
         "evalhub.cli._process.is_process_alive", return_value=True
     ), patch("evalhub.cli.mcp_cmd._fetch_server_info", return_value=None):
@@ -255,19 +393,20 @@ def test_mcp_status_running_server_info_unavailable(
 
 
 # ---------------------------------------------------------------------------
-# Config generation tests
+# Merge behavior — root profile fallback + MCP override
 # ---------------------------------------------------------------------------
 
 
 @patch("evalhub.cli._process.subprocess.run")
 @patch("evalhub.cli.mcp_cmd.find_binary", return_value="/usr/bin/evalhub-mcp")
-def test_mcp_run_generates_config_from_profile(
+def test_merge_inherits_connection_keys_from_profile(
     mock_find: MagicMock,
     mock_run: MagicMock,
     runner: CliRunner,
     config_file: Path,
     tmp_path: Path,
 ) -> None:
+    """Connection keys absent from MCP config are sourced from root profile."""
     _seed_profile(
         config_file,
         base_url="https://prod.example.com",
@@ -275,108 +414,69 @@ def test_mcp_run_generates_config_from_profile(
         tenant="team-a",
         insecure="true",
     )
+    cfg_dir = _write_mcp_config(
+        tmp_path / "mcp" / "default", transport="stdio", host="localhost", port=3001
+    )
     mock_run.return_value = MagicMock(returncode=0)
-    gen_cfg = tmp_path / "mcp" / "config.yaml"
 
-    with patch("evalhub.cli.mcp_cmd.CONFIG_FILE", gen_cfg):
+    with patch("evalhub.cli.config.resolve_component_config_dir", return_value=cfg_dir):
         result = runner.invoke(main, ["mcp", "run"])
-
     assert result.exit_code == 0, result.output
-    assert gen_cfg.exists()
 
-    loaded = yaml.safe_load(gen_cfg.read_text())
-    assert loaded["base_url"] == "https://prod.example.com"
-    assert loaded["token"] == "prod-token"
-    assert loaded["tenant"] == "team-a"
-    assert loaded["insecure"] is True
-    assert loaded["transport"] == "stdio"
-    assert loaded["host"] == "localhost"
-    assert loaded["port"] == 3001
-
-
-@patch("evalhub.cli.mcp_cmd.time.sleep")
-@patch("evalhub.cli._process.subprocess.Popen")
-@patch("evalhub.cli.mcp_cmd.find_binary", return_value="/usr/bin/evalhub-mcp")
-def test_mcp_start_generates_config_from_profile(
-    mock_find: MagicMock,
-    mock_popen: MagicMock,
-    mock_sleep: MagicMock,
-    runner: CliRunner,
-    config_file: Path,
-    tmp_path: Path,
-) -> None:
-    _seed_profile(
-        config_file,
-        base_url="https://staging.example.com",
-        token="staging-token",
-        tenant="team-b",
-    )
-    mock_proc = MagicMock()
-    mock_proc.pid = 54321
-    mock_proc.poll.return_value = None
-    mock_popen.return_value = mock_proc
-
-    with patch("evalhub.cli.mcp_cmd.MCP_STATE_DIR", tmp_path), patch(
-        "evalhub.cli.mcp_cmd.PID_FILE", tmp_path / "pid"
-    ), patch("evalhub.cli.mcp_cmd.LOG_FILE", tmp_path / "mcp.log"), patch(
-        "evalhub.cli.mcp_cmd.CONFIG_FILE", tmp_path / "config.yaml"
-    ):
-        result = runner.invoke(main, ["mcp", "start"])
-
-    assert result.exit_code == 0, result.output
-    gen_cfg = tmp_path / "config.yaml"
-    assert gen_cfg.exists()
-
-    loaded = yaml.safe_load(gen_cfg.read_text())
-    assert loaded["base_url"] == "https://staging.example.com"
-    assert loaded["token"] == "staging-token"
-    assert loaded["transport"] == "http"
-
-    cmd = mock_popen.call_args[0][0]
-    assert "--config" in cmd
-
-
-@patch("evalhub.cli.mcp_cmd.time.sleep")
-@patch("evalhub.cli._process.subprocess.Popen")
-@patch("evalhub.cli.mcp_cmd.find_binary", return_value="/usr/bin/evalhub-mcp")
-def test_mcp_start_rejects_stdio_transport(
-    mock_find: MagicMock,
-    mock_popen: MagicMock,
-    mock_sleep: MagicMock,
-    runner: CliRunner,
-    config_file: Path,
-    tmp_path: Path,
-) -> None:
-    _seed_profile(
-        config_file,
-        base_url="http://localhost:8080",
-        token="t",
-        tenant="x",
-        mcp_transport="stdio",
-    )
-
-    with patch("evalhub.cli.mcp_cmd.MCP_STATE_DIR", tmp_path), patch(
-        "evalhub.cli.mcp_cmd.PID_FILE", tmp_path / "pid"
-    ), patch("evalhub.cli.mcp_cmd.LOG_FILE", tmp_path / "mcp.log"), patch(
-        "evalhub.cli.mcp_cmd.CONFIG_FILE", tmp_path / "config.yaml"
-    ):
-        result = runner.invoke(main, ["mcp", "start"])
-
-    assert result.exit_code != 0
-    assert "stdio" in result.output
-    assert "evalhub mcp run" in result.output
-    mock_popen.assert_not_called()
+    generated = yaml.safe_load((cfg_dir / GENERATED_CONFIG).read_text())
+    assert generated["base_url"] == "https://prod.example.com"
+    assert generated["token"] == "prod-token"
+    assert generated["tenant"] == "team-a"
+    assert generated["insecure"] is True
+    assert generated["transport"] == "stdio"
+    assert generated["host"] == "localhost"
+    assert generated["port"] == 3001
 
 
 @patch("evalhub.cli._process.subprocess.run")
 @patch("evalhub.cli.mcp_cmd.find_binary", return_value="/usr/bin/evalhub-mcp")
-def test_mcp_run_respects_profile_flag(
+def test_merge_mcp_config_overrides_profile(
     mock_find: MagicMock,
     mock_run: MagicMock,
     runner: CliRunner,
     config_file: Path,
     tmp_path: Path,
 ) -> None:
+    """MCP config keys take precedence over root profile keys."""
+    _seed_profile(
+        config_file,
+        base_url="https://prod.example.com",
+        token="prod-token",
+        tenant="team-a",
+    )
+    cfg_dir = _write_mcp_config(
+        tmp_path / "mcp" / "default",
+        base_url="http://localhost:8080",
+        token="dev-token",
+        transport="stdio",
+    )
+    mock_run.return_value = MagicMock(returncode=0)
+
+    with patch("evalhub.cli.config.resolve_component_config_dir", return_value=cfg_dir):
+        result = runner.invoke(main, ["mcp", "run"])
+    assert result.exit_code == 0, result.output
+
+    generated = yaml.safe_load((cfg_dir / GENERATED_CONFIG).read_text())
+    assert generated["base_url"] == "http://localhost:8080"
+    assert generated["token"] == "dev-token"
+    assert generated["tenant"] == "team-a"
+
+
+@patch("evalhub.cli._process.subprocess.run")
+@patch("evalhub.cli.mcp_cmd.find_binary", return_value="/usr/bin/evalhub-mcp")
+def test_merge_respects_profile_flag(
+    mock_find: MagicMock,
+    mock_run: MagicMock,
+    runner: CliRunner,
+    config_file: Path,
+    tmp_path: Path,
+) -> None:
+    """--profile flag selects which root profile to merge from."""
     data = {
         "active_profile": "default",
         "profiles": {
@@ -389,21 +489,21 @@ def test_mcp_run_respects_profile_flag(
                 "base_url": "https://prod.example.com",
                 "token": "prod-tok",
                 "tenant": "prod-t",
+                "mcp_config_file": str(tmp_path / "mcp" / "prod" / "config.yaml"),
             },
         },
     }
     config_file.write_text(yaml.safe_dump(data))
+    cfg_dir = _write_mcp_config(tmp_path / "mcp" / "prod", transport="stdio")
     mock_run.return_value = MagicMock(returncode=0)
-    gen_cfg = tmp_path / "mcp" / "config.yaml"
 
-    with patch("evalhub.cli.mcp_cmd.CONFIG_FILE", gen_cfg):
-        result = runner.invoke(main, ["--profile", "prod", "mcp", "run"])
-
+    result = runner.invoke(main, ["--profile", "prod", "mcp", "run"])
     assert result.exit_code == 0, result.output
-    loaded = yaml.safe_load(gen_cfg.read_text())
-    assert loaded["base_url"] == "https://prod.example.com"
-    assert loaded["token"] == "prod-tok"
-    assert loaded["tenant"] == "prod-t"
+
+    generated = yaml.safe_load((cfg_dir / GENERATED_CONFIG).read_text())
+    assert generated["base_url"] == "https://prod.example.com"
+    assert generated["token"] == "prod-tok"
+    assert generated["tenant"] == "prod-t"
 
 
 # ---------------------------------------------------------------------------

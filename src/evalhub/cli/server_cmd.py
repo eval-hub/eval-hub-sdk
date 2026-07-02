@@ -78,18 +78,14 @@ def _wait_for_healthy(port: int, timeout: float, *, tls: bool = False) -> bool:
     return _health_check(port, tls=tls)
 
 
-def _server_config_dir(profile_name: str) -> Path:
-    return SERVER_STATE_DIR / profile_name
-
-
 def _resolve_config_dir(ctx: click.Context) -> Path:
     data = cfg.load_config()
-    profile = ctx.obj.get("profile")
-    value = cfg.get_value(data, "server_config_file", profile=profile)
-    if value:
-        return Path(str(value)).parent
-    profile_name = profile or cfg.get_active_profile(data)
-    return _server_config_dir(profile_name)
+    return cfg.resolve_component_config_dir(
+        data,
+        "server_config_file",
+        SERVER_STATE_DIR,
+        profile=ctx.obj.get("profile"),
+    )
 
 
 def _require_config(config_dir: Path) -> None:
