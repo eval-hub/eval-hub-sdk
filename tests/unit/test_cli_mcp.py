@@ -106,14 +106,14 @@ def test_mcp_run_no_mcp_config_uses_root_profile(
 
 @patch("evalhub.cli._process.subprocess.run")
 @patch("evalhub.cli.mcp_cmd.find_binary", return_value="/usr/bin/evalhub-mcp")
-def test_mcp_run_no_config_at_all_generates_empty(
+def test_mcp_run_no_config_at_all_defaults_to_stdio(
     mock_find: MagicMock,
     mock_run: MagicMock,
     runner: CliRunner,
     config_file: Path,
     tmp_path: Path,
 ) -> None:
-    """When neither MCP config nor root profile keys exist, mcp-config.yaml is empty."""
+    """When neither MCP config nor root profile keys exist, transport defaults to stdio."""
     cfg_dir = tmp_path / "mcp" / "default"
     mock_run.return_value = MagicMock(returncode=0)
 
@@ -122,7 +122,7 @@ def test_mcp_run_no_config_at_all_generates_empty(
     assert result.exit_code == 0, result.output
 
     generated = yaml.safe_load((cfg_dir / GENERATED_CONFIG).read_text()) or {}
-    assert generated == {}
+    assert generated == {"transport": "stdio"}
 
 
 # ---------------------------------------------------------------------------

@@ -197,7 +197,9 @@ def mcp_run(ctx: click.Context) -> None:
         data, "mcp_config_file", MCP_STATE_DIR, profile=profile_name
     )
     _, config_path = _generate_merged_config(
-        cfg.get_profile(data, profile_name), cfg_dir
+        cfg.get_profile(data, profile_name),
+        cfg_dir,
+        defaults={"transport": "stdio"},
     )
     run_foreground([binary, "--config", str(config_path)], ctx)
 
