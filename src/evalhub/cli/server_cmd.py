@@ -82,7 +82,6 @@ def _resolve_config_dir(ctx: click.Context) -> Path:
     data = cfg.load_config()
     return cfg.resolve_component_config_dir(
         data,
-        "server_config_file",
         SERVER_STATE_DIR,
         profile=ctx.obj.get("profile"),
     )

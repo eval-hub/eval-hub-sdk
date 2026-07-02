@@ -194,7 +194,7 @@ def mcp_run(ctx: click.Context) -> None:
     data = cfg.load_config()
     profile_name = ctx.obj.get("profile")
     cfg_dir = cfg.resolve_component_config_dir(
-        data, "mcp_config_file", MCP_STATE_DIR, profile=profile_name
+        data, MCP_STATE_DIR, profile=profile_name
     )
     _, config_path = _generate_merged_config(
         cfg.get_profile(data, profile_name),
@@ -225,7 +225,7 @@ def mcp_start(ctx: click.Context) -> None:
     data = cfg.load_config()
     profile_name = ctx.obj.get("profile")
     cfg_dir = cfg.resolve_component_config_dir(
-        data, "mcp_config_file", MCP_STATE_DIR, profile=profile_name
+        data, MCP_STATE_DIR, profile=profile_name
     )
 
     merged, config_path = _generate_merged_config(
@@ -285,7 +285,7 @@ def mcp_status(ctx: click.Context) -> None:
     data = cfg.load_config()
     profile_name = ctx.obj.get("profile")
     cfg_dir = cfg.resolve_component_config_dir(
-        data, "mcp_config_file", MCP_STATE_DIR, profile=profile_name
+        data, MCP_STATE_DIR, profile=profile_name
     )
     merged, _ = _generate_merged_config(cfg.get_profile(data, profile_name), cfg_dir)
     host = merged.get("host", "localhost")

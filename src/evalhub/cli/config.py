@@ -211,18 +211,10 @@ def remove_file_key(key: str, profile_name: str) -> None:
 
 def resolve_component_config_dir(
     data: dict[str, Any],
-    config_key: str,
     state_dir: Path,
     profile: str | None = None,
 ) -> Path:
-    """Return the config directory for a component (MCP, server, etc.).
-
-    If the profile has *config_key* set, its parent directory is returned.
-    Otherwise falls back to ``state_dir / <profile_name>``.
-    """
-    value = get_value(data, config_key, profile=profile)
-    if value:
-        return Path(str(value)).parent
+    """Return the config directory for a component (MCP, server, etc.)."""
     profile_name = profile or get_active_profile(data)
     return state_dir / profile_name
 

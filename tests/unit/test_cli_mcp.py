@@ -489,7 +489,6 @@ def test_merge_respects_profile_flag(
                 "base_url": "https://prod.example.com",
                 "token": "prod-tok",
                 "tenant": "prod-t",
-                "mcp_config_file": str(tmp_path / "mcp" / "prod" / "config.yaml"),
             },
         },
     }
@@ -497,7 +496,8 @@ def test_merge_respects_profile_flag(
     cfg_dir = _write_mcp_config(tmp_path / "mcp" / "prod", transport="stdio")
     mock_run.return_value = MagicMock(returncode=0)
 
-    result = runner.invoke(main, ["--profile", "prod", "mcp", "run"])
+    with patch("evalhub.cli.config.resolve_component_config_dir", return_value=cfg_dir):
+        result = runner.invoke(main, ["--profile", "prod", "mcp", "run"])
     assert result.exit_code == 0, result.output
 
     generated = yaml.safe_load((cfg_dir / GENERATED_CONFIG).read_text())
