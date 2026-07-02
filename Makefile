@@ -13,7 +13,7 @@ test-e2e:
 
 .PHONY: ruff
 ruff:
-	uv run ruff check --fix src/evalhub
+	uv run ruff check --fix src/evalhub tests
 	uv run ruff format src tests
 
 .PHONY: mypy

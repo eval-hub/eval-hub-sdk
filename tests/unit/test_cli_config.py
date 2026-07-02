@@ -14,7 +14,6 @@ from click.testing import CliRunner
 from evalhub.cli.config import (
     DEFAULT_PROFILE,
     FILE_KEYS,
-    KNOWN_KEYS,
     OPTIONAL_KEYS,
     REQUIRED_KEYS,
     SENSITIVE_KEYS,
