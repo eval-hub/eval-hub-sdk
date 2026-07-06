@@ -28,6 +28,8 @@ logger = logging.getLogger(__name__)
 
 # MLflow REST API base path
 _API = "/api/2.0/mlflow"
+# MLflow 3.x REST API base path (used for trace endpoints that include spans)
+_API_V3 = "/api/3.0/mlflow"
 # MLflow Artifacts server base path (separate from tracking API)
 _ARTIFACTS_API = "/api/2.0/mlflow-artifacts/artifacts"
 
@@ -321,6 +323,11 @@ class MlflowClient:
 
     def _get(self, path: str, params: dict[str, str]) -> dict[str, Any]:
         url = f"{self._tracking_uri}{_API}{path}"
+        resp = self._client.get(url, params=params)
+        return self._handle(resp)
+
+    def _get_v3(self, path: str, params: dict[str, str]) -> dict[str, Any]:
+        url = f"{self._tracking_uri}{_API_V3}{path}"
         resp = self._client.get(url, params=params)
         return self._handle(resp)
 
@@ -780,10 +787,10 @@ class TracesNamespace:
         return traces, next_token
 
     def get(self, request_id: str, experiment_id: str) -> Trace:
-        """Fetch a single trace by request_id via ``GET /api/2.0/mlflow/traces/{id}/info``."""
-        data = self._client._get(
-            f"/traces/{request_id}/info",
-            {"experiment_id": experiment_id},
+        """Fetch a single trace with spans via ``GET /api/3.0/mlflow/traces/get``."""
+        data = self._client._get_v3(
+            "/traces/get",
+            {"trace_id": request_id},
         )
         return _parse_trace(data)
 
@@ -852,22 +859,27 @@ class TracesNamespace:
             if not traces:
                 break
             for trace in traces:
-                tid = re.sub(r"[^a-zA-Z0-9_\-]", "_", trace.info.request_id)
+                # Re-fetch each trace using the 3.0 endpoint to include spans
+                full_trace = self.get(
+                    request_id=trace.info.request_id,
+                    experiment_id=experiment_id,
+                )
+                tid = re.sub(r"[^a-zA-Z0-9_\-]", "_", full_trace.info.request_id)
                 if not tid:
                     tid = uuid.uuid4().hex
                 prefix = "" if tid.startswith("tr-") else "tr-"
                 file_path = out / f"{prefix}{tid}.json"
                 trace_dict = {
                     "info": {
-                        "request_id": trace.info.request_id,
-                        "experiment_id": trace.info.experiment_id,
-                        "timestamp_ms": trace.info.timestamp_ms,
-                        "execution_time_ms": trace.info.execution_time_ms,
-                        "status": trace.info.status,
-                        "tags": trace.info.tags,
-                        "request_metadata": trace.info.request_metadata,
+                        "request_id": full_trace.info.request_id,
+                        "experiment_id": full_trace.info.experiment_id,
+                        "timestamp_ms": full_trace.info.timestamp_ms,
+                        "execution_time_ms": full_trace.info.execution_time_ms,
+                        "status": full_trace.info.status,
+                        "tags": full_trace.info.tags,
+                        "request_metadata": full_trace.info.request_metadata,
                     },
-                    "data": trace.data,
+                    "data": full_trace.data,
                 }
                 file_path.write_text(
                     json.dumps(trace_dict, indent=2, default=str),
