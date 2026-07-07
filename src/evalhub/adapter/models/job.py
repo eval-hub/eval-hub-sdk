@@ -310,6 +310,14 @@ class JobResults(BaseModel):
         description="Environment Card metadata. Serialized into artifacts['evalhub.env_card'].",
     )
 
+    additional_info: dict[str, str | int | float | bool | None] | None = Field(
+        default=None,
+        description="Supplementary scalar key-value pairs merged into the "
+        "server-generated EvalCard. The server populates core EvalCard fields "
+        "from job metadata; these supply additional fields. "
+        "Serialized into status_event['additional_info'].",
+    )
+
 
 class JobCallbacks(ABC):
     """Abstract interface for job callbacks.

@@ -368,3 +368,53 @@ def test_report_results_always_includes_provider_id() -> None:
     event = body["benchmark_status_event"]
     assert "provider_id" in event
     assert event["provider_id"] == ""
+
+
+# ---------------------------------------------------------------------------
+# additional_info payload tests
+# ---------------------------------------------------------------------------
+
+
+def test_report_results_includes_additional_info_when_set() -> None:
+    callbacks, mock_http = _make_callbacks()
+    results = _results()
+    results.additional_info = {
+        "dataset_sha": "abc123",
+        "zero_shot": "0.85",
+    }
+    callbacks.report_results(results)
+
+    body = mock_http.post.call_args.kwargs["json"]
+    event = body["benchmark_status_event"]
+    assert event["additional_info"] == {
+        "dataset_sha": "abc123",
+        "zero_shot": "0.85",
+    }
+
+
+def test_report_results_omits_additional_info_when_not_set() -> None:
+    callbacks, mock_http = _make_callbacks()
+    callbacks.report_results(_results())
+
+    body = mock_http.post.call_args.kwargs["json"]
+    event = body["benchmark_status_event"]
+    assert "additional_info" not in event
+
+
+def test_report_results_additional_info_passes_arbitrary_keys() -> None:
+    callbacks, mock_http = _make_callbacks()
+    results = _results()
+    results.additional_info = {
+        "alt_prompting": "0.91",
+        "alt_prompting_description": "5-Shot CoT",
+        "custom_key": 42,
+    }
+    callbacks.report_results(results)
+
+    body = mock_http.post.call_args.kwargs["json"]
+    event = body["benchmark_status_event"]
+    assert event["additional_info"] == {
+        "alt_prompting": "0.91",
+        "alt_prompting_description": "5-Shot CoT",
+        "custom_key": 42,
+    }

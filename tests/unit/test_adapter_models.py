@@ -1013,3 +1013,50 @@ class TestJobResultsWithCards:
 
         assert results.eval_card is None
         assert results.env_card is None
+        assert results.additional_info is None
+
+    def test_additional_info_accepts_scalar_values(self) -> None:
+        info: dict[str, str | int | float | bool | None] = {
+            "dataset_sha": "sha256:abc",
+            "zero_shot": "0.85",
+            "custom_metric": 42,
+            "score": 0.95,
+            "passed": True,
+            "notes": None,
+        }
+        results = JobResults(
+            id="j",
+            benchmark_id="b",
+            benchmark_index=0,
+            model_name="m",
+            results=[],
+            num_examples_evaluated=0,
+            duration_seconds=0.0,
+            additional_info=info,
+        )
+        assert results.additional_info == info
+
+    def test_additional_info_rejects_non_scalar_values(self) -> None:
+        with pytest.raises(ValueError, match="additional_info"):
+            JobResults(
+                id="j",
+                benchmark_id="b",
+                benchmark_index=0,
+                model_name="m",
+                results=[],
+                num_examples_evaluated=0,
+                duration_seconds=0.0,
+                additional_info={"nested": {"a": 1}},  # type: ignore[dict-item]
+            )
+
+        with pytest.raises(ValueError, match="additional_info"):
+            JobResults(
+                id="j",
+                benchmark_id="b",
+                benchmark_index=0,
+                model_name="m",
+                results=[],
+                num_examples_evaluated=0,
+                duration_seconds=0.0,
+                additional_info={"tags": ["a", "b"]},  # type: ignore[dict-item]
+            )

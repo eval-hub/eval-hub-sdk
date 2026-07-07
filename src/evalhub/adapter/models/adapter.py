@@ -39,6 +39,8 @@ class FrameworkAdapter(ABC):
 
     Framework adapters should:
     - Implement run_benchmark_job() to execute the benchmark
+    - Optionally override generate_additional_info() to supply supplementary EvalCard fields;
+      call it from run_benchmark_job() and attach to results before returning
     - Use the config parameter for job configuration (passed as adapter.job_spec in production)
     - Access self.settings for runtime configuration (service_url, registry, etc.)
     - Use callbacks.report_status() to report progress
@@ -57,7 +59,11 @@ class FrameworkAdapter(ABC):
                 # Run evaluation
                 results = evaluate(config.model, ...)
 
-                return JobResults(...)
+                job_results = JobResults(...)
+                job_results.additional_info = self.generate_additional_info(
+                    config, job_results
+                )
+                return job_results
 
         # Production usage (auto-detects /meta/job.json in k8s)
         adapter = MyAdapter()
@@ -69,13 +75,9 @@ class FrameworkAdapter(ABC):
         # export EVALHUB_JOB_SPEC_PATH=/path/to/job.json
         adapter = MyAdapter()
 
-        # Run the job
-        callbacks = DefaultCallbacks(
-            job_id=adapter.job_spec.id,
-            sidecar_url=adapter.job_spec.callback_url,
-            ...
-        )
+        callbacks = DefaultCallbacks.from_adapter(adapter)
         results = adapter.run_benchmark_job(adapter.job_spec, callbacks)
+        callbacks.report_results(results)
         ```
     """
 
@@ -228,6 +230,26 @@ class FrameworkAdapter(ABC):
                 f"got: {s.job_spec_path}"
             )
         return job_spec.parent.parent
+
+    def generate_additional_info(
+        self, config: JobSpec, results: JobResults
+    ) -> dict[str, str | int | float | bool | None] | None:
+        """Generate supplementary key-value pairs for EvalCard generation.
+
+        The server populates EvalCard fields from job metadata automatically;
+        override this to supply additional fields (e.g. ``zero_shot``,
+        ``alt_prompting``, ``dataset_sha``) that are merged into the
+        generated EvalCard. The default returns ``None``.
+        Values must be scalar types (str, int, float, bool, or None).
+
+        Args:
+            config: The job specification (dataset info, benchmark params, etc.)
+            results: The completed evaluation results (metrics, scores, etc.)
+
+        Returns:
+            Dict of scalar key-value pairs, or None to skip.
+        """
+        return None
 
     @abstractmethod
     def run_benchmark_job(self, config: JobSpec, callbacks: JobCallbacks) -> JobResults:

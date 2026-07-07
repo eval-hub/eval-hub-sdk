@@ -718,6 +718,9 @@ class DefaultCallbacks(JobCallbacks):
                 if artifacts:
                     status_event["artifacts"] = artifacts
 
+                if results.additional_info is not None:
+                    status_event["additional_info"] = results.additional_info
+
                 data = {"benchmark_status_event": status_event}
                 logger.debug("Events report_results body: %s", data)
 

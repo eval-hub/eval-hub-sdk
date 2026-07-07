@@ -80,7 +80,8 @@ The SDK is organized into distinct, focused packages:
 4. **JobResults** - Evaluation results returned when job completes
 5. **EvalCardMetadata** - Standardized evaluation disclosure (Dhar et al., arXiv:2511.21695): modalities, languages, capability and safety evaluations
 6. **EnvironmentCardMetadata** - Operational context of an evaluation run: hardware, software, Kubernetes, model identity, and run provenance
-7. **Sidecar** - Container that handles service communication (provided by platform)
+7. **additional_info** - Supplementary scalar key-value pairs merged into the server-generated EvalCard (e.g. zero-shot/alt-prompting scores, dataset SHA)
+8. **Sidecar** - Container that handles service communication (provided by platform)
 
 ## Breaking Changes
 
@@ -497,6 +498,7 @@ class JobResults(BaseModel):
     oci_artifact: Optional[OCIArtifactResult] # OCI artifact info if persisted
     eval_card: Optional[EvalCardMetadata]     # EvalCard disclosure metadata
     env_card: Optional[EnvironmentCardMetadata] # Environment Card metadata
+    additional_info: Optional[Dict[str, Any]]  # Key-value pairs for EvalCard generation
 ```
 
 **EvalCard & Environment Card** - Evaluation documentation artifacts:
@@ -536,6 +538,102 @@ eval_card = EvalCardMetadata(
 # Attach to results before reporting
 results = JobResults(..., eval_card=eval_card, env_card=env_card)
 callbacks.report_results(results)
+```
+
+**additional_info** - EvalCard key-value metadata:
+
+`additional_info` is a flat `dict[str, str | int | float | bool | None]` of
+supplementary key-value pairs merged into the server-generated EvalCard. The
+server populates core EvalCard fields from job metadata automatically; use
+`additional_info` to supply additional fields such as `zero_shot`,
+`alt_prompting`, and `alt_prompting_description`.
+Values must be scalar types (`str`, `int`, `float`, `bool`, or `None`).
+It is serialized as a top-level `additional_info` key in the
+`benchmark_status_event` payload.
+
+Override `generate_additional_info()` on your `FrameworkAdapter` subclass to
+centralise the derivation logic, then call it from `run_benchmark_job()`
+before returning results. If a framework has no implementation the base
+class returns `None` and it becomes a no-op.
+
+The adapter is not opinionated about where the key-value pairs come from —
+they can be derived from user input or from the framework's evaluation
+output. It is up to the implementer to decide. For example, when deriving
+from lm-evaluation-harness results it could look like:
+
+```python
+from evalhub.adapter import (
+    FrameworkAdapter,
+    JobSpec,
+    JobCallbacks,
+    JobResults,
+)
+
+
+class LMEvalAdapter(FrameworkAdapter):
+
+    def generate_additional_info(
+        self, config: JobSpec, results: JobResults
+    ) -> dict[str, str | int | float | bool | None] | None:
+        """Derive supplementary EvalCard fields from lm-eval output."""
+        eval_meta = results.evaluation_metadata or {}
+        benchmark_id = config.benchmark_id
+
+        # Resolved n-shot (after task YAML override of the CLI value)
+        n_shot = eval_meta.get("n_shot", {}).get(benchmark_id, 0)
+
+        # CoT detection — layered heuristic (no single reliable signal)
+        task_config = eval_meta.get("task_configs", {}).get(benchmark_id, {})
+        tags = task_config.get("tag", [])
+        if isinstance(tags, str):
+            tags = [tags]
+        doc_to_text = str(task_config.get("doc_to_text", ""))
+
+        is_cot = (
+            "chain_of_thought" in tags
+            or "cot" in benchmark_id.lower().replace("-", "_").split("_")
+            or "think step by step" in doc_to_text.lower()
+        )
+
+        is_zero_shot = n_shot == 0 and not is_cot
+        score = results.overall_score
+
+        # Build prompting strategy description
+        alt_desc = None
+        if not is_zero_shot:
+            parts = []
+            if n_shot > 0:
+                parts.append(f"{n_shot}-Shot")
+            if is_cot:
+                parts.append("CoT")
+            alt_desc = " ".join(parts) if parts else None
+
+        return {
+            "zero_shot": score if is_zero_shot else None,
+            "alt_prompting": score if not is_zero_shot else None,
+            "alt_prompting_description": alt_desc,
+        }
+
+    def run_benchmark_job(
+        self, config: JobSpec, callbacks: JobCallbacks
+    ) -> JobResults:
+        from lm_eval import simple_evaluate
+
+        lmeval_results = simple_evaluate(...)
+
+        # Stash framework metadata needed by generate_additional_info()
+        job_results = JobResults(
+            ...,
+            evaluation_metadata={
+                "framework": "lm-evaluation-harness",
+                "n_shot": lmeval_results.get("n-shot", {}),
+                "task_configs": lmeval_results.get("configs", {}),
+            },
+        )
+        job_results.additional_info = self.generate_additional_info(
+            config, job_results
+        )
+        return job_results
 ```
 
 ## Deployment
