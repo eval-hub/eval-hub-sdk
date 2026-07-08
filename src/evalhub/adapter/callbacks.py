@@ -679,7 +679,12 @@ class DefaultCallbacks(JobCallbacks):
         # Resolve additional_info without mutating the caller's results object.
         additional_info = results.additional_info
         if additional_info is None and self.generate_additional_info_fn:
-            additional_info = self.generate_additional_info_fn(results)
+            try:
+                additional_info = self.generate_additional_info_fn(results)
+            except Exception:
+                logger.debug(
+                    "generate_additional_info_fn failed", exc_info=True
+                )
 
         # Resolve the Environment Card without mutating the caller's results object.
         # If the provider did not supply one, capture a best-effort card locally.
