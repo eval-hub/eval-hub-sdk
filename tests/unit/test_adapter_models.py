@@ -24,6 +24,7 @@ from evalhub.adapter import (
     OCIArtifactSpec,
     SafetyEvalEntry,
 )
+from pydantic import ValidationError
 
 
 @pytest.fixture
@@ -530,6 +531,21 @@ class TestJobResults:
 
         assert results.completed_at is not None
         assert isinstance(results.completed_at, datetime)
+
+    def test_additional_info_rejects_invalid_values_on_assignment(self) -> None:
+        """Test that assigning non-scalar values to additional_info is rejected."""
+        results = JobResults(
+            id="test-job-001",
+            benchmark_id="mmlu",
+            benchmark_index=0,
+            model_name="model",
+            results=[],
+            num_examples_evaluated=100,
+            duration_seconds=60.0,
+        )
+
+        with pytest.raises(ValidationError):
+            results.additional_info = {"nested": {"not": "allowed"}}  # type: ignore[dict-item]
 
 
 class TestJobCallbacks:

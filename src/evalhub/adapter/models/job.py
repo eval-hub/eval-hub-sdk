@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Self
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ...models.api import (
     EvaluationResult,
@@ -263,6 +263,8 @@ class JobResults(BaseModel):
 
     This is returned synchronously when the job completes.
     """
+
+    model_config = ConfigDict(validate_assignment=True)
 
     # Core results
     id: str = Field(..., description="Job identifier")
