@@ -578,14 +578,13 @@ class LMEvalAdapter(FrameworkAdapter):
         self, results: JobResults
     ) -> dict[str, str | int | float | bool | None] | None:
         """Derive supplementary EvalCard fields from lm-eval output."""
-        eval_meta = results.evaluation_metadata or {}
         benchmark_id = results.benchmark_id
 
         # Resolved n-shot (after task YAML override of the CLI value)
-        n_shot = eval_meta.get("n_shot", {}).get(benchmark_id, 0)
+        n_shot = self._n_shot.get(benchmark_id, 0)
 
         # CoT detection — layered heuristic (no single reliable signal)
-        task_config = eval_meta.get("task_configs", {}).get(benchmark_id, {})
+        task_config = self._task_configs.get(benchmark_id, {})
         tags = task_config.get("tag", [])
         if isinstance(tags, str):
             tags = [tags]
@@ -623,15 +622,11 @@ class LMEvalAdapter(FrameworkAdapter):
 
         lmeval_results = simple_evaluate(...)
 
-        # Stash framework metadata needed by generate_additional_info()
-        return JobResults(
-            ...,
-            evaluation_metadata={
-                "framework": "lm-evaluation-harness",
-                "n_shot": lmeval_results.get("n-shot", {}),
-                "task_configs": lmeval_results.get("configs", {}),
-            },
-        )
+        # Store framework output on self for generate_additional_info()
+        self._n_shot = lmeval_results.get("n-shot", {})
+        self._task_configs = lmeval_results.get("configs", {})
+
+        return JobResults(...)
 ```
 
 ## Deployment
