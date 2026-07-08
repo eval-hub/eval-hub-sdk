@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -339,6 +340,10 @@ class DefaultCallbacks(JobCallbacks):
         oci_insecure: bool = False,
         oci_proxy_host: str | None = None,
         mlflow_backend: MlflowBackend = MlflowBackend.ODH,
+        generate_additional_info_fn: (
+            Callable[[JobResults], dict[str, str | int | float | bool | None] | None]
+            | None
+        ) = None,
     ):
         """Initialize default callbacks.
 
@@ -367,6 +372,10 @@ class DefaultCallbacks(JobCallbacks):
                            MlflowBackend.UPSTREAM for the official mlflow library.
                            Can also be set via EVALHUB_MLFLOW_BACKEND env var when
                            constructing via from_adapter().
+            generate_additional_info_fn: Optional callable that derives supplementary
+                           evaluation key-value pairs from JobResults. Called by
+                           report_results() when results.additional_info is not
+                           already set. Automatically wired via from_adapter().
         """
         self.job_id = job_id
         self.benchmark_id = benchmark_id
@@ -408,6 +417,8 @@ class DefaultCallbacks(JobCallbacks):
 
         # MLflow integration (single-method API via callbacks.mlflow.save)
         self.mlflow = _MlflowOps(backend=mlflow_backend, callbacks=self)
+
+        self.generate_additional_info_fn = generate_additional_info_fn
 
         # Try to import httpx for sidecar communication
         self._httpx_available = False
@@ -665,6 +676,11 @@ class DefaultCallbacks(JobCallbacks):
         Args:
             results: Final job results to report
         """
+        # Resolve additional_info without mutating the caller's results object.
+        additional_info = results.additional_info
+        if additional_info is None and self.generate_additional_info_fn:
+            additional_info = self.generate_additional_info_fn(results)
+
         # Resolve the Environment Card without mutating the caller's results object.
         # If the provider did not supply one, capture a best-effort card locally.
         env_card = results.env_card
@@ -718,8 +734,8 @@ class DefaultCallbacks(JobCallbacks):
                 if artifacts:
                     status_event["artifacts"] = artifacts
 
-                if results.additional_info is not None:
-                    status_event["additional_info"] = results.additional_info
+                if additional_info is not None:
+                    status_event["additional_info"] = additional_info
 
                 data = {"benchmark_status_event": status_event}
                 logger.debug("Events report_results body: %s", data)
@@ -777,4 +793,10 @@ class DefaultCallbacks(JobCallbacks):
                 else None
             ),
             mlflow_backend=adapter.settings.mlflow_backend,
+            generate_additional_info_fn=(
+                adapter.generate_additional_info
+                if type(adapter).generate_additional_info
+                is not FrameworkAdapter.generate_additional_info
+                else None
+            ),
         )

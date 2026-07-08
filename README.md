@@ -80,7 +80,7 @@ The SDK is organized into distinct, focused packages:
 4. **JobResults** - Evaluation results returned when job completes
 5. **EvalCardMetadata** - Standardized evaluation disclosure (Dhar et al., arXiv:2511.21695): modalities, languages, capability and safety evaluations
 6. **EnvironmentCardMetadata** - Operational context of an evaluation run: hardware, software, Kubernetes, model identity, and run provenance
-7. **additional_info** - Supplementary scalar key-value pairs merged into the server-generated EvalCard (e.g. zero-shot/alt-prompting scores, dataset SHA)
+7. **additional_info** - Supplementary scalar key-value pairs for evaluation information beyond metrics (e.g. zero-shot/alt-prompting scores, dataset SHA)
 8. **Sidecar** - Container that handles service communication (provided by platform)
 
 ## Breaking Changes
@@ -498,7 +498,7 @@ class JobResults(BaseModel):
     oci_artifact: Optional[OCIArtifactResult] # OCI artifact info if persisted
     eval_card: Optional[EvalCardMetadata]     # EvalCard disclosure metadata
     env_card: Optional[EnvironmentCardMetadata] # Environment Card metadata
-    additional_info: Optional[Dict[str, Any]]  # Key-value pairs for EvalCard generation
+    additional_info: Optional[Dict[str, Union[str, int, float, bool, None]]]  # Supplementary evaluation info beyond metrics
 ```
 
 **EvalCard & Environment Card** - Evaluation documentation artifacts:
@@ -540,21 +540,23 @@ results = JobResults(..., eval_card=eval_card, env_card=env_card)
 callbacks.report_results(results)
 ```
 
-**additional_info** - EvalCard key-value metadata:
+**additional_info** - supplementary evaluation metadata:
 
 `additional_info` is a flat `dict[str, str | int | float | bool | None]` of
-supplementary key-value pairs merged into the server-generated EvalCard. The
-server populates core EvalCard fields from job metadata automatically; use
-`additional_info` to supply additional fields such as `zero_shot`,
-`alt_prompting`, and `alt_prompting_description`.
+supplementary key-value pairs for evaluation information beyond metrics
+(e.g. prompting strategy, dataset provenance). Use `additional_info` to
+supply fields such as `zero_shot`, `alt_prompting`, and
+`alt_prompting_description`.
 Values must be scalar types (`str`, `int`, `float`, `bool`, or `None`).
 It is serialized as a top-level `additional_info` key in the
-`benchmark_status_event` payload.
+`benchmark_status_event` payload and is available to downstream consumers
+such as EvalCard generation.
 
 Override `generate_additional_info()` on your `FrameworkAdapter` subclass to
-centralise the derivation logic, then call it from `run_benchmark_job()`
-before returning results. If a framework has no implementation the base
-class returns `None` and it becomes a no-op.
+centralise the derivation logic. It is called automatically by
+`DefaultCallbacks.report_results()` when `results.additional_info` is not
+already set. If a framework has no implementation the base class returns
+`None` and it becomes a no-op.
 
 The adapter is not opinionated about where the key-value pairs come from —
 they can be derived from user input or from the framework's evaluation
@@ -573,11 +575,11 @@ from evalhub.adapter import (
 class LMEvalAdapter(FrameworkAdapter):
 
     def generate_additional_info(
-        self, config: JobSpec, results: JobResults
+        self, results: JobResults
     ) -> dict[str, str | int | float | bool | None] | None:
         """Derive supplementary EvalCard fields from lm-eval output."""
         eval_meta = results.evaluation_metadata or {}
-        benchmark_id = config.benchmark_id
+        benchmark_id = results.benchmark_id
 
         # Resolved n-shot (after task YAML override of the CLI value)
         n_shot = eval_meta.get("n_shot", {}).get(benchmark_id, 0)
@@ -622,7 +624,7 @@ class LMEvalAdapter(FrameworkAdapter):
         lmeval_results = simple_evaluate(...)
 
         # Stash framework metadata needed by generate_additional_info()
-        job_results = JobResults(
+        return JobResults(
             ...,
             evaluation_metadata={
                 "framework": "lm-evaluation-harness",
@@ -630,10 +632,6 @@ class LMEvalAdapter(FrameworkAdapter):
                 "task_configs": lmeval_results.get("configs", {}),
             },
         )
-        job_results.additional_info = self.generate_additional_info(
-            config, job_results
-        )
-        return job_results
 ```
 
 ## Deployment

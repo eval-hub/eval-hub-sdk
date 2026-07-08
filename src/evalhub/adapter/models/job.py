@@ -314,10 +314,10 @@ class JobResults(BaseModel):
 
     additional_info: dict[str, str | int | float | bool | None] | None = Field(
         default=None,
-        description="Supplementary scalar key-value pairs merged into the "
-        "server-generated EvalCard. The server populates core EvalCard fields "
-        "from job metadata; these supply additional fields. "
-        "Serialized into status_event['additional_info'].",
+        description="Supplementary scalar key-value pairs for evaluation "
+        "information beyond metrics (e.g. prompting strategy, dataset SHA). "
+        "Serialized into status_event['additional_info'] and available to "
+        "downstream consumers such as EvalCard generation.",
     )
 
 

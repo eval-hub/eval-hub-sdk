@@ -39,8 +39,9 @@ class FrameworkAdapter(ABC):
 
     Framework adapters should:
     - Implement run_benchmark_job() to execute the benchmark
-    - Optionally override generate_additional_info() to supply supplementary EvalCard fields;
-      call it from run_benchmark_job() and attach to results before returning
+    - Optionally override generate_additional_info() to supply supplementary
+      evaluation metadata beyond metrics; called automatically by
+      DefaultCallbacks.report_results()
     - Use the config parameter for job configuration (passed as adapter.job_spec in production)
     - Access self.settings for runtime configuration (service_url, registry, etc.)
     - Use callbacks.report_status() to report progress
@@ -59,11 +60,7 @@ class FrameworkAdapter(ABC):
                 # Run evaluation
                 results = evaluate(config.model, ...)
 
-                job_results = JobResults(...)
-                job_results.additional_info = self.generate_additional_info(
-                    config, job_results
-                )
-                return job_results
+                return JobResults(...)
 
         # Production usage (auto-detects /meta/job.json in k8s)
         adapter = MyAdapter()
@@ -232,19 +229,23 @@ class FrameworkAdapter(ABC):
         return job_spec.parent.parent
 
     def generate_additional_info(
-        self, config: JobSpec, results: JobResults
+        self, results: JobResults
     ) -> dict[str, str | int | float | bool | None] | None:
-        """Generate supplementary key-value pairs for EvalCard generation.
+        """Generate supplementary key-value pairs for the evaluation.
 
-        The server populates EvalCard fields from job metadata automatically;
-        override this to supply additional fields (e.g. ``zero_shot``,
-        ``alt_prompting``, ``dataset_sha``) that are merged into the
-        generated EvalCard. The default returns ``None``.
+        Override this to supply additional evaluation information beyond
+        metrics (e.g. ``zero_shot``, ``alt_prompting``, ``dataset_sha``).
+        These are included in the ``benchmark_status_event`` payload and
+        are available to downstream consumers such as EvalCard generation.
+        The default returns ``None``.
         Values must be scalar types (str, int, float, bool, or None).
 
+        Called automatically by ``DefaultCallbacks.report_results()`` when
+        ``results.additional_info`` is not already set.
+
         Args:
-            config: The job specification (dataset info, benchmark params, etc.)
-            results: The completed evaluation results (metrics, scores, etc.)
+            results: The completed evaluation results (metrics, scores, etc.).
+                     Use ``results.benchmark_id`` for benchmark-specific logic.
 
         Returns:
             Dict of scalar key-value pairs, or None to skip.
