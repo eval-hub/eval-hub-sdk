@@ -24,6 +24,7 @@ from evalhub.models import (
     ExperimentConfig,
     JobStatus,
     JobSubmissionRequest,
+    ModelAuth,
     ModelConfig,
     OCIConnectionConfig,
     OCICoordinates,
@@ -163,6 +164,16 @@ def _load_config_file(path: str) -> dict[str, Any]:
     return data
 
 
+def _build_model_config(
+    model_url: str,
+    model_name: str,
+    model_auth_secret: str | None = None,
+) -> ModelConfig:
+    """Build ModelConfig from CLI flags."""
+    auth = ModelAuth(secret_ref=model_auth_secret) if model_auth_secret else None
+    return ModelConfig(url=model_url, name=model_name, auth=auth)
+
+
 def _build_request_from_flags(
     name: str,
     model_url: str,
@@ -177,6 +188,7 @@ def _build_request_from_flags(
     extra_params: dict[str, Any] | None = None,
     queue: QueueConfig | None = None,
     test_data_ref: TestDataRef | None = None,
+    model_auth_secret: str | None = None,
 ) -> JobSubmissionRequest:
     """Build a JobSubmissionRequest from CLI flags."""
     parameters: dict[str, Any] = {}
@@ -198,7 +210,7 @@ def _build_request_from_flags(
     return JobSubmissionRequest(
         name=name,
         description=description,
-        model=ModelConfig(url=model_url, name=model_name),
+        model=_build_model_config(model_url, model_name, model_auth_secret),
         benchmarks=benchmarks,
         experiment=experiment,
         exports=exports,
@@ -221,6 +233,14 @@ def _build_request_from_flags(
 @click.option("--name", default=None, help="Job name (required if not using --config).")
 @click.option("--model-url", default=None, help="Model endpoint URL.")
 @click.option("--model-name", default=None, help="Model name or identifier.")
+@click.option(
+    "--model-auth-secret",
+    default=None,
+    help=(
+        "Kubernetes Secret name containing model endpoint credentials "
+        "(inline flags only)."
+    ),
+)
 @click.option("--provider", default=None, help="Evaluation provider ID.")
 @click.option("--benchmark", "-b", multiple=True, help="Benchmark ID (repeatable).")
 @click.option(
@@ -311,6 +331,7 @@ def eval_run(
     name: str | None,
     model_url: str | None,
     model_name: str | None,
+    model_auth_secret: str | None,
     provider: str | None,
     benchmark: tuple[str, ...],
     metrics: tuple[str, ...],
@@ -344,6 +365,9 @@ def eval_run(
       evalhub eval run --config eval.yaml --wait
       evalhub eval run --name my-eval --model-url http://vllm:8000/v1 \\
           --model-name llama3 --provider lm_evaluation_harness -b mmlu -b hellaswag
+      evalhub eval run --name my-eval --model-url http://vllm:8000/v1 \\
+          --model-name llama3 --model-auth-secret my-model-credentials -b mmlu \\
+          --provider lm_evaluation_harness
       evalhub eval run --name my-eval --model-url http://vllm:8000/v1 \\
           --model-name llama3 --provider lm_evaluation_harness -b mmlu \\
           --experiment my-experiment
@@ -451,6 +475,7 @@ def eval_run(
             extra_params=extra_params,
             queue=queue_config,
             test_data_ref=test_data_ref,
+            model_auth_secret=model_auth_secret,
         )
 
     job = client.jobs.submit(request)
@@ -887,6 +912,11 @@ def collections_delete(ctx: click.Context, collection_id: str) -> None:
 @click.argument("collection_id")
 @click.option("--model-url", required=True, help="Model endpoint URL.")
 @click.option("--model-name", required=True, help="Model name or identifier.")
+@click.option(
+    "--model-auth-secret",
+    default=None,
+    help="Kubernetes Secret name containing model endpoint credentials.",
+)
 @click.option("--name", default=None, help="Job name (defaults to collection name).")
 @click.option(
     "--queue",
@@ -914,6 +944,7 @@ def collections_run(
     collection_id: str,
     model_url: str,
     model_name: str,
+    model_auth_secret: str | None,
     name: str | None,
     queue: str | None,
     wait_for: bool,
@@ -929,6 +960,8 @@ def collections_run(
     \b
     Examples:
       evalhub collections run rag-safety --model-url http://vllm:8000/v1 --model-name llama3
+      evalhub collections run rag-safety --model-url http://vllm:8000/v1 --model-name llama3 \\
+          --model-auth-secret my-model-credentials
       evalhub collections run rag-safety --model-url http://vllm:8000/v1 --model-name llama3 --wait
       evalhub collections run rag-safety --model-url http://vllm:8000/v1 --model-name llama3 \\
           --queue my-local-queue
@@ -953,7 +986,7 @@ def collections_run(
     queue_config: QueueConfig | None = QueueConfig(name=queue) if queue else None
     request = JobSubmissionRequest(
         name=job_name,
-        model=ModelConfig(url=model_url, name=model_name),
+        model=_build_model_config(model_url, model_name, model_auth_secret),
         benchmarks=benchmarks,
         queue=queue_config,
     )

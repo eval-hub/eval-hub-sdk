@@ -179,6 +179,35 @@ class TestEvalRun:
         assert req.experiment.name == "test_exp"
         assert req.experiment.tags == []
 
+    def test_run_with_model_auth_secret(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        mock_client.jobs.submit.return_value = _make_job()
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(
+                main,
+                [
+                    "eval",
+                    "run",
+                    "--name",
+                    "inline-eval",
+                    "--model-url",
+                    "http://vllm:8000/v1",
+                    "--model-name",
+                    "llama3",
+                    "--model-auth-secret",
+                    "my-model-credentials",
+                    "--provider",
+                    "lm_eval",
+                    "-b",
+                    "mmlu",
+                ],
+            )
+        assert result.exit_code == 0
+        req = mock_client.jobs.submit.call_args[0][0]
+        assert req.model.auth is not None
+        assert req.model.auth.secret_ref == "my-model-credentials"
+
     def test_run_with_inline_oci(
         self, runner: CliRunner, config_file: Path, mock_client: MagicMock
     ) -> None:
@@ -1002,6 +1031,7 @@ class TestEvalHelp:
         assert result.exit_code == 0
         assert "--config" in result.output
         assert "--model-url" in result.output
+        assert "--model-auth-secret" in result.output
         assert "--wait" in result.output
 
     def test_eval_status_help(self, runner: CliRunner) -> None:
