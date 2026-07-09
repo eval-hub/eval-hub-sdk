@@ -651,6 +651,18 @@ wheels = [
 ]
 
 [[package]]
+name = "eval-hub-mcp"
+version = "0.4.4"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2b/89/37c68f7d2e39b99a223bb3107b553921445a768248dab0edb3e18a04fa70/eval_hub_mcp-0.4.4-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:992d7235dc30a1d781028ca9942cc42e24eb9a78fe0c41f09765f854093288fc", size = 5469859, upload-time = "2026-07-09T06:01:08.417Z" },
+    { url = "https://files.pythonhosted.org/packages/3a/3f/8d161cfbe0211548a2a37c6ba95579e35641f427290a5ec314deda8a35ac/eval_hub_mcp-0.4.4-py3-none-macosx_11_0_arm64.whl", hash = "sha256:ddd9917f488c1dd3b0695bc282e0992993dd568c8c480f5f498cc431ea15abdc", size = 5012326, upload-time = "2026-07-09T06:01:10.772Z" },
+    { url = "https://files.pythonhosted.org/packages/65/c1/f86fb052a1575388eadf2f9a1bb2e55795b14c8ff1dbef10c0696632635a/eval_hub_mcp-0.4.4-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:0e771c459bd027dccc1ef882a5d27184ab3523dd487f61e4b2177aebb777a13b", size = 4811571, upload-time = "2026-07-09T06:01:12.878Z" },
+    { url = "https://files.pythonhosted.org/packages/1e/eb/92a0b79d7362facfc015c4125055f1a945bf21f96c31122bd09683c91e01/eval_hub_mcp-0.4.4-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:33b391b9f02281eff187a905030e60a6362299df02c418f660495884ecef889e", size = 5377102, upload-time = "2026-07-09T06:01:15.246Z" },
+    { url = "https://files.pythonhosted.org/packages/fe/82/2e27564a80ba8ebea40a0c597e76d8809091f9de345934391c7f618ee349/eval_hub_mcp-0.4.4-py3-none-win_amd64.whl", hash = "sha256:36e1392c59d2277d0623239eb4981d160cb6df869974af6ac36877d9e1630b41", size = 5515048, upload-time = "2026-07-09T06:01:17.115Z" },
+]
+
+[[package]]
 name = "eval-hub-sdk"
 source = { editable = "." }
 dependencies = [
@@ -667,6 +679,7 @@ adapter = [
 ]
 all = [
     { name = "click" },
+    { name = "eval-hub-mcp" },
     { name = "httpx" },
     { name = "mypy" },
     { name = "olot" },
@@ -708,10 +721,18 @@ examples = [
     { name = "ragas" },
 ]
 mcp = [
+    { name = "click" },
+    { name = "eval-hub-mcp" },
     { name = "httpx" },
+    { name = "pyyaml" },
+    { name = "rich" },
 ]
 server = [
+    { name = "click" },
     { name = "eval-hub-server" },
+    { name = "httpx" },
+    { name = "pyyaml" },
+    { name = "rich" },
 ]
 
 [package.dev-dependencies]
@@ -735,13 +756,15 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "click", marker = "extra == 'cli'", specifier = ">=8.1.0" },
+    { name = "eval-hub-mcp", marker = "extra == 'mcp'", specifier = ">=0.4.4" },
     { name = "eval-hub-sdk", extras = ["adapter", "cli", "client", "core", "dev", "mcp"], marker = "extra == 'all'" },
     { name = "eval-hub-sdk", extras = ["cli"], marker = "extra == 'dev'" },
+    { name = "eval-hub-sdk", extras = ["cli"], marker = "extra == 'mcp'" },
+    { name = "eval-hub-sdk", extras = ["cli"], marker = "extra == 'server'" },
     { name = "eval-hub-sdk", extras = ["core"], marker = "extra == 'adapter'" },
+    { name = "eval-hub-sdk", extras = ["core"], marker = "extra == 'cli'" },
     { name = "eval-hub-sdk", extras = ["core"], marker = "extra == 'client'" },
-    { name = "eval-hub-sdk", extras = ["core"], marker = "extra == 'mcp'" },
-    { name = "eval-hub-sdk", extras = ["mcp"], marker = "extra == 'cli'" },
-    { name = "eval-hub-server", marker = "extra == 'server'", specifier = ">=0.4.2" },
+    { name = "eval-hub-server", marker = "extra == 'server'", specifier = ">=0.4.4" },
     { name = "httpx", marker = "extra == 'core'", specifier = ">=0.25.0" },
     { name = "importlib-metadata", specifier = ">=6.0.0" },
     { name = "lm-eval", marker = "extra == 'examples'", specifier = ">=0.4.0" },
@@ -781,14 +804,14 @@ dev = [
 
 [[package]]
 name = "eval-hub-server"
-version = "0.4.3"
+version = "0.4.4"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7f/9d/de524edd303187a4b23c9dd35c93862e2c06671465cb0050a1a5012a514a/eval_hub_server-0.4.3-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:baa5e6e37bf0cfc45a95035e8997675bd4ee54645b88062a0ab5ef9884f5b489", size = 19104044, upload-time = "2026-06-22T09:02:24.28Z" },
-    { url = "https://files.pythonhosted.org/packages/ec/04/8cc5894325a5999a356d56edff582a5f96c94fcf37157d90a0315207afbf/eval_hub_server-0.4.3-py3-none-macosx_11_0_arm64.whl", hash = "sha256:3d13bc86c1f8d832acf8c5f2d7e4a9a0c421a17add62a40ba7eb3a82a0a7f685", size = 17581899, upload-time = "2026-06-22T09:02:26.742Z" },
-    { url = "https://files.pythonhosted.org/packages/34/6e/c7b1434905f27360cea6b209cd1e258cdcf4d9f9a8a9c53cdfd7b3056c83/eval_hub_server-0.4.3-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:484eda36a0c962f544c691817e766a22a1f3b35f3ddf5eeb8f409282afc96ee8", size = 16726055, upload-time = "2026-06-22T09:02:29.156Z" },
-    { url = "https://files.pythonhosted.org/packages/41/ae/2cec267a2d7856e26a081dd92b613b69f6b975e22537fccca80e45d02283/eval_hub_server-0.4.3-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:f486ad6256021b1f961d879e0869c46aad47c52fc968aae2d2c7c3b54e00a906", size = 18711034, upload-time = "2026-06-22T09:02:31.716Z" },
-    { url = "https://files.pythonhosted.org/packages/12/29/9c15c07b340d30455e0bf18913c834eefaa5d8c52b49cb109bb47238fd4a/eval_hub_server-0.4.3-py3-none-win_amd64.whl", hash = "sha256:4cf58776e23ec8e88485705f680e5cf1e43bd87a3f9748654545745563a47b9f", size = 19133090, upload-time = "2026-06-22T09:02:33.935Z" },
+    { url = "https://files.pythonhosted.org/packages/27/19/91b0af1397404ee0e5412c9d25d9192b847f20c8b6f9a9bcf7b58d83e58a/eval_hub_server-0.4.4-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:4cf17c7cff73731125f70376b44b7ba582b9b5ca0b1c0d705415f99e39d2f09c", size = 19581291, upload-time = "2026-07-10T12:58:12.95Z" },
+    { url = "https://files.pythonhosted.org/packages/30/f6/0401289c43778b9f1085a32597f40c6938e8a742b224f0bda70dd275b81e/eval_hub_server-0.4.4-py3-none-macosx_11_0_arm64.whl", hash = "sha256:eb1d3ca489e7a9f1bdcf3e5fd265a8c074649ee3e80846f562ad4c71b5ee7a62", size = 18023563, upload-time = "2026-07-10T12:58:15.672Z" },
+    { url = "https://files.pythonhosted.org/packages/7c/81/230b7fe3c23c4da30b0096daf90d162574040d5ef6c137e1c8480aa0c159/eval_hub_server-0.4.4-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:b5ceccc9bbb7a9fa672bc0e973cee87f24feeb177d0d420942a3055c7377d498", size = 17138766, upload-time = "2026-07-10T12:58:18.042Z" },
+    { url = "https://files.pythonhosted.org/packages/0f/d5/4e1d2fb2da60fe72bdd2e4a7da8e8f84ce94cf1999e59b4faac7c6b45984/eval_hub_server-0.4.4-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:738e99805b1b5327667bb4841d3b29547b03e990a86a54f8085f1df3c7a293c2", size = 19177266, upload-time = "2026-07-10T12:58:20.377Z" },
+    { url = "https://files.pythonhosted.org/packages/1c/d1/5db1b0394ed76813ae26a7682ba468cdf51a56051569685a1cff3efe310d/eval_hub_server-0.4.4-py3-none-win_amd64.whl", hash = "sha256:7654d2203564a3f9c35bfc41515709cbbd02744f79366731098ca68425aedc8c", size = 19607578, upload-time = "2026-07-10T12:58:22.896Z" },
 ]
 
 [[package]]

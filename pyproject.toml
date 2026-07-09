@@ -51,7 +51,7 @@ client = [
 
 # CLI - command-line interface
 cli = [
-    "eval-hub-sdk[mcp]",
+    "eval-hub-sdk[core]",
     "click>=8.1.0",
     "pyyaml>=6.0",
     "rich>=13.0.0",
@@ -59,8 +59,8 @@ cli = [
 
 # MCP — installs the evalhub-mcp Go binary via PyPI
 mcp = [
-    "eval-hub-sdk[core]",
-    # "eval-hub-mcp",  # uncomment when the package is published to PyPI
+    "eval-hub-sdk[cli]",
+    "eval-hub-mcp>=0.4.4",
 ]
 
 # Development dependencies
@@ -83,7 +83,8 @@ examples = [
 
 # Server - eval-hub-server binary for local/embedded use
 server = [
-    "eval-hub-server>=0.4.2",
+    "eval-hub-sdk[cli]",
+    "eval-hub-server>=0.4.4",
 ]
 
 # All core functionality (excludes examples which are optional)
