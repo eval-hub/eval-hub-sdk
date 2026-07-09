@@ -26,8 +26,11 @@ from evalhub.models.api import (
     ModelConfig,
     OCIConnectionConfig,
     OCICoordinates,
+    PVCTestDataRef,
     ProviderList,
     QueueConfig,
+    S3TestDataRef,
+    TestDataRef,
 )
 from pydantic import ValidationError
 
@@ -1193,3 +1196,52 @@ class TestBenchmarkStatusPhase:
         from evalhub.models import JobPhase as CommonJobPhase
 
         assert AdapterJobPhase is CommonJobPhase
+
+
+class TestPVCTestDataRef:
+    """Tests for PVCTestDataRef and TestDataRef PVC support."""
+
+    def test_pvc_ref_basic(self) -> None:
+        ref = PVCTestDataRef(claim_name="my-pvc")
+        assert ref.claim_name == "my-pvc"
+        assert ref.sub_path is None
+
+    def test_pvc_ref_with_sub_path(self) -> None:
+        ref = PVCTestDataRef(claim_name="my-pvc", sub_path="staging")
+        assert ref.sub_path == "staging"
+
+    def test_pvc_ref_serializes_correctly(self) -> None:
+        ref = PVCTestDataRef(claim_name="my-pvc", sub_path="staging")
+        data = ref.model_dump(exclude_none=True)
+        assert data == {"claim_name": "my-pvc", "sub_path": "staging"}
+
+    def test_pvc_ref_omits_none_sub_path(self) -> None:
+        ref = PVCTestDataRef(claim_name="my-pvc")
+        data = ref.model_dump(exclude_none=True)
+        assert "sub_path" not in data
+
+    def test_test_data_ref_with_pvc(self) -> None:
+        ref = TestDataRef(pvc=PVCTestDataRef(claim_name="my-pvc"))
+        assert ref.pvc is not None
+        assert ref.s3 is None
+        data = ref.model_dump(exclude_none=True)
+        assert data == {"pvc": {"claim_name": "my-pvc"}}
+
+    def test_test_data_ref_with_s3(self) -> None:
+        ref = TestDataRef(s3=S3TestDataRef(bucket="b", key="k", secret_ref="s"))
+        assert ref.s3 is not None
+        assert ref.pvc is None
+
+    def test_pvc_importable_from_models_package(self) -> None:
+        from evalhub.models import PVCTestDataRef as Imported
+        assert Imported is PVCTestDataRef
+
+    def test_benchmark_config_with_pvc(self) -> None:
+        cfg = BenchmarkConfig(
+            id="arc_easy",
+            provider_id="lm_evaluation_harness",
+            test_data_ref=TestDataRef(pvc=PVCTestDataRef(claim_name="my-pvc", sub_path="staging")),
+        )
+        data = cfg.model_dump(exclude_none=True)
+        assert data["test_data_ref"]["pvc"]["claim_name"] == "my-pvc"
+        assert data["test_data_ref"]["pvc"]["sub_path"] == "staging"

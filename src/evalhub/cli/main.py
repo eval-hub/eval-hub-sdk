@@ -29,6 +29,7 @@ from evalhub.models import (
     OCICoordinates,
     ProviderCreateRequest,
     QueueConfig,
+    PVCTestDataRef,
     S3TestDataRef,
     TestDataRef,
 )
@@ -279,6 +280,16 @@ def _build_request_from_flags(
     help="Kubernetes Secret name with S3 credentials for custom test data (inline flags only).",
 )
 @click.option(
+    "--test-data-pvc-claim-name",
+    default=None,
+    help="PVC claim name for custom test data (inline flags only).",
+)
+@click.option(
+    "--test-data-pvc-sub-path",
+    default=None,
+    help="Sub-path within the PVC to mount at /test_data (inline flags only).",
+)
+@click.option(
     "--wait", "wait_for", is_flag=True, default=False, help="Block until job completes."
 )
 @click.option(
@@ -314,6 +325,8 @@ def eval_run(
     test_data_s3_bucket: str | None,
     test_data_s3_key: str | None,
     test_data_s3_secret: str | None,
+    test_data_pvc_claim_name: str | None,
+    test_data_pvc_sub_path: str | None,
     wait_for: bool,
     timeout: float | None,
     poll_interval: float,
@@ -347,6 +360,9 @@ def eval_run(
           --model-name llama3 --provider lm_evaluation_harness -b your_benchmark_id \\
           --test-data-s3-bucket evalhub-test --test-data-s3-key dataset/ \\
           --test-data-s3-secret evalhub-s3-credentials
+      evalhub eval run --name my-eval --model-url http://vllm:8000/v1 \\
+          --model-name llama3 --provider lm_evaluation_harness -b your_benchmark_id \\
+          --test-data-pvc-claim-name my-datasets-pvc --test-data-pvc-sub-path staging
     """
     client = get_client(ctx)
 
@@ -401,6 +417,10 @@ def eval_run(
                 "S3 test data requires --test-data-s3-bucket, --test-data-s3-key, "
                 "and --test-data-s3-secret to all be specified."
             )
+        if any(s3_flags) and test_data_pvc_claim_name:
+            raise click.ClickException(
+                "Cannot specify both S3 and PVC test data sources. Use one or the other."
+            )
         test_data_ref: TestDataRef | None = None
         if all(s3_flags):
             test_data_ref = TestDataRef(
@@ -408,6 +428,13 @@ def eval_run(
                     bucket=cast(str, test_data_s3_bucket),
                     key=cast(str, test_data_s3_key),
                     secret_ref=cast(str, test_data_s3_secret),
+                )
+            )
+        elif test_data_pvc_claim_name:
+            test_data_ref = TestDataRef(
+                pvc=PVCTestDataRef(
+                    claim_name=test_data_pvc_claim_name,
+                    sub_path=test_data_pvc_sub_path,
                 )
             )
         request = _build_request_from_flags(
