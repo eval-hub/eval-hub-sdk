@@ -25,6 +25,8 @@ from evalhub.models.api import (
     ModelConfig,
 )
 
+pytestmark = pytest.mark.unit
+
 NOW = datetime(2026, 3, 23, 12, 0, 0, tzinfo=UTC)
 
 
@@ -656,7 +658,6 @@ class TestEvalRun:
         assert req.queue is not None
         assert req.queue.name == "user-queue"
 
-
     def test_run_with_pvc_claim_name(
         self, runner: CliRunner, config_file: Path, mock_client: MagicMock
     ) -> None:
@@ -665,13 +666,20 @@ class TestEvalRun:
             result = runner.invoke(
                 main,
                 [
-                    "eval", "run",
-                    "--name", "pvc-eval",
-                    "--model-url", "http://vllm:8000/v1",
-                    "--model-name", "llama3",
-                    "--provider", "lm_eval",
-                    "-b", "mmlu",
-                    "--test-data-pvc-claim-name", "my-datasets-pvc",
+                    "eval",
+                    "run",
+                    "--name",
+                    "pvc-eval",
+                    "--model-url",
+                    "http://vllm:8000/v1",
+                    "--model-name",
+                    "llama3",
+                    "--provider",
+                    "lm_eval",
+                    "-b",
+                    "mmlu",
+                    "--test-data-pvc-claim-name",
+                    "my-datasets-pvc",
                 ],
             )
         assert result.exit_code == 0
@@ -690,14 +698,22 @@ class TestEvalRun:
             result = runner.invoke(
                 main,
                 [
-                    "eval", "run",
-                    "--name", "pvc-eval",
-                    "--model-url", "http://vllm:8000/v1",
-                    "--model-name", "llama3",
-                    "--provider", "lm_eval",
-                    "-b", "mmlu",
-                    "--test-data-pvc-claim-name", "my-datasets-pvc",
-                    "--test-data-pvc-sub-path", "staging",
+                    "eval",
+                    "run",
+                    "--name",
+                    "pvc-eval",
+                    "--model-url",
+                    "http://vllm:8000/v1",
+                    "--model-name",
+                    "llama3",
+                    "--provider",
+                    "lm_eval",
+                    "-b",
+                    "mmlu",
+                    "--test-data-pvc-claim-name",
+                    "my-datasets-pvc",
+                    "--test-data-pvc-sub-path",
+                    "staging",
                 ],
             )
         assert result.exit_code == 0
@@ -714,20 +730,60 @@ class TestEvalRun:
             result = runner.invoke(
                 main,
                 [
-                    "eval", "run",
-                    "--name", "pvc-eval",
-                    "--model-url", "http://vllm:8000/v1",
-                    "--model-name", "llama3",
-                    "--provider", "lm_eval",
-                    "-b", "mmlu",
-                    "--test-data-pvc-claim-name", "my-datasets-pvc",
-                    "--test-data-s3-bucket", "my-bucket",
-                    "--test-data-s3-key", "data/",
-                    "--test-data-s3-secret", "my-secret",
+                    "eval",
+                    "run",
+                    "--name",
+                    "pvc-eval",
+                    "--model-url",
+                    "http://vllm:8000/v1",
+                    "--model-name",
+                    "llama3",
+                    "--provider",
+                    "lm_eval",
+                    "-b",
+                    "mmlu",
+                    "--test-data-pvc-claim-name",
+                    "my-datasets-pvc",
+                    "--test-data-s3-bucket",
+                    "my-bucket",
+                    "--test-data-s3-key",
+                    "data/",
+                    "--test-data-s3-secret",
+                    "my-secret",
                 ],
             )
         assert result.exit_code != 0
         assert "Cannot specify both S3 and PVC" in result.output
+
+    def test_run_pvc_sub_path_requires_claim_name(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(
+                main,
+                [
+                    "eval",
+                    "run",
+                    "--name",
+                    "pvc-eval",
+                    "--model-url",
+                    "http://vllm:8000/v1",
+                    "--model-name",
+                    "llama3",
+                    "--provider",
+                    "lm_eval",
+                    "-b",
+                    "mmlu",
+                    "--test-data-pvc-sub-path",
+                    "staging",
+                ],
+            )
+        assert result.exit_code != 0
+        assert (
+            "--test-data-pvc-sub-path requires --test-data-pvc-claim-name"
+            in result.output
+        )
+        mock_client.jobs.submit.assert_not_called()
 
     def test_eval_run_help_pvc_flags(self, runner: CliRunner) -> None:
         result = runner.invoke(main, ["eval", "run", "--help"])

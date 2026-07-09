@@ -26,8 +26,8 @@ from evalhub.models.api import (
     ModelConfig,
     OCIConnectionConfig,
     OCICoordinates,
-    PVCTestDataRef,
     ProviderList,
+    PVCTestDataRef,
     QueueConfig,
     S3TestDataRef,
     TestDataRef,
@@ -1232,15 +1232,29 @@ class TestPVCTestDataRef:
         assert ref.s3 is not None
         assert ref.pvc is None
 
+    def test_test_data_ref_rejects_both(self) -> None:
+        with pytest.raises(ValidationError, match="Cannot specify both"):
+            TestDataRef(
+                s3=S3TestDataRef(bucket="b", key="k", secret_ref="s"),
+                pvc=PVCTestDataRef(claim_name="my-pvc"),
+            )
+
+    def test_test_data_ref_rejects_neither(self) -> None:
+        with pytest.raises(ValidationError, match="Must specify either"):
+            TestDataRef()
+
     def test_pvc_importable_from_models_package(self) -> None:
         from evalhub.models import PVCTestDataRef as Imported
+
         assert Imported is PVCTestDataRef
 
     def test_benchmark_config_with_pvc(self) -> None:
         cfg = BenchmarkConfig(
             id="arc_easy",
             provider_id="lm_evaluation_harness",
-            test_data_ref=TestDataRef(pvc=PVCTestDataRef(claim_name="my-pvc", sub_path="staging")),
+            test_data_ref=TestDataRef(
+                pvc=PVCTestDataRef(claim_name="my-pvc", sub_path="staging")
+            ),
         )
         data = cfg.model_dump(exclude_none=True)
         assert data["test_data_ref"]["pvc"]["claim_name"] == "my-pvc"

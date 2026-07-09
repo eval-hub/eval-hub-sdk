@@ -29,8 +29,8 @@ from evalhub.models import (
     OCIConnectionConfig,
     OCICoordinates,
     ProviderCreateRequest,
-    QueueConfig,
     PVCTestDataRef,
+    QueueConfig,
     S3TestDataRef,
     TestDataRef,
 )
@@ -440,6 +440,10 @@ def eval_run(
             raise click.ClickException(
                 "S3 test data requires --test-data-s3-bucket, --test-data-s3-key, "
                 "and --test-data-s3-secret to all be specified."
+            )
+        if test_data_pvc_sub_path and not test_data_pvc_claim_name:
+            raise click.ClickException(
+                "--test-data-pvc-sub-path requires --test-data-pvc-claim-name."
             )
         if any(s3_flags) and test_data_pvc_claim_name:
             raise click.ClickException(
