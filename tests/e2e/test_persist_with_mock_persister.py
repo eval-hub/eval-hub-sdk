@@ -18,6 +18,8 @@ from evalhub.adapter.callbacks import DefaultCallbacks
 from evalhub.adapter.models import JobStatusUpdate, OCIArtifactResult, OCIArtifactSpec
 from evalhub.models.api import OCICoordinates
 
+pytestmark = pytest.mark.e2e
+
 
 @pytest.fixture
 def mock_job_spec_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:

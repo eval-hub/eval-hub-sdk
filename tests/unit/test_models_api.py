@@ -31,6 +31,8 @@ from evalhub.models.api import (
 )
 from pydantic import ValidationError
 
+pytestmark = pytest.mark.unit
+
 
 class TestModelConfig:
     """Test cases for ModelConfig model."""

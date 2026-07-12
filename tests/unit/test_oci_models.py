@@ -8,6 +8,8 @@ from evalhub.models.api import (
 )
 from pydantic import ValidationError
 
+pytestmark = pytest.mark.unit
+
 
 class TestOCICoordinates:
     """Tests for OCICoordinates model."""

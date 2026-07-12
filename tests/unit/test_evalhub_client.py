@@ -46,6 +46,8 @@ from evalhub.models.api import (
     ScoreRange,
 )
 
+pytestmark = pytest.mark.unit
+
 # Environment variable to enable real server testing
 EVALHUB_TEST_BASE_URL = os.environ.get("EVALHUB_TEST_BASE_URL")
 

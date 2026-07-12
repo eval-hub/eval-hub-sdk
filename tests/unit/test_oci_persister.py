@@ -10,6 +10,8 @@ from evalhub.adapter.oci import OCIArtifactContext, OCIArtifactPersister
 from evalhub.adapter.oci.persister import default_tag_hasher
 from evalhub.models.api import OCICoordinates
 
+pytestmark = pytest.mark.unit
+
 
 class TestOCIArtifactPersisterInit:
     """Tests for OCIArtifactPersister initialization."""

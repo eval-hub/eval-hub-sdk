@@ -1,6 +1,9 @@
 """MLflow metric key sanitization for REST API rules."""
 
+import pytest
 from evalhub.adapter.mlflow import sanitize_metric_key_for_api
+
+pytestmark = pytest.mark.unit
 
 
 def test_sanitize_lm_eval_style_comma() -> None:

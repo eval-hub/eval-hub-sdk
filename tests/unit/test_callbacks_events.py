@@ -13,6 +13,8 @@ from evalhub.adapter.models.job import (
 )
 from evalhub.models.api import EvaluationResult, JobStatus, ModelConfig
 
+pytestmark = pytest.mark.unit
+
 
 def _results(mlflow_run_id: str | None = None) -> JobResults:
     return JobResults(
@@ -154,7 +156,6 @@ def test_mlflow_save_returns_run_id_from_upstream_path() -> None:
     m.assert_called_once()
 
 
-@pytest.mark.unit
 def test_mlflow_save_posts_failed_event_on_mlflow_error() -> None:
     callbacks, mock_http = _make_callbacks()
 

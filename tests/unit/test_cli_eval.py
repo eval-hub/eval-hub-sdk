@@ -25,6 +25,8 @@ from evalhub.models.api import (
     ModelConfig,
 )
 
+pytestmark = pytest.mark.unit
+
 NOW = datetime(2026, 3, 23, 12, 0, 0, tzinfo=UTC)
 
 

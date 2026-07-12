@@ -15,6 +15,8 @@ from click.testing import CliRunner
 from evalhub.cli.main import main
 from evalhub.cli.mcp_cmd import GENERATED_CONFIG, _fetch_server_info
 
+pytestmark = pytest.mark.unit
+
 
 @pytest.fixture()
 def config_file(tmp_path: Path) -> Iterator[Path]:

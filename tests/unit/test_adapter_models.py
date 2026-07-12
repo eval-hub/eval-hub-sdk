@@ -26,6 +26,8 @@ from evalhub.adapter import (
 )
 from pydantic import ValidationError
 
+pytestmark = pytest.mark.unit
+
 
 @pytest.fixture
 def mock_job_spec_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:

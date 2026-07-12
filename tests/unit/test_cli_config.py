@@ -33,6 +33,8 @@ from evalhub.cli.config import (
 )
 from evalhub.cli.main import main
 
+pytestmark = pytest.mark.unit
+
 
 @pytest.fixture()
 def config_file(tmp_path: Path) -> Iterator[Path]:

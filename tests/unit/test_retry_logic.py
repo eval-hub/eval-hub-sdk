@@ -13,6 +13,8 @@ from evalhub.client.base import (
     _calculate_retry_delay,
 )
 
+pytestmark = pytest.mark.unit
+
 
 class TestRetryDelayCalculation:
     """Test retry delay calculation with exponential backoff."""

@@ -6,6 +6,7 @@ import io
 import json
 import re
 
+import pytest
 import yaml
 from evalhub.cli.formatter import (
     FORMATS,
@@ -13,6 +14,8 @@ from evalhub.cli.formatter import (
     format_option,
     output,
 )
+
+pytestmark = pytest.mark.unit
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 

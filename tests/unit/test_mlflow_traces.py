@@ -11,6 +11,8 @@ from evalhub.adapter.mlflow import (
     _parse_trace,
 )
 
+pytestmark = pytest.mark.unit
+
 # -- TracesNamespace.is_source_configured -----------------------------------
 
 

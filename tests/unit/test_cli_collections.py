@@ -19,6 +19,8 @@ from evalhub.models.api import (
     Resource,
 )
 
+pytestmark = pytest.mark.unit
+
 
 def _make_benchmark_ref(
     id: str = "mmlu",

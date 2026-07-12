@@ -21,6 +21,8 @@ from evalhub.models.api import (
     Resource,
 )
 
+pytestmark = pytest.mark.unit
+
 
 def _make_provider(
     id: str = "lm_eval",
