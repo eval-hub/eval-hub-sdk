@@ -17,6 +17,7 @@ import re
 import time
 import uuid
 from collections.abc import Iterable, Iterator
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -858,36 +859,43 @@ class TracesNamespace:
             )
             if not traces:
                 break
-            for trace in traces:
-                # Re-fetch each trace using the 3.0 endpoint to include spans
-                full_trace = self.get(
-                    request_id=trace.info.request_id,
-                    experiment_id=experiment_id,
-                )
-                tid = re.sub(r"[^a-zA-Z0-9_\-]", "_", full_trace.info.request_id)
-                if not tid:
-                    tid = uuid.uuid4().hex
-                prefix = "" if tid.startswith("tr-") else "tr-"
-                file_path = out / f"{prefix}{tid}.json"
-                trace_dict = {
-                    "info": {
-                        "request_id": full_trace.info.request_id,
-                        "experiment_id": full_trace.info.experiment_id,
-                        "timestamp_ms": full_trace.info.timestamp_ms,
-                        "execution_time_ms": full_trace.info.execution_time_ms,
-                        "status": full_trace.info.status,
-                        "tags": full_trace.info.tags,
-                        "request_metadata": full_trace.info.request_metadata,
-                    },
-                    "data": full_trace.data,
+            # Fetch full span data for each trace in parallel to avoid N+1 I/O
+            workers = min(len(traces), 10)
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                future_to_id = {
+                    pool.submit(
+                        self.get,
+                        trace.info.request_id,
+                        experiment_id,
+                    ): trace.info.request_id
+                    for trace in traces
                 }
-                file_path.write_text(
-                    json.dumps(trace_dict, indent=2, default=str),
-                    encoding="utf-8",
-                )
-                collected += 1
-                if collected >= max_results:
-                    break
+                for future in as_completed(future_to_id):
+                    full_trace = future.result()
+                    tid = re.sub(r"[^a-zA-Z0-9_\-]", "_", full_trace.info.request_id)
+                    if not tid:
+                        tid = uuid.uuid4().hex
+                    prefix = "" if tid.startswith("tr-") else "tr-"
+                    file_path = out / f"{prefix}{tid}.json"
+                    trace_dict = {
+                        "info": {
+                            "request_id": full_trace.info.request_id,
+                            "experiment_id": full_trace.info.experiment_id,
+                            "timestamp_ms": full_trace.info.timestamp_ms,
+                            "execution_time_ms": full_trace.info.execution_time_ms,
+                            "status": full_trace.info.status,
+                            "tags": full_trace.info.tags,
+                            "request_metadata": full_trace.info.request_metadata,
+                        },
+                        "data": full_trace.data,
+                    }
+                    file_path.write_text(
+                        json.dumps(trace_dict, indent=2, default=str),
+                        encoding="utf-8",
+                    )
+                    collected += 1
+                    if collected >= max_results:
+                        break
             if not page_token:
                 break
 
