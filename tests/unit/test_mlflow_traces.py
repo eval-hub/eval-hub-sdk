@@ -256,6 +256,36 @@ def test_materialize_writes_files(tmp_path: Path) -> None:
         }
     )
 
+    _get_v3_responses = {
+        "abc": {
+            "info": {
+                "request_id": "abc",
+                "experiment_id": "10",
+                "timestamp_ms": 1700000000000,
+                "execution_time_ms": 300,
+                "status": "OK",
+                "tags": [],
+                "request_metadata": [],
+            },
+            "data": {"spans": [{"name": "root"}]},
+        },
+        "tr-def": {
+            "info": {
+                "request_id": "tr-def",
+                "experiment_id": "10",
+                "timestamp_ms": 0,
+                "execution_time_ms": 0,
+                "status": "ERROR",
+                "tags": [],
+                "request_metadata": [],
+            },
+            "data": {},
+        },
+    }
+    mock_client._get_v3 = MagicMock(
+        side_effect=lambda path, params: _get_v3_responses[params["trace_id"]]
+    )
+
     out = ns.materialize(
         parameters={
             "mlflow_traces_experiment_name": "test-exp",
@@ -296,6 +326,20 @@ def test_materialize_resolves_experiment_name(tmp_path: Path) -> None:
                 },
             ],
             "next_page_token": None,
+        }
+    )
+    mock_client._get_v3 = MagicMock(
+        return_value={
+            "info": {
+                "request_id": "x",
+                "experiment_id": "42",
+                "timestamp_ms": 0,
+                "execution_time_ms": 0,
+                "status": "OK",
+                "tags": [],
+                "request_metadata": [],
+            },
+            "data": {},
         }
     )
 
