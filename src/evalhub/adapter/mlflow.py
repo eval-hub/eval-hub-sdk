@@ -716,8 +716,12 @@ def _parse_trace(raw: dict[str, Any]) -> Trace:
     info = TraceInfo(
         request_id=request_id,
         experiment_id=experiment_id,
-        timestamp_ms=int(info_raw.get("timestamp_ms") or 0),
-        execution_time_ms=int(info_raw.get("execution_time_ms") or 0),
+        timestamp_ms=int(
+            info_raw.get("timestamp_ms") or info_raw.get("request_time") or 0
+        ),
+        execution_time_ms=int(
+            info_raw.get("execution_time_ms") or info_raw.get("execution_duration") or 0
+        ),
         status=status,
         tags=_kv_list_to_dict(info_raw.get("tags")),
         request_metadata=_kv_list_to_dict(
