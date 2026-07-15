@@ -419,3 +419,20 @@ def test_report_results_additional_info_passes_arbitrary_keys() -> None:
         "alt_prompting_description": "5-Shot CoT",
         "custom_key": 42,
     }
+
+
+def test_report_results_additional_info_passes_nested_values() -> None:
+    callbacks, mock_http = _make_callbacks()
+    results = _results()
+    results.additional_info = {
+        "config": {"shots": 5, "cot": True},
+        "tags": ["a", "b"],
+    }
+    callbacks.report_results(results)
+
+    body = mock_http.post.call_args.kwargs["json"]
+    event = body["benchmark_status_event"]
+    assert event["additional_info"] == {
+        "config": {"shots": 5, "cot": True},
+        "tags": ["a", "b"],
+    }

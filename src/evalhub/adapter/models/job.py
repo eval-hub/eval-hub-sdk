@@ -312,10 +312,11 @@ class JobResults(BaseModel):
         description="Environment Card metadata. Serialized into artifacts['evalhub.env_card'].",
     )
 
-    additional_info: dict[str, str | int | float | bool | None] | None = Field(
+    additional_info: dict[str, Any] | None = Field(
         default=None,
-        description="Supplementary scalar key-value pairs for evaluation "
+        description="Supplementary key-value pairs for evaluation "
         "information beyond metrics (e.g. prompting strategy, dataset SHA). "
+        "Accepts any JSON-serializable values. "
         "Serialized into status_event['additional_info'] and available to "
         "downstream consumers such as EvalCard generation.",
     )

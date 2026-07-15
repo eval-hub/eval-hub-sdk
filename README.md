@@ -84,7 +84,7 @@ The SDK is organized into distinct, focused packages:
 4. **JobResults** - Evaluation results returned when job completes
 5. **EvalCardMetadata** - Standardized evaluation disclosure (Dhar et al., arXiv:2511.21695): modalities, languages, capability and safety evaluations
 6. **EnvironmentCardMetadata** - Operational context of an evaluation run: hardware, software, Kubernetes, model identity, and run provenance
-7. **additional_info** - Supplementary scalar key-value pairs for evaluation information beyond metrics (e.g. zero-shot/alt-prompting scores, dataset SHA)
+7. **additional_info** - Supplementary key-value pairs for evaluation information beyond metrics (e.g. dataset provenance, zero-shot/alt-prompting scores)
 8. **Sidecar** - Container that handles service communication (provided by platform)
 
 ## Breaking Changes
@@ -529,7 +529,7 @@ class JobResults(BaseModel):
     oci_artifact: Optional[OCIArtifactResult] # OCI artifact info if persisted
     eval_card: Optional[EvalCardMetadata]     # EvalCard disclosure metadata
     env_card: Optional[EnvironmentCardMetadata] # Environment Card metadata
-    additional_info: Optional[Dict[str, Union[str, int, float, bool, None]]]  # Supplementary evaluation info beyond metrics
+    additional_info: Optional[Dict[str, Any]]  # Supplementary evaluation info beyond metrics
 ```
 
 **EvalCard & Environment Card** - Evaluation documentation artifacts:
@@ -573,12 +573,11 @@ callbacks.report_results(results)
 
 **additional_info** - supplementary evaluation metadata:
 
-`additional_info` is a flat `dict[str, str | int | float | bool | None]` of
-supplementary key-value pairs for evaluation information beyond metrics
-(e.g. prompting strategy, dataset provenance). Use `additional_info` to
-supply fields such as `zero_shot`, `alt_prompting`, and
-`alt_prompting_description`.
-Values must be scalar types (`str`, `int`, `float`, `bool`, or `None`).
+`additional_info` is a `dict[str, Any]` of supplementary key-value pairs for
+evaluation information beyond metrics. Values can be any JSON-serializable
+type, including nested objects and lists. Use `additional_info` to supply
+fields such as `dataset` (list of dataset provenance records), `zero_shot`,
+`alt_prompting`, and `alt_prompting_description`.
 It is serialized as a top-level `additional_info` key in the
 `benchmark_status_event` payload and is available to downstream consumers
 such as EvalCard generation.
@@ -607,7 +606,7 @@ class LMEvalAdapter(FrameworkAdapter):
 
     def generate_additional_info(
         self, results: JobResults
-    ) -> dict[str, str | int | float | bool | None] | None:
+    ) -> dict[str, Any] | None:
         """Derive supplementary EvalCard fields from lm-eval output."""
         benchmark_id = results.benchmark_id
 

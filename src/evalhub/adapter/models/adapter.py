@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from evalhub.adapter.config import EvalHubMode
 
@@ -228,9 +228,7 @@ class FrameworkAdapter(ABC):
             )
         return job_spec.parent.parent
 
-    def generate_additional_info(
-        self, results: JobResults
-    ) -> dict[str, str | int | float | bool | None] | None:
+    def generate_additional_info(self, results: JobResults) -> dict[str, Any] | None:
         """Generate supplementary key-value pairs for the evaluation.
 
         Override this to supply additional evaluation information beyond
@@ -238,7 +236,7 @@ class FrameworkAdapter(ABC):
         These are included in the ``benchmark_status_event`` payload and
         are available to downstream consumers such as EvalCard generation.
         The default returns ``None``.
-        Values must be scalar types (str, int, float, bool, or None).
+        Values may be any JSON-serializable type.
 
         Called automatically by ``DefaultCallbacks.report_results()`` when
         ``results.additional_info`` is not already set.
@@ -248,7 +246,7 @@ class FrameworkAdapter(ABC):
                      Use ``results.benchmark_id`` for benchmark-specific logic.
 
         Returns:
-            Dict of scalar key-value pairs, or None to skip.
+            Dict of key-value pairs, or None to skip.
         """
         return None
 

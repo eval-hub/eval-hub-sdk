@@ -3,6 +3,7 @@
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 from evalhub.adapter import (
@@ -24,7 +25,6 @@ from evalhub.adapter import (
     OCIArtifactSpec,
     SafetyEvalEntry,
 )
-from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit
 
@@ -534,8 +534,8 @@ class TestJobResults:
         assert results.completed_at is not None
         assert isinstance(results.completed_at, datetime)
 
-    def test_additional_info_rejects_invalid_values_on_assignment(self) -> None:
-        """Test that assigning non-scalar values to additional_info is rejected."""
+    def test_additional_info_accepts_nested_values_on_assignment(self) -> None:
+        """Test that assigning nested values to additional_info is accepted."""
         results = JobResults(
             id="test-job-001",
             benchmark_id="mmlu",
@@ -546,8 +546,8 @@ class TestJobResults:
             duration_seconds=60.0,
         )
 
-        with pytest.raises(ValidationError):
-            results.additional_info = {"nested": {"not": "allowed"}}  # type: ignore[dict-item]
+        results.additional_info = {"nested": {"is": "allowed"}}
+        assert results.additional_info == {"nested": {"is": "allowed"}}
 
 
 class TestJobCallbacks:
@@ -1034,7 +1034,7 @@ class TestJobResultsWithCards:
         assert results.additional_info is None
 
     def test_additional_info_accepts_scalar_values(self) -> None:
-        info: dict[str, str | int | float | bool | None] = {
+        info: dict[str, Any] = {
             "dataset_sha": "sha256:abc",
             "zero_shot": "0.85",
             "custom_metric": 42,
@@ -1054,27 +1054,20 @@ class TestJobResultsWithCards:
         )
         assert results.additional_info == info
 
-    def test_additional_info_rejects_non_scalar_values(self) -> None:
-        with pytest.raises(ValueError, match="additional_info"):
-            JobResults(
-                id="j",
-                benchmark_id="b",
-                benchmark_index=0,
-                model_name="m",
-                results=[],
-                num_examples_evaluated=0,
-                duration_seconds=0.0,
-                additional_info={"nested": {"a": 1}},  # type: ignore[dict-item]
-            )
-
-        with pytest.raises(ValueError, match="additional_info"):
-            JobResults(
-                id="j",
-                benchmark_id="b",
-                benchmark_index=0,
-                model_name="m",
-                results=[],
-                num_examples_evaluated=0,
-                duration_seconds=0.0,
-                additional_info={"tags": ["a", "b"]},  # type: ignore[dict-item]
-            )
+    def test_additional_info_accepts_nested_values(self) -> None:
+        info: dict[str, Any] = {
+            "nested": {"a": 1, "b": [2, 3]},
+            "tags": ["a", "b"],
+            "scalar": "still works",
+        }
+        results = JobResults(
+            id="j",
+            benchmark_id="b",
+            benchmark_index=0,
+            model_name="m",
+            results=[],
+            num_examples_evaluated=0,
+            duration_seconds=0.0,
+            additional_info=info,
+        )
+        assert results.additional_info == info

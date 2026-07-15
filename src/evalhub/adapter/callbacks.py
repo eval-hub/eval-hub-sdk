@@ -341,8 +341,7 @@ class DefaultCallbacks(JobCallbacks):
         oci_proxy_host: str | None = None,
         mlflow_backend: MlflowBackend = MlflowBackend.ODH,
         generate_additional_info_fn: (
-            Callable[[JobResults], dict[str, str | int | float | bool | None] | None]
-            | None
+            Callable[[JobResults], dict[str, Any] | None] | None
         ) = None,
     ):
         """Initialize default callbacks.
