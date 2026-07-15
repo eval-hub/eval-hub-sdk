@@ -871,7 +871,14 @@ class TracesNamespace:
                     for trace in traces
                 }
                 for future in as_completed(future_to_id):
-                    full_trace = future.result()
+                    try:
+                        full_trace = future.result()
+                    except Exception:
+                        rid = future_to_id[future]
+                        logger.warning(
+                            "Failed to fetch trace %s, skipping", rid, exc_info=True
+                        )
+                        continue
                     tid = re.sub(r"[^a-zA-Z0-9_\-]", "_", full_trace.info.request_id)
                     if not tid:
                         tid = uuid.uuid4().hex
