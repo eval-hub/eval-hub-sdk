@@ -7,6 +7,7 @@ import pytest
 from evalhub.models.api import (
     BenchmarkConfig,
     BenchmarkInfo,
+    BenchmarkResult,
     BenchmarksList,
     CollectionList,
     CollectionRef,
@@ -15,6 +16,7 @@ from evalhub.models.api import (
     EvaluationExports,
     EvaluationExportsOCI,
     EvaluationJob,
+    EvaluationJobResults,
     EvaluationResponse,
     EvaluationResult,
     EvaluationStatus,
@@ -667,6 +669,67 @@ class TestExperimentConfig:
         assert restored.name == "roundtrip"
         assert len(restored.tags) == 2
         assert restored.tags[0].key == "k1"
+
+
+class TestBenchmarkResult:
+    """Test cases for BenchmarkResult model."""
+
+    def test_additional_info_default_none(self) -> None:
+        result = BenchmarkResult(id="mmlu", provider_id="lm_eval")
+        assert result.additional_info is None
+
+    def test_additional_info_with_nested_values(self) -> None:
+        info: dict[str, Any] = {
+            "dataset": [
+                {
+                    "hf_repo": "openai/gsm8k",
+                    "hf_subset": "main",
+                    "sha": "740312add88f",
+                }
+            ],
+            "generation_parameters": {"temperature": 0},
+            "zero_shot": 0.8,
+        }
+        result = BenchmarkResult(
+            id="mmlu", provider_id="lm_eval", additional_info=info
+        )
+        assert result.additional_info == info
+
+    def test_additional_info_roundtrip(self) -> None:
+        info: dict[str, Any] = {
+            "prompting_strategy": "chain-of-thought",
+            "dataset_sha": "abc123",
+        }
+        result = BenchmarkResult(
+            id="mmlu",
+            provider_id="lm_eval",
+            metrics={"accuracy": 0.85},
+            additional_info=info,
+        )
+        data = result.model_dump(mode="json")
+        assert data["additional_info"] == info
+        restored = BenchmarkResult.model_validate(data)
+        assert restored.additional_info == info
+
+    def test_additional_info_excluded_when_none(self) -> None:
+        result = BenchmarkResult(id="mmlu", provider_id="lm_eval")
+        data = result.model_dump(mode="json", exclude_none=True)
+        assert "additional_info" not in data
+
+    def test_additional_info_in_job_results(self) -> None:
+        info: dict[str, Any] = {"zero_shot": 0.8}
+        results = EvaluationJobResults(
+            benchmarks=[
+                BenchmarkResult(
+                    id="mmlu",
+                    provider_id="lm_eval",
+                    metrics={"accuracy": 0.85},
+                    additional_info=info,
+                ),
+            ],
+        )
+        data = results.model_dump(mode="json")
+        assert data["benchmarks"][0]["additional_info"] == info
 
 
 class TestEvaluationResult:

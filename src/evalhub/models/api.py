@@ -239,6 +239,11 @@ class BenchmarkResult(BaseModel):
         default=None, description="MLFlow run ID if tracking enabled"
     )
     logs_path: str | None = Field(default=None, description="Path to evaluation logs")
+    additional_info: dict[str, Any] | None = Field(
+        default=None,
+        description="Supplementary key-value pairs for evaluation "
+        "information beyond metrics (e.g. prompting strategy, dataset SHA).",
+    )
 
 
 class EvaluationJobResults(BaseModel):
