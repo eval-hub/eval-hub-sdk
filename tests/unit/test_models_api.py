@@ -690,9 +690,7 @@ class TestBenchmarkResult:
             "generation_parameters": {"temperature": 0},
             "zero_shot": 0.8,
         }
-        result = BenchmarkResult(
-            id="mmlu", provider_id="lm_eval", additional_info=info
-        )
+        result = BenchmarkResult(id="mmlu", provider_id="lm_eval", additional_info=info)
         assert result.additional_info == info
 
     def test_additional_info_roundtrip(self) -> None:
