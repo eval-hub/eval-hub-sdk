@@ -459,7 +459,7 @@ def test_server_status_not_running(
 
     with patch("evalhub.cli.server_cmd.PID_FILE", tmp_path / "pid"), patch(
         "evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path
-    ), patch("evalhub.cli.server_cmd._health_check", return_value=False):
+    ), patch("evalhub.cli.server_cmd._fetch_health_info", return_value=None):
         result = runner.invoke(main, ["server", "status"])
 
     assert result.exit_code == 0, result.output
@@ -476,17 +476,21 @@ def test_server_status_running_healthy(
     pid_file.write_text("12345")
     _setup_server_config(tmp_path, config_file)
 
+    health_info = {"status": "healthy", "build": "0.4.4", "git_hash": "f758919"}
+
     with patch("evalhub.cli.server_cmd.PID_FILE", pid_file), patch(
         "evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path
     ), patch("evalhub.cli.server_cmd.LOG_FILE", tmp_path / "server.log"), patch(
         "evalhub.cli._process.is_process_alive", return_value=True
-    ), patch("evalhub.cli.server_cmd._health_check", return_value=True):
+    ), patch("evalhub.cli.server_cmd._fetch_health_info", return_value=health_info):
         result = runner.invoke(main, ["server", "status"])
 
     assert result.exit_code == 0, result.output
     assert "running" in result.output
     assert "12345" in result.output
     assert "healthy" in result.output
+    assert "Version: 0.4.4" in result.output
+    assert "Commit:  f758919" in result.output
     assert "http://localhost:8080" in result.output
     assert "Logs:" in result.output
 
@@ -500,14 +504,18 @@ def test_server_status_healthy_no_pid(
     _seed_profile(config_file)
     _setup_server_config(tmp_path, config_file)
 
+    health_info = {"status": "healthy", "build": "1.0.0"}
+
     with patch("evalhub.cli.server_cmd.PID_FILE", tmp_path / "pid"), patch(
         "evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path
-    ), patch("evalhub.cli.server_cmd._health_check", return_value=True):
+    ), patch("evalhub.cli.server_cmd._fetch_health_info", return_value=health_info):
         result = runner.invoke(main, ["server", "status"])
 
     assert result.exit_code == 0, result.output
     assert "running" in result.output
     assert "healthy" in result.output
+    assert "Version: 1.0.0" in result.output
+    assert "Commit:" not in result.output
     assert "http://localhost:8080" in result.output
     assert "PID" not in result.output
     assert "Logs:" not in result.output
@@ -523,17 +531,21 @@ def test_server_status_tls_uses_https_scheme(
     pid_file.write_text("12345")
     _setup_server_config(tmp_path, config_file, tls=True)
 
+    health_info = {"status": "healthy"}
+
     with patch("evalhub.cli.server_cmd.PID_FILE", pid_file), patch(
         "evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path
     ), patch("evalhub.cli.server_cmd.LOG_FILE", tmp_path / "server.log"), patch(
         "evalhub.cli._process.is_process_alive", return_value=True
-    ), patch("evalhub.cli.server_cmd._health_check", return_value=True) as mock_hc:
+    ), patch(
+        "evalhub.cli.server_cmd._fetch_health_info", return_value=health_info
+    ) as mock_fhi:
         result = runner.invoke(main, ["server", "status"])
 
     assert result.exit_code == 0, result.output
     assert "https://localhost:8080" in result.output
     assert "http://localhost:8080" not in result.output
-    mock_hc.assert_called_once_with(8080, tls=True)
+    mock_fhi.assert_called_once_with(8080, tls=True)
 
 
 def test_server_status_running_unhealthy(
@@ -550,12 +562,14 @@ def test_server_status_running_unhealthy(
         "evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path
     ), patch("evalhub.cli.server_cmd.LOG_FILE", tmp_path / "server.log"), patch(
         "evalhub.cli._process.is_process_alive", return_value=True
-    ), patch("evalhub.cli.server_cmd._health_check", return_value=False):
+    ), patch("evalhub.cli.server_cmd._fetch_health_info", return_value=None):
         result = runner.invoke(main, ["server", "status"])
 
     assert result.exit_code == 0, result.output
     assert "running" in result.output
     assert "not responding" in result.output
+    assert "Version:" not in result.output
+    assert "Commit:" not in result.output
 
 
 # ---------------------------------------------------------------------------

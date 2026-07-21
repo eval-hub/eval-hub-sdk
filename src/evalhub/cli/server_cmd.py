@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import ssl
 import time
 import urllib.request
 from pathlib import Path
+from typing import Any
 
 import click
 import yaml
@@ -48,7 +50,8 @@ def _read_server_config(config_dir: Path) -> tuple[int, bool]:
         ) from exc
 
 
-def _health_check(port: int, *, tls: bool = False) -> bool:
+def _fetch_health_info(port: int, *, tls: bool = False) -> dict[str, Any] | None:
+    """Fetch the full JSON response from the health endpoint."""
     scheme = "https" if tls else "http"
     url = f"{scheme}://localhost:{port}/api/v1/health"
     req = urllib.request.Request(url, method="GET")
@@ -59,9 +62,15 @@ def _health_check(port: int, *, tls: bool = False) -> bool:
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
         with urllib.request.urlopen(req, timeout=2, context=ctx) as resp:
-            return bool(resp.status == 200)
+            if resp.status == 200:
+                return json.loads(resp.read().decode())  # type: ignore[no-any-return]
     except Exception:
-        return False
+        pass
+    return None
+
+
+def _health_check(port: int, *, tls: bool = False) -> bool:
+    return _fetch_health_info(port, tls=tls) is not None
 
 
 def _wait_for_healthy(port: int, timeout: float, *, tls: bool = False) -> bool:
@@ -192,9 +201,9 @@ def server_status(ctx: click.Context) -> None:
     scheme = "https" if tls else "http"
 
     pid = live_pid(PID_FILE)
-    healthy = _health_check(port, tls=tls)
+    info = _fetch_health_info(port, tls=tls)
 
-    if not healthy and pid is None:
+    if not info and pid is None:
         click.echo("Server is not running.")
         return
 
@@ -203,7 +212,12 @@ def server_status(ctx: click.Context) -> None:
     else:
         click.echo("Server is running.")
 
-    click.echo(f"  Health: {'healthy' if healthy else 'not responding'}")
+    click.echo(f"  Health: {'healthy' if info else 'not responding'}")
+    if info:
+        if info.get("build"):
+            click.echo(f"  Version: {info['build']}")
+        if info.get("git_hash"):
+            click.echo(f"  Commit:  {info['git_hash']}")
     click.echo(f"  URL:    {scheme}://localhost:{port}")
     if pid is not None:
         click.echo(f"  Logs:   {LOG_FILE}")
