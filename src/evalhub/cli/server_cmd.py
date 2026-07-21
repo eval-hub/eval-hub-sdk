@@ -63,7 +63,10 @@ def _fetch_health_info(port: int, *, tls: bool = False) -> dict[str, Any] | None
             ctx.verify_mode = ssl.CERT_NONE
         with urllib.request.urlopen(req, timeout=2, context=ctx) as resp:
             if resp.status == 200:
-                return json.loads(resp.read().decode())  # type: ignore[no-any-return]
+                data = json.loads(resp.read().decode())
+                if isinstance(data, dict):
+                    return data
+
     except Exception:
         pass
     return None
