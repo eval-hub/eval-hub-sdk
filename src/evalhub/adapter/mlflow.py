@@ -664,6 +664,37 @@ class MlflowClient:
 # ---------------------------------------------------------------------------
 
 
+def _to_ms(val: Any) -> int:
+    """Coerce a timing value to integer milliseconds.
+
+    MLflow v2 returns integer ms; MLflow v3 returns ``request_time`` as an
+    ISO-8601 string (e.g. ``"2026-07-22T17:17:14.010Z"``) and
+    ``execution_duration`` as a duration string (e.g. ``"0.001s"``).
+    """
+    if not val:
+        return 0
+    if isinstance(val, int | float):
+        return int(val)
+    s = str(val).strip()
+    if s.endswith("s"):
+        try:
+            return int(float(s[:-1]) * 1000)
+        except ValueError:
+            return 0
+    if "T" in s:
+        try:
+            from datetime import datetime as _dt
+
+            dt = _dt.fromisoformat(s.replace("Z", "+00:00"))
+            return int(dt.timestamp() * 1000)
+        except (ValueError, OSError):
+            return 0
+    try:
+        return int(s)
+    except (ValueError, TypeError):
+        return 0
+
+
 def _kv_list_to_dict(items: Any) -> dict[str, str]:
     """Convert MLflow tag/metadata lists or dicts to a string map."""
     if isinstance(items, dict):
@@ -716,11 +747,11 @@ def _parse_trace(raw: dict[str, Any]) -> Trace:
     info = TraceInfo(
         request_id=request_id,
         experiment_id=experiment_id,
-        timestamp_ms=int(
-            info_raw.get("timestamp_ms") or info_raw.get("request_time") or 0
+        timestamp_ms=_to_ms(
+            info_raw.get("timestamp_ms") or info_raw.get("request_time")
         ),
-        execution_time_ms=int(
-            info_raw.get("execution_time_ms") or info_raw.get("execution_duration") or 0
+        execution_time_ms=_to_ms(
+            info_raw.get("execution_time_ms") or info_raw.get("execution_duration")
         ),
         status=status,
         tags=_kv_list_to_dict(info_raw.get("tags")),
