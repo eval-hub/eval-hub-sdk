@@ -34,7 +34,8 @@ class MessageInfo(BaseModel):
         default=None,
         description=(
             "Origin of the message. Set by the SDK when posting /events: "
-            "'adapter' for adapter-driven updates, 'sdk' for SDK-generated errors."
+            "'adapter' for a message from the adapter, 'sdk' for a message "
+            "from the SDK."
         ),
     )
 
@@ -51,7 +52,8 @@ class ErrorInfo(BaseModel):
         default=None,
         description=(
             "Origin of the error. Set by the SDK when posting /events: "
-            "'adapter' for adapter-driven updates, 'sdk' for SDK-generated errors."
+            "'adapter' for an error from the adapter, 'sdk' for an error "
+            "from the SDK."
         ),
     )
 
