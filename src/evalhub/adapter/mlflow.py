@@ -695,6 +695,58 @@ def _to_ms(val: Any) -> int:
         return 0
 
 
+def _unwrap_proto_value(val: Any) -> Any:
+    """Recursively unwrap a protobuf-style attribute value to plain Python."""
+    if not isinstance(val, dict):
+        return val
+    for scalar in (
+        "string_value",
+        "bytes_value",
+        "int_value",
+        "double_value",
+        "bool_value",
+    ):
+        if scalar in val:
+            return val[scalar]
+    if "kvlist_value" in val:
+        entries = val["kvlist_value"].get("values", [])
+        return {e["key"]: _unwrap_proto_value(e.get("value", {})) for e in entries}
+    if "array_value" in val:
+        return [_unwrap_proto_value(v) for v in val["array_value"].get("values", [])]
+    return val
+
+
+def _normalize_spans(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Convert protobuf-style span attributes to top-level fields.
+
+    MLflow v3 returns span attributes as a list of ``{key, value}`` pairs
+    using protobuf wrapper types.  Downstream consumers (e.g. CLEAR) expect
+    flat dicts with top-level ``inputs``, ``outputs``, and ``span_type``.
+    """
+    normalized = []
+    for span in spans:
+        raw_attrs = span.get("attributes", [])
+        if isinstance(raw_attrs, list):
+            attrs: dict[str, Any] = {}
+            for item in raw_attrs:
+                if isinstance(item, dict) and "key" in item:
+                    attrs[str(item["key"])] = _unwrap_proto_value(item.get("value", {}))
+        else:
+            attrs = dict(raw_attrs)
+
+        span_type = attrs.pop("mlflow.spanType", span.get("span_type", "UNKNOWN"))
+        inputs = attrs.pop("mlflow.spanInputs", span.get("inputs", {}))
+        outputs = attrs.pop("mlflow.spanOutputs", span.get("outputs", {}))
+
+        out = dict(span)
+        out["attributes"] = attrs
+        out["span_type"] = span_type
+        out["inputs"] = inputs
+        out["outputs"] = outputs
+        normalized.append(out)
+    return normalized
+
+
 def _kv_list_to_dict(items: Any) -> dict[str, str]:
     """Convert MLflow tag/metadata lists or dicts to a string map."""
     if isinstance(items, dict):
@@ -759,6 +811,9 @@ def _parse_trace(raw: dict[str, Any]) -> Trace:
             info_raw.get("request_metadata") or info_raw.get("trace_metadata")
         ),
     )
+    if "spans" in data and isinstance(data["spans"], list):
+        data = {**data, "spans": _normalize_spans(data["spans"])}
+
     return Trace(info=info, data=data)
 
 
