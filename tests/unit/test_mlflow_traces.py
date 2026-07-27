@@ -66,7 +66,13 @@ def test_parse_trace_basic() -> None:
     assert trace.info.status == "OK"
     assert trace.info.tags == {"framework": "langgraph"}
     assert trace.info.request_metadata == {"source": "test"}
-    assert trace.data == {"spans": [{"name": "root"}]}
+    spans = trace.data["spans"]
+    assert len(spans) == 1
+    assert spans[0]["name"] == "root"
+    assert spans[0]["span_type"] == "UNKNOWN"
+    assert spans[0]["inputs"] == {}
+    assert spans[0]["outputs"] == {}
+    assert spans[0]["attributes"] == {}
 
 
 def test_parse_trace_missing_fields() -> None:
@@ -267,7 +273,45 @@ def test_materialize_writes_files(tmp_path: Path) -> None:
                 "tags": [],
                 "request_metadata": [],
             },
-            "data": {"spans": [{"name": "root"}]},
+            "data": {
+                "spans": [
+                    {
+                        "name": "root",
+                        "attributes": [
+                            {
+                                "key": "mlflow.spanType",
+                                "value": {"string_value": "AGENT"},
+                            },
+                            {
+                                "key": "mlflow.spanInputs",
+                                "value": {
+                                    "kvlist_value": {
+                                        "values": [
+                                            {
+                                                "key": "q",
+                                                "value": {"string_value": "hello"},
+                                            }
+                                        ]
+                                    }
+                                },
+                            },
+                            {
+                                "key": "mlflow.spanOutputs",
+                                "value": {
+                                    "kvlist_value": {
+                                        "values": [
+                                            {
+                                                "key": "a",
+                                                "value": {"string_value": "world"},
+                                            }
+                                        ]
+                                    }
+                                },
+                            },
+                        ],
+                    }
+                ]
+            },
         },
         "tr-def": {
             "info": {
@@ -302,7 +346,13 @@ def test_materialize_writes_files(tmp_path: Path) -> None:
 
     content = json.loads((out / "tr-abc.json").read_text())
     assert content["info"]["request_id"] == "abc"
-    assert content["data"]["spans"] == [{"name": "root"}]
+    spans = content["data"]["spans"]
+    assert len(spans) == 1
+    assert spans[0]["name"] == "root"
+    assert spans[0]["span_type"] == "AGENT"
+    assert spans[0]["inputs"] == {"q": "hello"}
+    assert spans[0]["outputs"] == {"a": "world"}
+    assert "mlflow.spanType" not in spans[0]["attributes"]
 
 
 def test_materialize_resolves_experiment_name(tmp_path: Path) -> None:
