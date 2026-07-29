@@ -821,7 +821,7 @@ class Collection(BaseModel):
 
     resource: Resource = Field(..., description="Resource metadata")
     name: str = Field(..., description="Collection name")
-    description: str = Field(..., description="Collection description")
+    description: str = Field(default="", description="Collection description")
     category: str = Field(..., description="Collection category")
     tags: list[str] = Field(default_factory=list, description="Collection tags")
     custom: dict[str, Any] = Field(default_factory=dict, description="Custom metadata")

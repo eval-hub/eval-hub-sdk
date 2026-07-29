@@ -1024,6 +1024,36 @@ class TestListModelsServerCompatibility:
         assert len(collection_list.items) == 1
         assert collection_list.items[0].resource.id == "healthcare_v1"
 
+    def test_collection_list_without_description(self) -> None:
+        """Test CollectionList parses when server omits description."""
+        server_response = {
+            "items": [
+                {
+                    "resource": {
+                        "id": "c566c23d-8f79-4643-9d61-a6392e810184",
+                        "tenant": "dataplane",
+                        "created_at": "2026-07-28T15:25:38Z",
+                        "updated_at": "2026-07-28T15:25:38Z",
+                    },
+                    "name": "my-safety-suite",
+                    "category": "safety",
+                    "benchmarks": [
+                        {
+                            "id": "truthfulqa_mc1",
+                            "provider_id": "lm_evaluation_harness",
+                        },
+                        {"id": "owasp_llm_top_10", "provider_id": "garak"},
+                    ],
+                }
+            ],
+            "total_count": 1,
+        }
+
+        collection_list = CollectionList.model_validate(server_response)
+        assert collection_list.total_count == 1
+        assert len(collection_list.items) == 1
+        assert collection_list.items[0].description == ""
+
     def test_jobs_list_with_server_fields(self) -> None:
         """Test JobsList parses server response format."""
         # Go API returns 'items' and 'total_count' with nested structure
