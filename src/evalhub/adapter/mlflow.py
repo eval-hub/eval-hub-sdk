@@ -742,16 +742,18 @@ def _normalize_spans(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
     using protobuf wrapper types.  Downstream consumers (e.g. CLEAR) expect
     flat dicts with top-level ``inputs``, ``outputs``, and ``span_type``.
     """
-    normalized = []
+    normalized: list[dict[str, Any]] = []
     for span in spans:
-        raw_attrs = span.get("attributes", [])
+        raw_attrs = span.get("attributes") or []
         if isinstance(raw_attrs, list):
             attrs: dict[str, Any] = {}
             for item in raw_attrs:
                 if isinstance(item, dict) and "key" in item:
                     attrs[str(item["key"])] = _unwrap_proto_value(item.get("value", {}))
-        else:
+        elif isinstance(raw_attrs, dict):
             attrs = dict(raw_attrs)
+        else:
+            attrs = {}
 
         span_type = attrs.pop("mlflow.spanType", span.get("span_type", "UNKNOWN"))
         inputs = attrs.pop("mlflow.spanInputs", span.get("inputs", {}))
@@ -956,7 +958,7 @@ class TracesNamespace:
             else:
                 return common_pb2.KeyValue(key=key, value=common_pb2.AnyValue(string_value=json.dumps(val, default=str)))
 
-        proto_spans = []
+        proto_spans: list[Any] = []
         for span in spans:
             attrs = span.get("attributes", {})
             kv_attrs = [_kv(k, v) for k, v in attrs.items()]
@@ -967,6 +969,12 @@ class TracesNamespace:
             kv_attrs.append(_kv("mlflow.traceRequestId", f"tr-{trace_id}"))
 
             span_id_hex = span.get("span_id", uuid.uuid4().hex[:16])
+            status_str = span.get("status", "OK")
+            if status_str == "ERROR":
+                status_code = trace_pb2.Status.STATUS_CODE_ERROR
+            else:
+                status_code = trace_pb2.Status.STATUS_CODE_OK
+
             proto_span = trace_pb2.Span(
                 trace_id=bytes.fromhex(trace_id),
                 span_id=bytes.fromhex(span_id_hex),
@@ -975,7 +983,7 @@ class TracesNamespace:
                 start_time_unix_nano=span.get("start_time_unix_nano", 0),
                 end_time_unix_nano=span.get("end_time_unix_nano", 0),
                 attributes=kv_attrs,
-                status=trace_pb2.Status(code=trace_pb2.Status.STATUS_CODE_OK),
+                status=trace_pb2.Status(code=status_code),
             )
             proto_spans.append(proto_span)
 
@@ -1004,8 +1012,8 @@ class TracesNamespace:
         request_id = f"tr-{trace_id}"
 
         # Step 2: Register trace metadata via POST /api/3.0/mlflow/traces
-        root_inputs = {}
-        root_outputs = {}
+        root_inputs: str = "{}"
+        root_outputs: str = "{}"
         for span in spans:
             if not span.get("parent_span_id"):
                 attrs = span.get("attributes", {})
@@ -1037,8 +1045,8 @@ class TracesNamespace:
                     "state": "OK",
                     "trace_metadata": trace_metadata,
                     "tags": trace_tags,
-                    "request_preview": root_inputs[:100] if isinstance(root_inputs, str) else "",
-                    "response_preview": root_outputs[:100] if isinstance(root_outputs, str) else "",
+                    "request_preview": root_inputs[:100],
+                    "response_preview": root_outputs[:100],
                 }
             }
         }
@@ -1076,12 +1084,16 @@ class TracesNamespace:
             """Convert base64 or hex span ID to 16-char hex."""
             if not val:
                 return None
-            if len(val) == 16 and all(c in "0123456789abcdef" for c in val):
-                return val
+            val_lower = val.lower()
+            if len(val_lower) == 16 and all(c in "0123456789abcdef" for c in val_lower):
+                return val_lower
             try:
-                return base64.b64decode(val).hex()
+                decoded = base64.b64decode(val, validate=True)
+                if len(decoded) == 8:
+                    return decoded.hex()
             except Exception:
-                return uuid.uuid4().hex[:16]
+                pass
+            return uuid.uuid4().hex[:16]
 
         exec_ms = info.get("execution_time_ms") or info.get("execution_duration_ms")
         ts_ms = info.get("timestamp_ms")
@@ -1095,7 +1107,7 @@ class TracesNamespace:
                 except (ValueError, TypeError):
                     ts_ms = None
 
-        span_dicts = []
+        span_dicts: list[dict[str, Any]] = []
         for s in spans_raw:
             attrs = dict(s.get("attributes", {}))
             status_raw = s.get("status", "OK")
