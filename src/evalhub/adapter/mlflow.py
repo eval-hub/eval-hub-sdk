@@ -332,6 +332,21 @@ class MlflowClient:
         resp = self._client.get(url, params=params)
         return self._handle(resp)
 
+    def _post_v3(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
+        url = f"{self._tracking_uri}{_API_V3}{path}"
+        resp = self._client.post(url, json=body)
+        return self._handle(resp)
+
+    def _put_json(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
+        url = f"{self._tracking_uri}{_API}{path}"
+        resp = self._client.put(url, json=body)
+        return self._handle(resp)
+
+    def _patch(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
+        url = f"{self._tracking_uri}{_API}{path}"
+        resp = self._client.patch(url, json=body)
+        return self._handle(resp)
+
     @staticmethod
     def _handle(resp: httpx.Response) -> dict[str, Any]:
         if not (200 <= resp.status_code < 300):
@@ -548,6 +563,11 @@ class MlflowClient:
 
             mlflow-artifacts:/workspaces/{workspace}/{experiment_id}/{run_id}/artifacts
 
+        When bypassing the sidecar (talking directly to the MLflow service), the
+        full workspace-scoped path MUST be preserved.  The sidecar normally injects
+        the workspace prefix on the caller's behalf, but without it the path must
+        include ``workspaces/{name}/`` or the PUT silently succeeds without storing.
+
         Upstream MLflow 3.x may instead return a local filesystem path or an HTTP
         proxied artifact root. When the URI is not ``mlflow-artifacts:``, fall back
         to ``{experiment_id}/{run_id}/artifacts/{path}`` from the run record.
@@ -557,11 +577,7 @@ class MlflowClient:
 
         if artifact_uri.startswith("mlflow-artifacts:/"):
             path = artifact_uri.removeprefix("mlflow-artifacts:/")
-            parts = path.split("/", 2)
-            if len(parts) == 3 and parts[0] == "workspaces":
-                run_root = parts[2]
-            else:
-                run_root = path.lstrip("/")
+            run_root = path.lstrip("/")
             return f"{_ARTIFACTS_API}/{run_root}/{artifact_path}"
 
         if anchor in artifact_uri:
@@ -569,8 +585,9 @@ class MlflowClient:
             return f"{_ARTIFACTS_API}/{run_root}/{artifact_path}"
 
         if experiment_id and run_id:
+            workspace = os.environ.get("MLFLOW_WORKSPACE", "default")
             return (
-                f"{_ARTIFACTS_API}/{experiment_id}/{run_id}/artifacts/{artifact_path}"
+                f"{_ARTIFACTS_API}/workspaces/{workspace}/{experiment_id}/{run_id}/artifacts/{artifact_path}"
             )
 
         raise ValueError(
@@ -584,7 +601,9 @@ class MlflowClient:
         """Raw PUT to the MLflow Artifacts server."""
         url = f"{self._tracking_uri}{path}"
         headers = {"Content-Type": content_type}
+        logger.debug("PUT artifact url=%s content_type=%s", url, content_type)
         resp = self._client.put(url, content=content, headers=headers)
+        logger.debug("PUT artifact response: %s %s", resp.status_code, resp.text[:200] if resp.text else "")
         self._handle(resp)
 
     def upload_artifact(
@@ -840,6 +859,8 @@ class TracesNamespace:
         traces, token = client.traces.search(experiment_ids=["1"])
         trace = client.traces.get("tr-abc", experiment_id="1")
         out = client.traces.materialize(params, "/tmp/out")
+        request_id = client.traces.create(exp_id, spans=[...])
+        request_id = client.traces.upload_trace_file(exp_id, "trace.json")
     """
 
     def __init__(self, client: MlflowClient) -> None:
@@ -884,6 +905,220 @@ class TracesNamespace:
             {"trace_id": request_id},
         )
         return _parse_trace(data)
+
+    def create(
+        self,
+        experiment_id: str,
+        spans: list[dict[str, Any]],
+        *,
+        timestamp_ms: int | None = None,
+        execution_time_ms: int | None = None,
+        tags: dict[str, str] | None = None,
+    ) -> str:
+        """Create a trace with spans via the MLflow OTLP + v3 API.
+
+        Uses a two-step approach (mirroring the official MLflow SDK):
+          1. POST /v1/traces  – uploads span data via OTLP JSON
+          2. POST /api/3.0/mlflow/traces – registers trace metadata
+
+        Each span dict should contain:
+          - name: str
+          - span_id: str (hex, 16 chars)
+          - parent_span_id: str | None (None for root span)
+          - start_time_unix_nano: int
+          - end_time_unix_nano: int
+          - attributes: dict[str, Any] (should include mlflow.spanType,
+            mlflow.spanInputs, mlflow.spanOutputs, and gen_ai.* for LLM spans)
+          - status: str ("OK" or "ERROR", default "OK")
+
+        Returns the trace request_id assigned by the server.
+        """
+        ts = timestamp_ms or _now_ms()
+        exec_ms = execution_time_ms or 0
+
+        trace_id = uuid.uuid4().hex
+
+        # Step 1: Upload spans via OTLP protobuf (POST /v1/traces)
+        from opentelemetry.proto.collector.trace.v1 import trace_service_pb2
+        from opentelemetry.proto.common.v1 import common_pb2
+        from opentelemetry.proto.resource.v1 import resource_pb2
+        from opentelemetry.proto.trace.v1 import trace_pb2
+
+        def _kv(key: str, val: Any) -> common_pb2.KeyValue:
+            if isinstance(val, str):
+                return common_pb2.KeyValue(key=key, value=common_pb2.AnyValue(string_value=val))
+            elif isinstance(val, bool):
+                return common_pb2.KeyValue(key=key, value=common_pb2.AnyValue(bool_value=val))
+            elif isinstance(val, int):
+                return common_pb2.KeyValue(key=key, value=common_pb2.AnyValue(int_value=val))
+            elif isinstance(val, float):
+                return common_pb2.KeyValue(key=key, value=common_pb2.AnyValue(double_value=val))
+            else:
+                return common_pb2.KeyValue(key=key, value=common_pb2.AnyValue(string_value=json.dumps(val, default=str)))
+
+        proto_spans = []
+        for span in spans:
+            attrs = span.get("attributes", {})
+            kv_attrs = [_kv(k, v) for k, v in attrs.items()]
+
+            parent = span.get("parent_span_id")
+            if not parent:
+                kv_attrs.append(_kv("mlflow.experimentId", experiment_id))
+            kv_attrs.append(_kv("mlflow.traceRequestId", f"tr-{trace_id}"))
+
+            span_id_hex = span.get("span_id", uuid.uuid4().hex[:16])
+            proto_span = trace_pb2.Span(
+                trace_id=bytes.fromhex(trace_id),
+                span_id=bytes.fromhex(span_id_hex),
+                parent_span_id=bytes.fromhex(parent) if parent else b"",
+                name=span.get("name", "span"),
+                start_time_unix_nano=span.get("start_time_unix_nano", 0),
+                end_time_unix_nano=span.get("end_time_unix_nano", 0),
+                attributes=kv_attrs,
+                status=trace_pb2.Status(code=trace_pb2.Status.STATUS_CODE_OK),
+            )
+            proto_spans.append(proto_span)
+
+        resource = resource_pb2.Resource(attributes=[
+            _kv("telemetry.sdk.language", "python"),
+            _kv("telemetry.sdk.name", "mlflow"),
+            _kv("telemetry.sdk.version", "3.14.0"),
+        ])
+
+        export_request = trace_service_pb2.ExportTraceServiceRequest(
+            resource_spans=[trace_pb2.ResourceSpans(
+                resource=resource,
+                scope_spans=[trace_pb2.ScopeSpans(spans=proto_spans)],
+            )]
+        )
+
+        url = f"{self._client._tracking_uri}/v1/traces"
+        headers = {
+            "x-mlflow-experiment-id": experiment_id,
+            "Content-Type": "application/x-protobuf",
+        }
+        resp = self._client._client.post(url, content=export_request.SerializeToString(), headers=headers)
+        if resp.status_code >= 400:
+            raise MLflowAPIError(resp.status_code, "OTLP_ERROR", resp.text)
+
+        request_id = f"tr-{trace_id}"
+
+        # Step 2: Register trace metadata via POST /api/3.0/mlflow/traces
+        root_inputs = {}
+        root_outputs = {}
+        for span in spans:
+            if not span.get("parent_span_id"):
+                attrs = span.get("attributes", {})
+                ri = attrs.get("mlflow.spanInputs", "{}")
+                ro = attrs.get("mlflow.spanOutputs", "{}")
+                root_inputs = ri if isinstance(ri, str) else json.dumps(ri, default=str)
+                root_outputs = ro if isinstance(ro, str) else json.dumps(ro, default=str)
+                break
+
+        trace_metadata = [
+            {"key": "mlflow.traceInputs", "value": root_inputs},
+            {"key": "mlflow.traceOutputs", "value": root_outputs},
+            {"key": "mlflow.source.type", "value": "LOCAL"},
+            {"key": "mlflow.trace_schema.version", "value": "3"},
+        ]
+        trace_tags = [{"key": k, "value": v} for k, v in (tags or {}).items()]
+
+        now_iso = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(ts / 1000))
+        trace_info_body = {
+            "trace": {
+                "trace_info": {
+                    "trace_id": request_id,
+                    "trace_location": {
+                        "type": "MLFLOW_EXPERIMENT",
+                        "mlflow_experiment": {"experiment_id": experiment_id},
+                    },
+                    "request_time": now_iso,
+                    "execution_duration": f"{exec_ms / 1000}s",
+                    "state": "OK",
+                    "trace_metadata": trace_metadata,
+                    "tags": trace_tags,
+                    "request_preview": root_inputs[:100] if isinstance(root_inputs, str) else "",
+                    "response_preview": root_outputs[:100] if isinstance(root_outputs, str) else "",
+                }
+            }
+        }
+
+        self._client._post_v3("/traces", trace_info_body)
+        return request_id
+
+    def upload_trace_file(
+        self,
+        experiment_id: str,
+        trace_path: str | Path,
+    ) -> str:
+        """Upload a trace JSON file to MLflow.
+
+        Accepts files in the standard format with ``info`` and ``data.spans``
+        sections (as produced by ``materialize`` or the MLflow UI export).
+        Handles both hex and base64-encoded span IDs.
+
+        Returns the request_id of the created trace.
+        """
+        import base64
+
+        path = Path(trace_path)
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        spans_raw = raw.get("data", {}).get("spans", [])
+        if not spans_raw:
+            raise ValueError(f"No spans found in {path}")
+
+        info = raw.get("info", {})
+        tags = info.get("tags", {})
+        if isinstance(tags, list):
+            tags = {t["key"]: t["value"] for t in tags if "key" in t}
+
+        def _decode_span_id(val: str | None) -> str | None:
+            """Convert base64 or hex span ID to 16-char hex."""
+            if not val:
+                return None
+            if len(val) == 16 and all(c in "0123456789abcdef" for c in val):
+                return val
+            try:
+                return base64.b64decode(val).hex()
+            except Exception:
+                return uuid.uuid4().hex[:16]
+
+        exec_ms = info.get("execution_time_ms") or info.get("execution_duration_ms")
+        ts_ms = info.get("timestamp_ms")
+        if not ts_ms:
+            req_time = info.get("request_time")
+            if isinstance(req_time, str):
+                import datetime
+                try:
+                    dt = datetime.datetime.fromisoformat(req_time.replace("Z", "+00:00"))
+                    ts_ms = int(dt.timestamp() * 1000)
+                except (ValueError, TypeError):
+                    ts_ms = None
+
+        span_dicts = []
+        for s in spans_raw:
+            attrs = dict(s.get("attributes", {}))
+            status_raw = s.get("status", "OK")
+            if isinstance(status_raw, dict):
+                status_raw = "OK" if status_raw.get("code", "").endswith("OK") else "ERROR"
+
+            span_dicts.append({
+                "name": s.get("name", "span"),
+                "span_id": _decode_span_id(s.get("span_id")) or uuid.uuid4().hex[:16],
+                "parent_span_id": _decode_span_id(s.get("parent_span_id")),
+                "start_time_unix_nano": s.get("start_time_unix_nano", 0),
+                "end_time_unix_nano": s.get("end_time_unix_nano", 0),
+                "attributes": attrs,
+                "status": status_raw,
+            })
+
+        return self.create(
+            experiment_id=experiment_id,
+            spans=span_dicts,
+            timestamp_ms=ts_ms,
+            execution_time_ms=exec_ms or 0,
+            tags=tags if isinstance(tags, dict) else None,
+        )
 
     @staticmethod
     def is_source_configured(parameters: dict[str, Any] | None) -> bool:
