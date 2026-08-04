@@ -104,7 +104,11 @@ def list_profiles(data: dict[str, Any]) -> dict[str, Any]:
     profiles = data.get("profiles", {})
     if not isinstance(profiles, dict):
         return {}
-    return profiles
+    return {
+        name: prof
+        for name, prof in profiles.items()
+        if isinstance(name, str) and isinstance(prof, dict)
+    }
 
 
 def get_profile(data: dict[str, Any], profile: str | None = None) -> dict[str, Any]:
