@@ -99,6 +99,18 @@ def get_active_profile(data: dict[str, Any]) -> str:
     return active
 
 
+def list_profiles(data: dict[str, Any]) -> dict[str, Any]:
+    """Return the profiles mapping, safely handling corrupt data."""
+    profiles = data.get("profiles", {})
+    if not isinstance(profiles, dict):
+        return {}
+    return {
+        name: prof
+        for name, prof in profiles.items()
+        if isinstance(name, str) and isinstance(prof, dict)
+    }
+
+
 def get_profile(data: dict[str, Any], profile: str | None = None) -> dict[str, Any]:
     """Return the settings dict for a profile (empty dict if it doesn't exist yet)."""
     name = profile or get_active_profile(data)
