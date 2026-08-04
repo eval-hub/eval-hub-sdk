@@ -367,54 +367,6 @@ class TestConfigListAllCommand:
         assert "Missing required keys" in result.output  # prod is incomplete
 
 
-class TestConfigProfilesCommand:
-    def test_profiles_empty(self, runner: CliRunner, config_file: Path) -> None:
-        result = runner.invoke(main, ["config", "profiles"])
-        assert result.exit_code == 0
-        assert "No profiles configured." in result.output
-
-    def test_profiles_single(self, runner: CliRunner, config_file: Path) -> None:
-        runner.invoke(main, ["config", "set", "base_url", "http://localhost:8080"])
-        result = runner.invoke(main, ["config", "profiles"])
-        assert result.exit_code == 0
-        assert "default *" in result.output
-
-    def test_profiles_multiple_marks_active(
-        self, runner: CliRunner, config_file: Path
-    ) -> None:
-        runner.invoke(main, ["config", "set", "base_url", "http://localhost:8080"])
-        runner.invoke(
-            main, ["--profile", "prod", "config", "set", "base_url", "https://prod:443"]
-        )
-        runner.invoke(
-            main,
-            ["--profile", "staging", "config", "set", "base_url", "https://stg:443"],
-        )
-        result = runner.invoke(main, ["config", "profiles"])
-        assert result.exit_code == 0
-        assert "default *" in result.output
-        assert "prod" in result.output
-        assert "staging" in result.output
-        # Only the active profile should have the asterisk
-        lines = result.output.strip().splitlines()
-        starred = [line for line in lines if "*" in line]
-        assert len(starred) == 1
-
-    def test_profiles_after_switch(self, runner: CliRunner, config_file: Path) -> None:
-        runner.invoke(main, ["config", "set", "base_url", "http://localhost:8080"])
-        runner.invoke(
-            main, ["--profile", "prod", "config", "set", "base_url", "https://prod:443"]
-        )
-        runner.invoke(main, ["config", "use", "prod"])
-        result = runner.invoke(main, ["config", "profiles"])
-        assert result.exit_code == 0
-        assert "prod *" in result.output
-        # default should NOT have the asterisk
-        lines = result.output.strip().splitlines()
-        default_line = [line for line in lines if "default" in line][0]
-        assert "*" not in default_line
-
-
 class TestConfigUseCommand:
     def test_use_switches_active_profile(
         self, runner: CliRunner, config_file: Path

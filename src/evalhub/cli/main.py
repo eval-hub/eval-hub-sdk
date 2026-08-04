@@ -1294,7 +1294,7 @@ def config(ctx: click.Context) -> None:
     Configuration is stored in ~/.config/evalhub/config.yaml and
     supports multiple profiles. Use 'config set' to store values,
     'config get' to read them, 'config list' to see the full
-    profile, 'config profiles' to list all profiles, and
+    profile, 'config list --all' to list all profiles, and
     'config use' to switch profiles.
 
     \b
@@ -1497,28 +1497,6 @@ def config_list(ctx: click.Context, *, show_all: bool = False) -> None:
         profile_name = profile or active
         prof = cfg.get_profile(data, profile=profile)
         _render_profile(profile_name, prof, data)
-
-
-@config.command("profiles")
-def config_profiles() -> None:
-    """List all available configuration profiles.
-
-    \b
-    Shows every profile name, marking the active one with an asterisk (*).
-
-    \b
-    Examples:
-      evalhub config profiles
-    """
-    data = cfg.load_config()
-    active = cfg.get_active_profile(data)
-    profiles = cfg.list_profiles(data)
-    if not profiles:
-        click.echo("No profiles configured.")
-        return
-    for name in profiles:
-        marker = " *" if name == active else ""
-        click.echo(f"  {name}{marker}")
 
 
 @config.command("use")
