@@ -304,6 +304,117 @@ class TestConfigListCommand:
         assert "Missing required keys" not in result.output
 
 
+class TestConfigListAllCommand:
+    def test_list_all_no_profiles(self, runner: CliRunner, config_file: Path) -> None:
+        result = runner.invoke(main, ["config", "list", "--all"])
+        assert result.exit_code == 0
+        assert "No profiles configured." in result.output
+
+    def test_list_all_shows_every_profile(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
+        runner.invoke(main, ["config", "set", "base_url", "http://localhost:8080"])
+        runner.invoke(main, ["config", "set", "token", "default-token-val"])
+        runner.invoke(
+            main, ["--profile", "prod", "config", "set", "base_url", "https://prod:443"]
+        )
+        runner.invoke(
+            main, ["--profile", "prod", "config", "set", "token", "prod-token-val"]
+        )
+        result = runner.invoke(main, ["config", "list", "--all"])
+        assert result.exit_code == 0
+        assert "Profile: default *" in result.output
+        assert "Profile: prod" in result.output
+        assert "base_url: http://localhost:8080" in result.output
+        assert "base_url: https://prod:443" in result.output
+
+    def test_list_all_masks_tokens(self, runner: CliRunner, config_file: Path) -> None:
+        runner.invoke(main, ["config", "set", "token", "secret-default-token"])
+        runner.invoke(
+            main, ["--profile", "prod", "config", "set", "token", "secret-prod-token"]
+        )
+        result = runner.invoke(main, ["config", "list", "--all"])
+        assert result.exit_code == 0
+        assert "secret-default-token" not in result.output
+        assert "secret-prod-token" not in result.output
+        assert "token: sec***en" in result.output
+
+    def test_list_all_marks_active_profile(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
+        runner.invoke(main, ["config", "set", "base_url", "http://localhost:8080"])
+        runner.invoke(
+            main, ["--profile", "prod", "config", "set", "base_url", "https://prod:443"]
+        )
+        runner.invoke(main, ["config", "use", "prod"])
+        result = runner.invoke(main, ["config", "list", "--all"])
+        assert result.exit_code == 0
+        assert "Profile: prod *" in result.output
+        assert "Profile: default\n" in result.output
+
+    def test_list_all_shows_missing_keys(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
+        runner.invoke(main, ["config", "set", "base_url", "http://localhost:8080"])
+        runner.invoke(main, ["config", "set", "token", "tok12345"])
+        runner.invoke(main, ["config", "set", "tenant", "ns"])
+        runner.invoke(
+            main, ["--profile", "prod", "config", "set", "base_url", "https://prod:443"]
+        )
+        result = runner.invoke(main, ["config", "list", "--all"])
+        assert result.exit_code == 0
+        # default is complete
+        assert "Missing required keys" in result.output  # prod is incomplete
+
+
+class TestConfigProfilesCommand:
+    def test_profiles_empty(self, runner: CliRunner, config_file: Path) -> None:
+        result = runner.invoke(main, ["config", "profiles"])
+        assert result.exit_code == 0
+        assert "No profiles configured." in result.output
+
+    def test_profiles_single(self, runner: CliRunner, config_file: Path) -> None:
+        runner.invoke(main, ["config", "set", "base_url", "http://localhost:8080"])
+        result = runner.invoke(main, ["config", "profiles"])
+        assert result.exit_code == 0
+        assert "default *" in result.output
+
+    def test_profiles_multiple_marks_active(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
+        runner.invoke(main, ["config", "set", "base_url", "http://localhost:8080"])
+        runner.invoke(
+            main, ["--profile", "prod", "config", "set", "base_url", "https://prod:443"]
+        )
+        runner.invoke(
+            main,
+            ["--profile", "staging", "config", "set", "base_url", "https://stg:443"],
+        )
+        result = runner.invoke(main, ["config", "profiles"])
+        assert result.exit_code == 0
+        assert "default *" in result.output
+        assert "prod" in result.output
+        assert "staging" in result.output
+        # Only the active profile should have the asterisk
+        lines = result.output.strip().splitlines()
+        starred = [line for line in lines if "*" in line]
+        assert len(starred) == 1
+
+    def test_profiles_after_switch(self, runner: CliRunner, config_file: Path) -> None:
+        runner.invoke(main, ["config", "set", "base_url", "http://localhost:8080"])
+        runner.invoke(
+            main, ["--profile", "prod", "config", "set", "base_url", "https://prod:443"]
+        )
+        runner.invoke(main, ["config", "use", "prod"])
+        result = runner.invoke(main, ["config", "profiles"])
+        assert result.exit_code == 0
+        assert "prod *" in result.output
+        # default should NOT have the asterisk
+        lines = result.output.strip().splitlines()
+        default_line = [line for line in lines if "default" in line][0]
+        assert "*" not in default_line
+
+
 class TestConfigUseCommand:
     def test_use_switches_active_profile(
         self, runner: CliRunner, config_file: Path

@@ -1294,7 +1294,8 @@ def config(ctx: click.Context) -> None:
     Configuration is stored in ~/.config/evalhub/config.yaml and
     supports multiple profiles. Use 'config set' to store values,
     'config get' to read them, 'config list' to see the full
-    profile, and 'config use' to switch profiles.
+    profile, 'config profiles' to list all profiles, and
+    'config use' to switch profiles.
 
     \b
     File-based keys (e.g. mcp_config_file, server_config_file) store
@@ -1443,32 +1444,81 @@ def config_get(ctx: click.Context, key: str, unmask: bool, unfold: bool) -> None
         click.echo(value)
 
 
-@config.command("list")
-@click.pass_context
-def config_list(ctx: click.Context) -> None:
-    """List all configuration values in the active profile.
-
-    \b
-    Shows all key-value pairs and flags any missing required keys.
-
-    \b
-    Examples:
-      evalhub config list
-      evalhub --profile prod config list
-    """
-    profile = ctx.obj.get("profile")
-    data = cfg.load_config()
-    profile_name = profile or cfg.get_active_profile(data)
-    prof = cfg.get_profile(data, profile=profile)
-    click.echo(f"Profile: {profile_name}")
+def _render_profile(
+    name: str,
+    prof: dict[str, object],
+    data: dict[str, object],
+    *,
+    marker: str = "",
+) -> None:
+    """Print a single profile's header, values, and missing-key warning."""
+    click.echo(f"Profile: {name}{marker}")
     if not prof:
         click.echo("  (no configuration values)")
     else:
         for k, v in cfg.mask_mapping(prof).items():
             click.echo(f"  {k}: {v}")
-    missing = cfg.missing_required_keys(data, profile=profile)
+    missing = cfg.missing_required_keys(data, profile=name)
     if missing:
         click.echo(f"\n  Missing required keys: {', '.join(missing)}")
+
+
+@config.command("list")
+@click.option("--all", "show_all", is_flag=True, help="Show all profiles.")
+@click.pass_context
+def config_list(ctx: click.Context, *, show_all: bool = False) -> None:
+    """List configuration values in the active profile.
+
+    \b
+    Shows all key-value pairs and flags any missing required keys.
+    Use --all to show every profile at once.
+
+    \b
+    Examples:
+      evalhub config list
+      evalhub config list --all
+      evalhub --profile prod config list
+    """
+    data = cfg.load_config()
+    active = cfg.get_active_profile(data)
+
+    if show_all:
+        profiles = cfg.list_profiles(data)
+        if not profiles:
+            click.echo("No profiles configured.")
+            return
+        for i, (name, prof) in enumerate(profiles.items()):
+            if i:
+                click.echo()
+            marker = " *" if name == active else ""
+            _render_profile(name, prof, data, marker=marker)
+    else:
+        profile = ctx.obj.get("profile")
+        profile_name = profile or active
+        prof = cfg.get_profile(data, profile=profile)
+        _render_profile(profile_name, prof, data)
+
+
+@config.command("profiles")
+def config_profiles() -> None:
+    """List all available configuration profiles.
+
+    \b
+    Shows every profile name, marking the active one with an asterisk (*).
+
+    \b
+    Examples:
+      evalhub config profiles
+    """
+    data = cfg.load_config()
+    active = cfg.get_active_profile(data)
+    profiles = cfg.list_profiles(data)
+    if not profiles:
+        click.echo("No profiles configured.")
+        return
+    for name in profiles:
+        marker = " *" if name == active else ""
+        click.echo(f"  {name}{marker}")
 
 
 @config.command("use")
@@ -1487,7 +1537,7 @@ def config_use(profile: str) -> None:
       evalhub config use staging
     """
     data = cfg.load_config()
-    profiles = data.get("profiles", {})
+    profiles = cfg.list_profiles(data)
     if profile not in profiles:
         click.echo(
             f"Profile '{profile}' does not exist. Available profiles: "
