@@ -17,6 +17,8 @@ from evalhub.cli.config import (
     OPTIONAL_KEYS,
     REQUIRED_KEYS,
     SENSITIVE_KEYS,
+    create_profile,
+    delete_profile,
     get_active_profile,
     get_profile,
     get_value,
@@ -134,6 +136,23 @@ class TestProfileOperations:
             "profiles": {"prod": {"base_url": "https://prod.example.com"}},
         }
         assert get_profile(data, "prod") == {"base_url": "https://prod.example.com"}
+
+    def test_create_profile(self) -> None:
+        data: dict[str, Any] = {"active_profile": "default", "profiles": {}}
+        create_profile(data, "staging")
+        assert data["profiles"]["staging"] == {}
+
+    def test_delete_profile(self) -> None:
+        data: dict[str, Any] = {
+            "active_profile": "default",
+            "profiles": {
+                "default": {"base_url": "http://localhost"},
+                "staging": {"base_url": "http://staging"},
+            },
+        }
+        delete_profile(data, "staging")
+        assert "staging" not in data["profiles"]
+        assert "default" in data["profiles"]
 
     def test_set_value_creates_profile(self) -> None:
         data: dict[str, Any] = {"active_profile": "default", "profiles": {}}
@@ -381,12 +400,25 @@ class TestConfigUseCommand:
         data = load_config()
         assert data["active_profile"] == "prod"
 
-    def test_use_nonexistent_profile_errors(
+    def test_use_creates_nonexistent_profile(
         self, runner: CliRunner, config_file: Path
     ) -> None:
-        result = runner.invoke(main, ["config", "use", "nonexistent"])
-        assert result.exit_code != 0
-        assert "does not exist" in result.output
+        result = runner.invoke(main, ["config", "use", "newprofile"])
+        assert result.exit_code == 0
+        assert "Created profile 'newprofile'" in result.output
+        data = load_config()
+        assert data["active_profile"] == "newprofile"
+        assert data["profiles"]["newprofile"] == {}
+
+    def test_use_created_profile_shows_in_list_all(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
+        runner.invoke(main, ["config", "set", "base_url", "http://localhost:8080"])
+        runner.invoke(main, ["config", "use", "newprofile"])
+        result = runner.invoke(main, ["config", "list", "--all"])
+        assert result.exit_code == 0
+        assert "Profile: newprofile *" in result.output
+        assert "(no configuration values)" in result.output
 
     def test_use_then_set_uses_new_profile(
         self, runner: CliRunner, config_file: Path
@@ -636,3 +668,82 @@ class TestConfigUnsetCommand:
         assert "profile 'prod'" in result.output
         data = load_config()
         assert "token" not in data["profiles"]["prod"]
+
+
+class TestConfigCreateCommand:
+    def test_create_new_profile(self, runner: CliRunner, config_file: Path) -> None:
+        result = runner.invoke(main, ["config", "create", "staging"])
+        assert result.exit_code == 0
+        assert "Created profile 'staging'" in result.output
+        data = load_config()
+        assert data["profiles"]["staging"] == {}
+
+    def test_create_does_not_switch_active(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
+        runner.invoke(main, ["config", "set", "base_url", "http://localhost:8080"])
+        result = runner.invoke(main, ["config", "create", "staging"])
+        assert result.exit_code == 0
+        data = load_config()
+        assert data["active_profile"] == "default"
+
+    def test_create_existing_profile_errors(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
+        runner.invoke(main, ["config", "set", "base_url", "http://localhost:8080"])
+        result = runner.invoke(main, ["config", "create", "default"])
+        assert result.exit_code != 0
+        assert "already exists" in result.output
+
+    def test_create_shows_in_list_all(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
+        runner.invoke(main, ["config", "set", "base_url", "http://localhost:8080"])
+        runner.invoke(main, ["config", "create", "staging"])
+        result = runner.invoke(main, ["config", "list", "--all"])
+        assert result.exit_code == 0
+        assert "Profile: staging" in result.output
+        assert "(no configuration values)" in result.output
+
+
+class TestConfigDeleteCommand:
+    def test_delete_profile(self, runner: CliRunner, config_file: Path) -> None:
+        runner.invoke(
+            main, ["--profile", "staging", "config", "set", "base_url", "http://s:8080"]
+        )
+        result = runner.invoke(main, ["config", "delete", "staging"])
+        assert result.exit_code == 0
+        assert "Deleted profile 'staging'" in result.output
+        data = load_config()
+        assert "staging" not in data["profiles"]
+
+    def test_delete_nonexistent_profile_errors(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
+        result = runner.invoke(main, ["config", "delete", "nonexistent"])
+        assert result.exit_code != 0
+        assert "does not exist" in result.output
+
+    def test_delete_active_profile_errors(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
+        runner.invoke(main, ["config", "set", "base_url", "http://localhost:8080"])
+        result = runner.invoke(main, ["config", "delete", "default"])
+        assert result.exit_code != 0
+        assert "Cannot delete the active profile" in result.output
+
+    def test_delete_preserves_other_profiles(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
+        runner.invoke(main, ["config", "set", "base_url", "http://localhost:8080"])
+        runner.invoke(
+            main, ["--profile", "staging", "config", "set", "base_url", "http://s:8080"]
+        )
+        runner.invoke(
+            main, ["--profile", "prod", "config", "set", "base_url", "http://p:443"]
+        )
+        runner.invoke(main, ["config", "delete", "staging"])
+        data = load_config()
+        assert "staging" not in data["profiles"]
+        assert "default" in data["profiles"]
+        assert "prod" in data["profiles"]

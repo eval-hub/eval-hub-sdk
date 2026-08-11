@@ -231,6 +231,20 @@ def resolve_component_config_dir(
     return state_dir / profile_name
 
 
+def create_profile(data: dict[str, Any], profile: str) -> dict[str, Any]:
+    """Create an empty profile. Returns the updated data dict."""
+    data.setdefault("profiles", {})[profile] = {}
+    return data
+
+
+def delete_profile(data: dict[str, Any], profile: str) -> dict[str, Any]:
+    """Remove a profile and its file-key storage. Returns the updated data dict."""
+    data.get("profiles", {}).pop(profile, None)
+    for key in FILE_KEYS:
+        remove_file_key(key, profile)
+    return data
+
+
 def set_active_profile(data: dict[str, Any], profile: str) -> dict[str, Any]:
     """Switch the active profile."""
     data["active_profile"] = profile

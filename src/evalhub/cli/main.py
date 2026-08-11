@@ -1295,7 +1295,8 @@ def config(ctx: click.Context) -> None:
     supports multiple profiles. Use 'config set' to store values,
     'config get' to read them, 'config list' to see the full
     profile, 'config list --all' to list all profiles, and
-    'config use' to switch profiles.
+    'config use' to switch profiles, 'config create' to create
+    a new profile, and 'config delete' to remove one.
 
     \b
     File-based keys (e.g. mcp_config_file, server_config_file) store
@@ -1506,8 +1507,7 @@ def config_use(profile: str) -> None:
 
     \b
     Sets the given profile as the default for all subsequent commands.
-    The profile must already exist (create it by setting a value with
-    --profile).
+    If the profile does not exist yet, it is created as an empty profile.
 
     \b
     Examples:
@@ -1516,13 +1516,65 @@ def config_use(profile: str) -> None:
     """
     data = cfg.load_config()
     profiles = cfg.list_profiles(data)
-    if profile not in profiles:
-        click.echo(
-            f"Profile '{profile}' does not exist. Available profiles: "
-            f"{', '.join(profiles) or '(none)'}",
-            err=True,
-        )
-        raise SystemExit(1)
+    created = profile not in profiles
+    if created:
+        cfg.create_profile(data, profile)
     cfg.set_active_profile(data, profile)
     cfg.save_config(data)
-    click.echo(f"Active profile set to '{profile}'")
+    if created:
+        click.echo(f"Created profile '{profile}' and set it as active")
+    else:
+        click.echo(f"Active profile set to '{profile}'")
+
+
+@config.command("create")
+@click.argument("profile")
+def config_create(profile: str) -> None:
+    """Create a new empty configuration profile.
+
+    \b
+    Creates the profile without switching to it.
+    Use 'config use' to switch to it afterwards.
+
+    \b
+    Examples:
+      evalhub config create staging
+      evalhub config create prod
+    """
+    data = cfg.load_config()
+    profiles = cfg.list_profiles(data)
+    if profile in profiles:
+        raise click.ClickException(f"Profile '{profile}' already exists")
+    cfg.create_profile(data, profile)
+    cfg.save_config(data)
+    click.echo(f"Created profile '{profile}'")
+
+
+@config.command("delete")
+@click.argument("profile")
+def config_delete(profile: str) -> None:
+    """Delete a configuration profile.
+
+    \b
+    Removes the profile and any associated file-key data
+    (e.g. stored mcp_config_file, server_config_file).
+    The active profile cannot be deleted.
+
+    \b
+    Examples:
+      evalhub config delete staging
+      evalhub config delete prod
+    """
+    data = cfg.load_config()
+    profiles = cfg.list_profiles(data)
+    if profile not in profiles:
+        raise click.ClickException(f"Profile '{profile}' does not exist")
+    active = cfg.get_active_profile(data)
+    if profile == active:
+        raise click.ClickException(
+            f"Cannot delete the active profile '{profile}'. "
+            f"Switch to another profile first with 'config use'."
+        )
+    cfg.delete_profile(data, profile)
+    cfg.save_config(data)
+    click.echo(f"Deleted profile '{profile}'")
