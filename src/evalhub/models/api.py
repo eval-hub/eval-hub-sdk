@@ -399,7 +399,7 @@ class TestDataRef(BaseModel):
     )
 
     @model_validator(mode="after")
-    def check_exactly_one_source(self) -> "TestDataRef":
+    def check_exactly_one_source(self) -> TestDataRef:
         sources = [s for s in (self.s3, self.pvc, self.git) if s is not None]
         if len(sources) > 1:
             raise ValueError(
@@ -429,10 +429,10 @@ class BenchmarkConfig(BaseModel):
     parameters: dict[str, Any] = Field(
         default_factory=dict, description="Benchmark-specific parameters"
     )
-    primary_score: "PrimaryScore | None" = Field(
+    primary_score: PrimaryScore | None = Field(
         default=None, description="Override the benchmark's primary score metric"
     )
-    pass_criteria: "PassCriteria | None" = Field(
+    pass_criteria: PassCriteria | None = Field(
         default=None, description="Override pass/fail threshold for this benchmark"
     )
     test_data_ref: TestDataRef | None = Field(
@@ -565,7 +565,7 @@ class JobSubmissionRequest(BaseModel):
     )
 
     @model_validator(mode="after")
-    def check_benchmarks_or_collection(self) -> "JobSubmissionRequest":
+    def check_benchmarks_or_collection(self) -> JobSubmissionRequest:
         if self.benchmarks and self.collection:
             raise ValueError("Cannot specify both 'benchmarks' and 'collection'")
         if not self.benchmarks and not self.collection:

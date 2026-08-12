@@ -390,7 +390,10 @@ class TestBenchmarkConfig:
             pass_criteria=PassCriteria(threshold=0.99),
         )
         data = cfg.model_dump(exclude_none=True)
-        assert data["primary_score"] == {"metric": "hellaswag.em", "lower_is_better": False}
+        assert data["primary_score"] == {
+            "metric": "hellaswag.em",
+            "lower_is_better": False,
+        }
         assert data["pass_criteria"] == {"threshold": 0.99}
 
     def test_fields_omitted_when_none(self) -> None:
@@ -403,7 +406,8 @@ class TestBenchmarkConfig:
         """Regression test: per-benchmark overrides must survive YAML→model→dump→server."""
         import yaml
 
-        raw = yaml.safe_load("""
+        raw = yaml.safe_load(
+            """
 name: violations-demo
 model:
   url: http://vllm:8000/v1
@@ -417,7 +421,8 @@ benchmarks:
       threshold: 0.99
     parameters:
       num_examples: 10
-""")
+"""
+        )
         req = JobSubmissionRequest(**raw)
         assert req.benchmarks is not None
         b = req.benchmarks[0]
