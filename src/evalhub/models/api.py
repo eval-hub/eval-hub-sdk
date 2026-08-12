@@ -1,5 +1,7 @@
 """Core API models for the EvalHub SDK common interface."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from enum import Enum
 from typing import Any, cast
@@ -426,6 +428,12 @@ class BenchmarkConfig(BaseModel):
     provider_id: str = Field(..., description="Provider identifier")
     parameters: dict[str, Any] = Field(
         default_factory=dict, description="Benchmark-specific parameters"
+    )
+    primary_score: "PrimaryScore | None" = Field(
+        default=None, description="Override the benchmark's primary score metric"
+    )
+    pass_criteria: "PassCriteria | None" = Field(
+        default=None, description="Override pass/fail threshold for this benchmark"
     )
     test_data_ref: TestDataRef | None = Field(
         default=None, description="Reference to custom external test data"

@@ -30,6 +30,8 @@ from evalhub.models.api import (
     ModelConfig,
     OCIConnectionConfig,
     OCICoordinates,
+    PassCriteria,
+    PrimaryScore,
     ProviderList,
     PVCTestDataRef,
     QueueConfig,
@@ -349,6 +351,85 @@ class TestEffectiveState:
             ],
         )
         assert job.effective_state == JobStatus.PENDING
+
+
+class TestBenchmarkConfig:
+    """Test cases for BenchmarkConfig model — primary_score and pass_criteria overrides."""
+
+    def test_defaults_are_none(self) -> None:
+        cfg = BenchmarkConfig(id="hellaswag", provider_id="lighteval")
+        assert cfg.primary_score is None
+        assert cfg.pass_criteria is None
+
+    def test_primary_score_accepted(self) -> None:
+        cfg = BenchmarkConfig(
+            id="hellaswag",
+            provider_id="lighteval",
+            primary_score=PrimaryScore(metric="hellaswag.em"),
+        )
+        assert cfg.primary_score is not None
+        assert cfg.primary_score.metric == "hellaswag.em"
+        assert cfg.primary_score.lower_is_better is False
+
+    def test_pass_criteria_accepted(self) -> None:
+        cfg = BenchmarkConfig(
+            id="hellaswag",
+            provider_id="lighteval",
+            pass_criteria=PassCriteria(threshold=0.99),
+        )
+        assert cfg.pass_criteria is not None
+        assert cfg.pass_criteria.threshold == 0.99
+
+    def test_both_fields_serialized(self) -> None:
+        """primary_score and pass_criteria must appear in model_dump output so the
+        server receives the per-benchmark threshold override."""
+        cfg = BenchmarkConfig(
+            id="hellaswag",
+            provider_id="lighteval",
+            primary_score=PrimaryScore(metric="hellaswag.em"),
+            pass_criteria=PassCriteria(threshold=0.99),
+        )
+        data = cfg.model_dump(exclude_none=True)
+        assert data["primary_score"] == {"metric": "hellaswag.em", "lower_is_better": False}
+        assert data["pass_criteria"] == {"threshold": 0.99}
+
+    def test_fields_omitted_when_none(self) -> None:
+        cfg = BenchmarkConfig(id="hellaswag", provider_id="lighteval")
+        data = cfg.model_dump(exclude_none=True)
+        assert "primary_score" not in data
+        assert "pass_criteria" not in data
+
+    def test_roundtrip_via_job_submission_request(self) -> None:
+        """Regression test: per-benchmark overrides must survive YAML→model→dump→server."""
+        import yaml
+
+        raw = yaml.safe_load("""
+name: violations-demo
+model:
+  url: http://vllm:8000/v1
+  name: my-model
+benchmarks:
+  - id: hellaswag
+    provider_id: lighteval
+    primary_score:
+      metric: hellaswag.em
+    pass_criteria:
+      threshold: 0.99
+    parameters:
+      num_examples: 10
+""")
+        req = JobSubmissionRequest(**raw)
+        assert req.benchmarks is not None
+        b = req.benchmarks[0]
+        assert b.primary_score is not None
+        assert b.primary_score.metric == "hellaswag.em"
+        assert b.pass_criteria is not None
+        assert b.pass_criteria.threshold == 0.99
+        # Verify the fields survive serialisation (what the CLI sends to the server)
+        payload = req.model_dump(exclude_none=True)
+        bench_payload = payload["benchmarks"][0]
+        assert bench_payload["primary_score"]["metric"] == "hellaswag.em"
+        assert bench_payload["pass_criteria"]["threshold"] == 0.99
 
 
 class TestCollectionRef:
