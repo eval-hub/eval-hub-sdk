@@ -1326,14 +1326,14 @@ class TestPVCTestDataRef:
         assert ref.pvc is None
 
     def test_test_data_ref_rejects_both(self) -> None:
-        with pytest.raises(ValidationError, match="Cannot specify both"):
+        with pytest.raises(ValidationError, match="Cannot specify more than one"):
             TestDataRef(
                 s3=S3TestDataRef(bucket="b", key="k", secret_ref="s"),
                 pvc=PVCTestDataRef(claim_name="my-pvc"),
             )
 
     def test_test_data_ref_rejects_neither(self) -> None:
-        with pytest.raises(ValidationError, match="Must specify either"):
+        with pytest.raises(ValidationError, match="Must specify exactly one"):
             TestDataRef()
 
     def test_pvc_importable_from_models_package(self) -> None:

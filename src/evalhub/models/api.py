@@ -304,20 +304,49 @@ class PVCTestDataRef(BaseModel):
     )
 
 
+class GitTestDataRef(BaseModel):
+    """Git repository source for custom test data.
+
+    The repository is cloned and checked out at ``ref`` into ``/test_data``
+    before the adapter runs. Only HTTP(S) URLs are accepted. When ``secret_ref``
+    is set the URL must use HTTPS so credentials are not sent in the clear.
+    """
+
+    url: str = Field(..., description="Git repository URL (http or https)")
+    ref: str = Field(
+        ...,
+        description="Branch, tag, or full/abbreviated commit SHA to check out",
+    )
+    sub_path: str | None = Field(
+        default=None,
+        description="Optional sub-directory within the repository to expose at /test_data",
+    )
+    secret_ref: str | None = Field(
+        default=None,
+        description="Kubernetes Secret name containing username/password keys for private repos",
+    )
+
+
 class TestDataRef(BaseModel):
-    """Reference to an external test data source. Exactly one of s3 or pvc must be set."""
+    """Reference to an external test data source. Exactly one of s3, pvc, or git must be set."""
 
     s3: S3TestDataRef | None = Field(default=None, description="S3 data source")
     pvc: PVCTestDataRef | None = Field(
         default=None, description="PersistentVolumeClaim data source"
     )
+    git: GitTestDataRef | None = Field(default=None, description="Git repository data source")
+    resolved_sha: str | None = Field(
+        default=None,
+        description="Resolved content identity (e.g. git commit SHA). Server-populated; not accepted on input.",
+    )
 
     @model_validator(mode="after")
     def check_exactly_one_source(self) -> "TestDataRef":
-        if self.s3 and self.pvc:
-            raise ValueError("Cannot specify both 's3' and 'pvc' test data sources")
-        if not self.s3 and not self.pvc:
-            raise ValueError("Must specify either 's3' or 'pvc' test data source")
+        sources = [s for s in (self.s3, self.pvc, self.git) if s is not None]
+        if len(sources) > 1:
+            raise ValueError("Cannot specify more than one test data source (s3, pvc, git)")
+        if len(sources) == 0:
+            raise ValueError("Must specify exactly one test data source (s3, pvc, or git)")
         return self
 
 

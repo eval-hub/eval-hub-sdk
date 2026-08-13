@@ -23,6 +23,7 @@ from evalhub.models import (
     EvaluationExports,
     EvaluationExportsOCI,
     ExperimentConfig,
+    GitTestDataRef,
     JobStatus,
     JobSubmissionRequest,
     ModelAuth,
@@ -311,6 +312,26 @@ def _build_request_from_flags(
     help="Sub-path within the PVC to mount at /test_data (inline flags only).",
 )
 @click.option(
+    "--test-data-git-url",
+    default=None,
+    help="Git repository URL (http/https) for custom test data (inline flags only).",
+)
+@click.option(
+    "--test-data-git-ref",
+    default=None,
+    help="Git branch, tag, or commit SHA to check out (inline flags only).",
+)
+@click.option(
+    "--test-data-git-sub-path",
+    default=None,
+    help="Sub-directory within the repository to expose at /test_data (inline flags only).",
+)
+@click.option(
+    "--test-data-git-secret",
+    default=None,
+    help="Kubernetes Secret name with username/password keys for private git repos (inline flags only).",
+)
+@click.option(
     "--wait", "wait_for", is_flag=True, default=False, help="Block until job completes."
 )
 @click.option(
@@ -359,6 +380,10 @@ def eval_run(
     test_data_s3_secret: str | None,
     test_data_pvc_claim_name: str | None,
     test_data_pvc_sub_path: str | None,
+    test_data_git_url: str | None,
+    test_data_git_ref: str | None,
+    test_data_git_sub_path: str | None,
+    test_data_git_secret: str | None,
     wait_for: bool,
     watch_for: bool,
     timeout: float | None,
@@ -400,6 +425,13 @@ def eval_run(
       evalhub eval run --name my-eval --model-url http://vllm:8000/v1 \\
           --model-name llama3 --provider lm_evaluation_harness -b your_benchmark_id \\
           --test-data-pvc-claim-name my-datasets-pvc --test-data-pvc-sub-path staging
+      evalhub eval run --name my-eval --model-url http://vllm:8000/v1 \\
+          --model-name llama3 --provider lm_evaluation_harness -b your_benchmark_id \\
+          --test-data-git-url https://github.com/org/benchmarks.git --test-data-git-ref main
+      evalhub eval run --name my-eval --model-url http://vllm:8000/v1 \\
+          --model-name llama3 --provider lm_evaluation_harness -b your_benchmark_id \\
+          --test-data-git-url https://github.com/org/benchmarks.git --test-data-git-ref v1.0 \\
+          --test-data-git-sub-path arc_easy --test-data-git-secret my-git-credentials
     """
     if wait_for and watch_for:
         raise click.UsageError("--wait and --watch are mutually exclusive.")
@@ -461,9 +493,26 @@ def eval_run(
             raise click.ClickException(
                 "--test-data-pvc-sub-path requires --test-data-pvc-claim-name."
             )
-        if any(s3_flags) and test_data_pvc_claim_name:
+        if test_data_git_url and not test_data_git_ref:
             raise click.ClickException(
-                "Cannot specify both S3 and PVC test data sources. Use one or the other."
+                "--test-data-git-url requires --test-data-git-ref."
+            )
+        if test_data_git_ref and not test_data_git_url:
+            raise click.ClickException(
+                "--test-data-git-ref requires --test-data-git-url."
+            )
+        if (test_data_git_sub_path or test_data_git_secret) and not test_data_git_url:
+            raise click.ClickException(
+                "--test-data-git-sub-path and --test-data-git-secret require --test-data-git-url."
+            )
+        active_sources = sum([
+            bool(all(s3_flags)),
+            bool(test_data_pvc_claim_name),
+            bool(test_data_git_url),
+        ])
+        if active_sources > 1:
+            raise click.ClickException(
+                "Cannot specify more than one test data source (s3, pvc, git). Use only one."
             )
         test_data_ref: TestDataRef | None = None
         if all(s3_flags):
@@ -479,6 +528,15 @@ def eval_run(
                 pvc=PVCTestDataRef(
                     claim_name=test_data_pvc_claim_name,
                     sub_path=test_data_pvc_sub_path,
+                )
+            )
+        elif test_data_git_url:
+            test_data_ref = TestDataRef(
+                git=GitTestDataRef(
+                    url=cast(str, test_data_git_url),
+                    ref=cast(str, test_data_git_ref),
+                    sub_path=test_data_git_sub_path,
+                    secret_ref=test_data_git_secret,
                 )
             )
         request = _build_request_from_flags(

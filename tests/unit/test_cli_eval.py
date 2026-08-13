@@ -861,7 +861,7 @@ class TestEvalRun:
                 ],
             )
         assert result.exit_code != 0
-        assert "Cannot specify both S3 and PVC" in result.output
+        assert "Cannot specify more than one test data source" in result.output
 
     def test_run_pvc_sub_path_requires_claim_name(
         self, runner: CliRunner, config_file: Path, mock_client: MagicMock
