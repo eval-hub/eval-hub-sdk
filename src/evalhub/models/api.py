@@ -2,11 +2,19 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serializer, model_validator
-from pydantic import SerializationInfo
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializationInfo,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
+from pydantic.functional_serializers import SerializerFunctionWrapHandler
 
 OCI_ARTIFACT_TYPE = "application/vnd.eval-hub.github.io"
 
@@ -369,8 +377,10 @@ class TestDataRef(BaseModel):
         return self
 
     @model_serializer(mode="wrap")
-    def _serialize(self, handler: object, info: SerializationInfo) -> dict:
-        data = handler(self)  # type: ignore[operator]
+    def _serialize(
+        self, handler: SerializerFunctionWrapHandler, info: SerializationInfo
+    ) -> dict[str, Any]:
+        data = cast(dict[str, Any], handler(self))
         if info.context and info.context.get("for_submission"):
             data.pop("resolved_sha", None)
         return data
