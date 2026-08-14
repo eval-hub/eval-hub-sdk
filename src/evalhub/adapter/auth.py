@@ -38,6 +38,8 @@ def _resolve_auth_dir() -> Path:
 
 
 def _read_key_from_dir(auth_dir: Path, key_name: str) -> str | None:
+    if not key_name or "/" in key_name or "\\" in key_name or key_name in (".", ".."):
+        return None
     path = auth_dir / key_name
     if not path.is_file():
         return None

@@ -171,6 +171,33 @@ class TestReadModelAuthKey:
 
         assert read_model_auth_key("api-key") == "key-with-whitespace"
 
+    @pytest.mark.parametrize(
+        "key_name",
+        [
+            "/etc/passwd",
+            "../secret",
+            "../../etc/shadow",
+            "subdir/file",
+            "a\\b",
+            ".",
+            "..",
+        ],
+    )
+    def test_rejects_path_traversal(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        key_name: str,
+    ) -> None:
+        monkeypatch.setenv("EVALHUB_MODE", "local")
+        auth_dir = tmp_path / "model-auth"
+        auth_dir.mkdir()
+        spec = _make_job_spec(str(auth_dir))
+        job_json = _write_job_json(tmp_path, spec)
+        monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(job_json))
+
+        assert read_model_auth_key(key_name) is None
+
     def test_backward_compat_no_env_var(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
