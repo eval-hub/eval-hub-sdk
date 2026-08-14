@@ -693,7 +693,9 @@ class TestJobSubmitGitDataSource:
         test_data_ref = body["benchmarks"][0].get("test_data_ref", {})
         git = test_data_ref.get("git", {})
 
-        assert "resolved_sha" not in test_data_ref, "resolved_sha must be stripped on submission"
+        assert (
+            "resolved_sha" not in test_data_ref
+        ), "resolved_sha must be stripped on submission"
         assert git.get("url") == "https://github.com/example/dataset.git"
         assert git.get("ref") == "main"
         assert git.get("sub_path") == "data/"
@@ -718,7 +720,9 @@ class TestJobSubmitGitDataSource:
         test_data_ref = body["benchmarks"][0].get("test_data_ref", {})
         git = test_data_ref.get("git", {})
 
-        assert "resolved_sha" not in test_data_ref, "resolved_sha must be stripped on submission"
+        assert (
+            "resolved_sha" not in test_data_ref
+        ), "resolved_sha must be stripped on submission"
         assert git.get("url") == "https://github.com/example/dataset.git"
         assert git.get("ref") == "main"
         assert git.get("sub_path") == "data/"
