@@ -351,8 +351,7 @@ class TestDataRef(BaseModel):
     )
     resolved_sha: str | None = Field(
         default=None,
-        exclude=True,
-        description="Resolved content identity (e.g. git commit SHA). Server-populated; excluded from submissions.",
+        description="Resolved content identity (e.g. git commit SHA). Server-populated; rejected by the server on job create.",
     )
 
     @model_validator(mode="after")

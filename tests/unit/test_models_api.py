@@ -1407,21 +1407,13 @@ class TestGitTestDataRef:
         assert ref.s3 is None
         assert ref.pvc is None
 
-    def test_resolved_sha_excluded_from_model_dump(self) -> None:
+    def test_resolved_sha_visible_in_response(self) -> None:
         ref = TestDataRef(
             git=GitTestDataRef(url="https://github.com/org/repo.git", ref="main"),
-            resolved_sha="abc123",
+            resolved_sha="abc123def456",
         )
         data = ref.model_dump(exclude_none=True)
-        assert "resolved_sha" not in data
-
-    def test_resolved_sha_excluded_even_when_set(self) -> None:
-        ref = TestDataRef(
-            git=GitTestDataRef(url="https://github.com/org/repo.git", ref="main"),
-            resolved_sha="attacker-controlled-sha",
-        )
-        payload = ref.model_dump()
-        assert "resolved_sha" not in payload
+        assert data["resolved_sha"] == "abc123def456"
 
     def test_git_importable_from_models_package(self) -> None:
         from evalhub.models import GitTestDataRef as Imported
