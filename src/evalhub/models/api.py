@@ -326,6 +326,17 @@ class GitTestDataRef(BaseModel):
         description="Kubernetes Secret name containing username/password keys for private repos",
     )
 
+    @model_validator(mode="after")
+    def check_url_scheme(self) -> "GitTestDataRef":
+        scheme = self.url.lower().split("://", 1)[0] if "://" in self.url else ""
+        if scheme not in ("http", "https"):
+            raise ValueError("git url must use http or https scheme")
+        if self.secret_ref and scheme != "https":
+            raise ValueError(
+                "secret_ref requires an https URL to avoid sending credentials in the clear"
+            )
+        return self
+
 
 class TestDataRef(BaseModel):
     """Reference to an external test data source. Exactly one of s3, pvc, or git must be set."""
@@ -337,7 +348,8 @@ class TestDataRef(BaseModel):
     git: GitTestDataRef | None = Field(default=None, description="Git repository data source")
     resolved_sha: str | None = Field(
         default=None,
-        description="Resolved content identity (e.g. git commit SHA). Server-populated; not accepted on input.",
+        exclude=True,
+        description="Resolved content identity (e.g. git commit SHA). Server-populated; excluded from submissions.",
     )
 
     @model_validator(mode="after")
