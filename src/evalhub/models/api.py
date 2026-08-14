@@ -61,6 +61,35 @@ class JobPhase(str, Enum):
     COMPLETED = "completed"
 
 
+class ResultType(str, Enum):
+    """Declared result type for a named metric.
+
+    Matches the Go server's ResultType enum. Adapters declare this in their
+    YAML configuration or programmatically via ``JobResults.metrics_schema``.
+    The server uses it to drive result display, comparisons, and aggregation.
+    """
+
+    NUMERIC = "numeric"
+    CATEGORICAL = "categorical"
+    ARRAY_ORDERED = "array_ordered"
+    ARRAY_UNORDERED = "array_unordered"
+    TIME_SERIES = "time_series"
+
+
+class MetricSchema(BaseModel):
+    """Declared type annotation for a single named metric.
+
+    Mirrors the Go server's ``MetricSchema`` struct. A list of these is sent
+    alongside ``metrics`` in the terminal status event so the server knows how
+    to interpret each value.
+    """
+
+    name: str = Field(
+        ..., description="Metric name, must match a key in the metrics map"
+    )
+    type: ResultType = Field(..., description="Declared result type for this metric")
+
+
 class ErrorInfo(BaseModel):
     """Error information with message and code.
 
@@ -260,6 +289,10 @@ class BenchmarkResult(BaseModel):
     benchmark_index: int | None = Field(default=None, description="Benchmark index")
     metrics: dict[str, Any] = Field(
         default_factory=dict, description="Benchmark metrics"
+    )
+    metrics_schema: list[MetricSchema] | None = Field(
+        default=None,
+        description="Declared result types for each metric. Server-populated from the terminal status event.",
     )
     artifacts: dict[str, Any] = Field(
         default_factory=dict, description="Benchmark artifacts"
