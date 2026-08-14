@@ -2,9 +2,19 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, cast
+from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializationInfo,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
+from pydantic.functional_serializers import SerializerFunctionWrapHandler
 
 OCI_ARTIFACT_TYPE = "application/vnd.eval-hub.github.io"
 
@@ -304,21 +314,76 @@ class PVCTestDataRef(BaseModel):
     )
 
 
+class GitTestDataRef(BaseModel):
+    """Git repository source for custom test data.
+
+    The repository is cloned and checked out at ``ref`` into ``/test_data``
+    before the adapter runs. Only HTTP(S) URLs are accepted. When ``secret_ref``
+    is set the URL must use HTTPS so credentials are not sent in the clear.
+    """
+
+    url: str = Field(..., description="Git repository URL (http or https)")
+    ref: str = Field(
+        ...,
+        description="Branch, tag, or full/abbreviated commit SHA to check out",
+    )
+    sub_path: str | None = Field(
+        default=None,
+        description="Optional sub-directory within the repository to expose at /test_data",
+    )
+    secret_ref: str | None = Field(
+        default=None,
+        description="Kubernetes Secret name containing username/password keys for private repos",
+    )
+
+    @model_validator(mode="after")
+    def check_url_scheme(self) -> "GitTestDataRef":
+        parsed_url = urlsplit(self.url)
+        if parsed_url.scheme not in ("http", "https") or not parsed_url.hostname:
+            raise ValueError("git url must use http or https scheme and include a host")
+        if self.secret_ref and parsed_url.scheme != "https":
+            raise ValueError(
+                "secret_ref requires an https URL to avoid sending credentials in the clear"
+            )
+        return self
+
+
 class TestDataRef(BaseModel):
-    """Reference to an external test data source. Exactly one of s3 or pvc must be set."""
+    """Reference to an external test data source. Exactly one of s3, pvc, or git must be set."""
 
     s3: S3TestDataRef | None = Field(default=None, description="S3 data source")
     pvc: PVCTestDataRef | None = Field(
         default=None, description="PersistentVolumeClaim data source"
     )
+    git: GitTestDataRef | None = Field(
+        default=None, description="Git repository data source"
+    )
+    resolved_sha: str | None = Field(
+        default=None,
+        description="Resolved content identity (e.g. git commit SHA). Server-populated; stripped from submission payloads.",
+    )
 
     @model_validator(mode="after")
     def check_exactly_one_source(self) -> "TestDataRef":
-        if self.s3 and self.pvc:
-            raise ValueError("Cannot specify both 's3' and 'pvc' test data sources")
-        if not self.s3 and not self.pvc:
-            raise ValueError("Must specify either 's3' or 'pvc' test data source")
+        sources = [s for s in (self.s3, self.pvc, self.git) if s is not None]
+        if len(sources) > 1:
+            raise ValueError(
+                "Cannot specify more than one test data source (s3, pvc, git)"
+            )
+        if len(sources) == 0:
+            raise ValueError(
+                "Must specify exactly one test data source (s3, pvc, or git)"
+            )
         return self
+
+    @model_serializer(mode="wrap")
+    def _serialize(
+        self, handler: SerializerFunctionWrapHandler, info: SerializationInfo
+    ) -> dict[str, Any]:
+        data = cast(dict[str, Any], handler(self))
+        if info.context and info.context.get("for_submission"):
+            data.pop("resolved_sha", None)
+        return data
 
 
 class BenchmarkConfig(BaseModel):

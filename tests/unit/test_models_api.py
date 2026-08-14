@@ -21,6 +21,7 @@ from evalhub.models.api import (
     EvaluationResult,
     EvaluationStatus,
     FrameworkInfo,
+    GitTestDataRef,
     HealthResponse,
     JobsList,
     JobStatus,
@@ -1326,14 +1327,14 @@ class TestPVCTestDataRef:
         assert ref.pvc is None
 
     def test_test_data_ref_rejects_both(self) -> None:
-        with pytest.raises(ValidationError, match="Cannot specify both"):
+        with pytest.raises(ValidationError, match="Cannot specify more than one"):
             TestDataRef(
                 s3=S3TestDataRef(bucket="b", key="k", secret_ref="s"),
                 pvc=PVCTestDataRef(claim_name="my-pvc"),
             )
 
     def test_test_data_ref_rejects_neither(self) -> None:
-        with pytest.raises(ValidationError, match="Must specify either"):
+        with pytest.raises(ValidationError, match="Must specify exactly one"):
             TestDataRef()
 
     def test_pvc_importable_from_models_package(self) -> None:
@@ -1352,3 +1353,84 @@ class TestPVCTestDataRef:
         data = cfg.model_dump(exclude_none=True)
         assert data["test_data_ref"]["pvc"]["claim_name"] == "my-pvc"
         assert data["test_data_ref"]["pvc"]["sub_path"] == "staging"
+
+
+class TestGitTestDataRef:
+    """Tests for GitTestDataRef and TestDataRef git support."""
+
+    def test_git_ref_basic(self) -> None:
+        ref = GitTestDataRef(url="https://github.com/org/repo.git", ref="main")
+        assert ref.url == "https://github.com/org/repo.git"
+        assert ref.ref == "main"
+        assert ref.sub_path is None
+        assert ref.secret_ref is None
+
+    def test_git_ref_with_all_fields(self) -> None:
+        ref = GitTestDataRef(
+            url="https://github.com/org/repo.git",
+            ref="v1.0",
+            sub_path="arc_easy",
+            secret_ref="my-git-secret",
+        )
+        assert ref.sub_path == "arc_easy"
+        assert ref.secret_ref == "my-git-secret"
+
+    def test_git_ref_http_without_credentials_allowed(self) -> None:
+        ref = GitTestDataRef(url="http://github.com/org/repo.git", ref="main")
+        assert ref.url.startswith("http://")
+
+    def test_git_ref_rejects_non_http_scheme(self) -> None:
+        with pytest.raises(ValidationError, match="http or https scheme"):
+            GitTestDataRef(url="git@github.com:org/repo.git", ref="main")
+
+    def test_git_ref_rejects_hostless_https_url(self) -> None:
+        with pytest.raises(ValidationError, match="include a host"):
+            GitTestDataRef(url="https://", ref="main")
+
+    def test_git_ref_rejects_hostless_http_url(self) -> None:
+        with pytest.raises(ValidationError, match="include a host"):
+            GitTestDataRef(url="http://", ref="main")
+
+    def test_git_ref_rejects_http_with_secret_ref(self) -> None:
+        with pytest.raises(ValidationError, match="https URL"):
+            GitTestDataRef(
+                url="http://github.com/org/repo.git",
+                ref="main",
+                secret_ref="my-secret",
+            )
+
+    def test_test_data_ref_with_git(self) -> None:
+        ref = TestDataRef(
+            git=GitTestDataRef(url="https://github.com/org/repo.git", ref="main")
+        )
+        assert ref.git is not None
+        assert ref.s3 is None
+        assert ref.pvc is None
+
+    def test_resolved_sha_visible_in_response(self) -> None:
+        ref = TestDataRef(
+            git=GitTestDataRef(url="https://github.com/org/repo.git", ref="main"),
+            resolved_sha="abc123def456",
+        )
+        data = ref.model_dump(exclude_none=True)
+        assert data["resolved_sha"] == "abc123def456"
+
+    def test_resolved_sha_stripped_from_submission_payload(self) -> None:
+        ref = TestDataRef(
+            git=GitTestDataRef(url="https://github.com/org/repo.git", ref="main"),
+            resolved_sha="abc123def456",
+        )
+        data = ref.model_dump(exclude_none=True, context={"for_submission": True})
+        assert "resolved_sha" not in data
+
+    def test_resolved_sha_absent_means_not_in_dump(self) -> None:
+        ref = TestDataRef(
+            git=GitTestDataRef(url="https://github.com/org/repo.git", ref="main"),
+        )
+        data = ref.model_dump(exclude_none=True, context={"for_submission": True})
+        assert "resolved_sha" not in data
+
+    def test_git_importable_from_models_package(self) -> None:
+        from evalhub.models import GitTestDataRef as Imported
+
+        assert Imported is GitTestDataRef

@@ -36,6 +36,7 @@ from evalhub.models.api import (
     EvaluationExports,
     EvaluationExportsOCI,
     EvaluationJob,
+    GitTestDataRef,
     JobStatus,
     JobSubmissionRequest,
     ModelConfig,
@@ -44,6 +45,7 @@ from evalhub.models.api import (
     Provider,
     Resource,
     ScoreRange,
+    TestDataRef,
 )
 
 pytestmark = pytest.mark.unit
@@ -627,3 +629,100 @@ class TestProvidersListFiltering:
                 result = client.providers.list(target_type="model")
         ids = [p.resource.id for p in result]
         assert "ragas" not in ids
+
+
+def _make_git_submission_request() -> JobSubmissionRequest:
+    """Build a JobSubmissionRequest with a git test data source and a server-populated resolved_sha."""
+    return JobSubmissionRequest(
+        name="git-data-eval",
+        model=ModelConfig(url="http://localhost:8000/v1", name="test-model"),
+        benchmarks=[
+            BenchmarkConfig(
+                id="mmlu",
+                provider_id="lm_eval",
+                parameters={},
+                test_data_ref=TestDataRef(
+                    git=GitTestDataRef(
+                        url="https://github.com/example/dataset.git",
+                        ref="main",
+                        sub_path="data/",
+                    ),
+                    resolved_sha="abc123def456",
+                ),
+            )
+        ],
+    )
+
+
+def _make_mock_job_response() -> Mock:
+    mock_response = Mock()
+    mock_response.json.return_value = {
+        "resource": {
+            "id": "job_git_1",
+            "tenant": "default",
+            "created_at": "2024-01-01T12:00:00Z",
+            "updated_at": "2024-01-01T12:00:00Z",
+        },
+        "name": "git-data-eval",
+        "status": {"state": JobStatus.PENDING.value},
+        "model": {"url": "http://localhost:8000/v1", "name": "test-model"},
+        "benchmarks": [{"id": "mmlu", "provider_id": "lm_eval", "parameters": {}}],
+    }
+    return mock_response
+
+
+class TestJobSubmitGitDataSource:
+    """Tests that submit calls strip resolved_sha but preserve git fields."""
+
+    @pytest.mark.skipif(
+        EVALHUB_TEST_BASE_URL is not None,
+        reason="Skipping in real server mode - would create actual jobs",
+    )
+    def test_sync_submit_omits_resolved_sha_preserves_git_fields(self) -> None:
+        with SyncEvalHubClient() as client:
+            captured: dict[str, Any] = {}
+
+            def fake_post(path: str, *, json: Any = None, **kwargs: Any) -> Mock:
+                captured["body"] = json
+                return _make_mock_job_response()
+
+            with patch.object(client, "_request_post", side_effect=fake_post):
+                client.jobs.submit(_make_git_submission_request())
+
+        body = captured["body"]
+        test_data_ref = body["benchmarks"][0].get("test_data_ref", {})
+        git = test_data_ref.get("git", {})
+
+        assert (
+            "resolved_sha" not in test_data_ref
+        ), "resolved_sha must be stripped on submission"
+        assert git.get("url") == "https://github.com/example/dataset.git"
+        assert git.get("ref") == "main"
+        assert git.get("sub_path") == "data/"
+
+    @pytest.mark.skipif(
+        EVALHUB_TEST_BASE_URL is not None,
+        reason="Skipping in real server mode - would create actual jobs",
+    )
+    @pytest.mark.asyncio
+    async def test_async_submit_omits_resolved_sha_preserves_git_fields(self) -> None:
+        async with AsyncEvalHubClient() as client:
+            captured: dict[str, Any] = {}
+
+            def fake_post(path: str, *, json: Any = None, **kwargs: Any) -> Mock:
+                captured["body"] = json
+                return _make_mock_job_response()
+
+            with patch.object(client, "_request_post", side_effect=fake_post):
+                await client.jobs.submit(_make_git_submission_request())
+
+        body = captured["body"]
+        test_data_ref = body["benchmarks"][0].get("test_data_ref", {})
+        git = test_data_ref.get("git", {})
+
+        assert (
+            "resolved_sha" not in test_data_ref
+        ), "resolved_sha must be stripped on submission"
+        assert git.get("url") == "https://github.com/example/dataset.git"
+        assert git.get("ref") == "main"
+        assert git.get("sub_path") == "data/"

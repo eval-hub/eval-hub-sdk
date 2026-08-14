@@ -29,6 +29,7 @@ from .api import (
     ExperimentConfig,
     ExperimentTag,
     FrameworkInfo,
+    GitTestDataRef,
     HealthResponse,
     # Status and metadata
     JobPhase,
@@ -88,6 +89,7 @@ __all__ = [
     "Benchmark",
     "BenchmarkConfig",
     "BenchmarkInfo",
+    "GitTestDataRef",
     "PVCTestDataRef",
     "S3TestDataRef",
     "TestDataRef",
