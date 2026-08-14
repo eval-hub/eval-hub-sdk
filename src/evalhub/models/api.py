@@ -3,6 +3,7 @@
 from datetime import datetime
 from enum import Enum
 from typing import Any
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -328,10 +329,10 @@ class GitTestDataRef(BaseModel):
 
     @model_validator(mode="after")
     def check_url_scheme(self) -> "GitTestDataRef":
-        scheme = self.url.lower().split("://", 1)[0] if "://" in self.url else ""
-        if scheme not in ("http", "https"):
-            raise ValueError("git url must use http or https scheme")
-        if self.secret_ref and scheme != "https":
+        parsed_url = urlsplit(self.url)
+        if parsed_url.scheme not in ("http", "https") or not parsed_url.hostname:
+            raise ValueError("git url must use http or https scheme and include a host")
+        if self.secret_ref and parsed_url.scheme != "https":
             raise ValueError(
                 "secret_ref requires an https URL to avoid sending credentials in the clear"
             )

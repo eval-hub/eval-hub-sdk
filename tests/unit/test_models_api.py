@@ -1383,6 +1383,14 @@ class TestGitTestDataRef:
         with pytest.raises(ValidationError, match="http or https scheme"):
             GitTestDataRef(url="git@github.com:org/repo.git", ref="main")
 
+    def test_git_ref_rejects_hostless_https_url(self) -> None:
+        with pytest.raises(ValidationError, match="include a host"):
+            GitTestDataRef(url="https://", ref="main")
+
+    def test_git_ref_rejects_hostless_http_url(self) -> None:
+        with pytest.raises(ValidationError, match="include a host"):
+            GitTestDataRef(url="http://", ref="main")
+
     def test_git_ref_rejects_http_with_secret_ref(self) -> None:
         with pytest.raises(ValidationError, match="https URL"):
             GitTestDataRef(
