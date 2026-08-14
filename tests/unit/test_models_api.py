@@ -1415,6 +1415,21 @@ class TestGitTestDataRef:
         data = ref.model_dump(exclude_none=True)
         assert data["resolved_sha"] == "abc123def456"
 
+    def test_resolved_sha_stripped_from_submission_payload(self) -> None:
+        ref = TestDataRef(
+            git=GitTestDataRef(url="https://github.com/org/repo.git", ref="main"),
+            resolved_sha="abc123def456",
+        )
+        data = ref.model_dump(exclude_none=True, context={"for_submission": True})
+        assert "resolved_sha" not in data
+
+    def test_resolved_sha_absent_means_not_in_dump(self) -> None:
+        ref = TestDataRef(
+            git=GitTestDataRef(url="https://github.com/org/repo.git", ref="main"),
+        )
+        data = ref.model_dump(exclude_none=True, context={"for_submission": True})
+        assert "resolved_sha" not in data
+
     def test_git_importable_from_models_package(self) -> None:
         from evalhub.models import GitTestDataRef as Imported
 

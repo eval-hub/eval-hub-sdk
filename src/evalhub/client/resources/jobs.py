@@ -56,7 +56,7 @@ class AsyncJobsResource:
         """
         response = await self._client._request_post(
             "/evaluations/jobs",
-            json=request.model_dump(exclude_none=True),
+            json=request.model_dump(exclude_none=True, context={"for_submission": True}),
             tenant=tenant,
         )
         return EvaluationJob(**response.json())
@@ -306,7 +306,7 @@ class SyncJobsResource:
         """
         response = self._client._request_post(
             "/evaluations/jobs",
-            json=request.model_dump(exclude_none=True),
+            json=request.model_dump(exclude_none=True, context={"for_submission": True}),
             tenant=tenant,
         )
         return EvaluationJob(**response.json())

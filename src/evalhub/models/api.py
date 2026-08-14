@@ -5,7 +5,8 @@ from enum import Enum
 from typing import Any
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serializer, model_validator
+from pydantic import SerializationInfo
 
 OCI_ARTIFACT_TYPE = "application/vnd.eval-hub.github.io"
 
@@ -351,7 +352,7 @@ class TestDataRef(BaseModel):
     )
     resolved_sha: str | None = Field(
         default=None,
-        description="Resolved content identity (e.g. git commit SHA). Server-populated; rejected by the server on job create.",
+        description="Resolved content identity (e.g. git commit SHA). Server-populated; stripped from submission payloads.",
     )
 
     @model_validator(mode="after")
@@ -366,6 +367,13 @@ class TestDataRef(BaseModel):
                 "Must specify exactly one test data source (s3, pvc, or git)"
             )
         return self
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler: object, info: SerializationInfo) -> dict:
+        data = handler(self)  # type: ignore[operator]
+        if info.context and info.context.get("for_submission"):
+            data.pop("resolved_sha", None)
+        return data
 
 
 class BenchmarkConfig(BaseModel):
