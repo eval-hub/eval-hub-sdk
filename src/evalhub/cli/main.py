@@ -505,11 +505,13 @@ def eval_run(
             raise click.ClickException(
                 "--test-data-git-sub-path and --test-data-git-secret require --test-data-git-url."
             )
-        active_sources = sum([
-            bool(all(s3_flags)),
-            bool(test_data_pvc_claim_name),
-            bool(test_data_git_url),
-        ])
+        active_sources = sum(
+            [
+                bool(all(s3_flags)),
+                bool(test_data_pvc_claim_name),
+                bool(test_data_git_url),
+            ]
+        )
         if active_sources > 1:
             raise click.ClickException(
                 "Cannot specify more than one test data source (s3, pvc, git). Use only one."
@@ -533,7 +535,7 @@ def eval_run(
         elif test_data_git_url:
             test_data_ref = TestDataRef(
                 git=GitTestDataRef(
-                    url=cast(str, test_data_git_url),
+                    url=test_data_git_url,
                     ref=cast(str, test_data_git_ref),
                     sub_path=test_data_git_sub_path,
                     secret_ref=test_data_git_secret,

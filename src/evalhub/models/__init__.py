@@ -18,7 +18,6 @@ from .api import (
     ErrorResponse,
     EvaluationExports,
     EvaluationExportsOCI,
-    GitTestDataRef,
     EvaluationJob,
     EvaluationJobResource,
     EvaluationJobResults,
@@ -30,6 +29,7 @@ from .api import (
     ExperimentConfig,
     ExperimentTag,
     FrameworkInfo,
+    GitTestDataRef,
     HealthResponse,
     # Status and metadata
     JobPhase,

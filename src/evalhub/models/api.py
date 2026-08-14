@@ -346,7 +346,9 @@ class TestDataRef(BaseModel):
     pvc: PVCTestDataRef | None = Field(
         default=None, description="PersistentVolumeClaim data source"
     )
-    git: GitTestDataRef | None = Field(default=None, description="Git repository data source")
+    git: GitTestDataRef | None = Field(
+        default=None, description="Git repository data source"
+    )
     resolved_sha: str | None = Field(
         default=None,
         exclude=True,
@@ -357,9 +359,13 @@ class TestDataRef(BaseModel):
     def check_exactly_one_source(self) -> "TestDataRef":
         sources = [s for s in (self.s3, self.pvc, self.git) if s is not None]
         if len(sources) > 1:
-            raise ValueError("Cannot specify more than one test data source (s3, pvc, git)")
+            raise ValueError(
+                "Cannot specify more than one test data source (s3, pvc, git)"
+            )
         if len(sources) == 0:
-            raise ValueError("Must specify exactly one test data source (s3, pvc, or git)")
+            raise ValueError(
+                "Must specify exactly one test data source (s3, pvc, or git)"
+            )
         return self
 
 

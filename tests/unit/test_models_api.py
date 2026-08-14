@@ -21,6 +21,7 @@ from evalhub.models.api import (
     EvaluationResult,
     EvaluationStatus,
     FrameworkInfo,
+    GitTestDataRef,
     HealthResponse,
     JobsList,
     JobStatus,
@@ -29,7 +30,6 @@ from evalhub.models.api import (
     OCIConnectionConfig,
     OCICoordinates,
     ProviderList,
-    GitTestDataRef,
     PVCTestDataRef,
     QueueConfig,
     S3TestDataRef,
@@ -1400,7 +1400,9 @@ class TestGitTestDataRef:
             )
 
     def test_test_data_ref_with_git(self) -> None:
-        ref = TestDataRef(git=GitTestDataRef(url="https://github.com/org/repo.git", ref="main"))
+        ref = TestDataRef(
+            git=GitTestDataRef(url="https://github.com/org/repo.git", ref="main")
+        )
         assert ref.git is not None
         assert ref.s3 is None
         assert ref.pvc is None
