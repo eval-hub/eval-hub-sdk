@@ -147,23 +147,32 @@ def test_server_run_foreground(
     assert "-configdir" in cmd
 
 
+@patch("evalhub.cli._process.subprocess.run")
 @patch(
     "evalhub.cli.server_cmd.find_binary",
     return_value="/usr/bin/eval-hub-server",
 )
-def test_server_run_no_config_errors(
+def test_server_run_generates_default_config_when_missing(
     mock_find: MagicMock,
+    mock_run: MagicMock,
     runner: CliRunner,
     tmp_path: Path,
     config_file: Path,
 ) -> None:
     _seed_profile(config_file)
+    mock_run.return_value = MagicMock(returncode=0)
 
     with patch("evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path):
         result = runner.invoke(main, ["server", "run"])
 
-    assert result.exit_code != 0
-    assert "No server config found" in result.output
+    assert result.exit_code == 0, result.output
+    assert "Using default server config" in result.output
+
+    generated = tmp_path / "default" / "config.yaml"
+    assert generated.exists()
+    loaded = yaml.safe_load(generated.read_text())
+    assert loaded["service"]["port"] == 8080
+    assert loaded["database"]["driver"] == "sqlite"
 
 
 def test_server_run_binary_not_found(
@@ -358,25 +367,42 @@ def test_server_start_tls_uses_https_scheme(
     mock_healthy.assert_called_once_with(8080, 30.0, tls=True)
 
 
+@patch("evalhub.cli.server_cmd._wait_for_healthy", return_value=True)
+@patch("evalhub.cli._process.subprocess.Popen")
 @patch(
     "evalhub.cli.server_cmd.find_binary",
     return_value="/usr/bin/eval-hub-server",
 )
-def test_server_start_no_config_errors(
+def test_server_start_generates_default_config_when_missing(
     mock_find: MagicMock,
+    mock_popen: MagicMock,
+    mock_healthy: MagicMock,
     runner: CliRunner,
     tmp_path: Path,
     config_file: Path,
 ) -> None:
     _seed_profile(config_file)
 
+    mock_proc = MagicMock()
+    mock_proc.pid = 12345
+    mock_proc.poll.return_value = None
+    mock_popen.return_value = mock_proc
+
+    pid_file = tmp_path / "pid"
     with patch("evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path), patch(
-        "evalhub.cli.server_cmd.PID_FILE", tmp_path / "pid"
+        "evalhub.cli.server_cmd.PID_FILE", pid_file
     ), patch("evalhub.cli.server_cmd.LOG_FILE", tmp_path / "server.log"):
         result = runner.invoke(main, ["server", "start"])
 
-    assert result.exit_code != 0
-    assert "No server config found" in result.output
+    assert result.exit_code == 0, result.output
+    assert "Using default server config" in result.output
+    assert "12345" in result.output
+
+    generated = tmp_path / "default" / "config.yaml"
+    assert generated.exists()
+    loaded = yaml.safe_load(generated.read_text())
+    assert loaded["service"]["port"] == 8080
+    assert loaded["database"]["driver"] == "sqlite"
 
 
 # ---------------------------------------------------------------------------
@@ -847,3 +873,37 @@ def test_config_set_then_unfold_roundtrip(
     assert unfold_result.exit_code == 0, unfold_result.output
     loaded = yaml.safe_load(unfold_result.output)
     assert loaded == original
+
+
+# ---------------------------------------------------------------------------
+# _ensure_config
+# ---------------------------------------------------------------------------
+
+
+def test_ensure_config_writes_default(tmp_path: Path) -> None:
+    from evalhub.cli.server_cmd import _DEFAULT_SERVER_CONFIG, _ensure_config
+
+    config_dir = tmp_path / "profile"
+    _ensure_config(config_dir)
+
+    config_path = config_dir / "config.yaml"
+    assert config_path.exists()
+    assert config_path.read_text() == _DEFAULT_SERVER_CONFIG
+
+    loaded = yaml.safe_load(config_path.read_text())
+    assert loaded["service"]["port"] == 8080
+    assert loaded["database"]["driver"] == "sqlite"
+    assert loaded["database"]["url"] == "file::eval_hub:?mode=memory&cache=shared"
+
+
+def test_ensure_config_overwrites_existing(tmp_path: Path) -> None:
+    from evalhub.cli.server_cmd import _DEFAULT_SERVER_CONFIG, _ensure_config
+
+    config_dir = tmp_path / "profile"
+    config_dir.mkdir(parents=True)
+    config_path = config_dir / "config.yaml"
+    config_path.write_text(yaml.safe_dump({"service": {"port": 9999}}))
+
+    _ensure_config(config_dir)
+
+    assert config_path.read_text() == _DEFAULT_SERVER_CONFIG
