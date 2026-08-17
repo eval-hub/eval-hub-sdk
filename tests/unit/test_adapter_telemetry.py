@@ -30,17 +30,17 @@ def _otel_provider(
     """
     from opentelemetry import trace as trace_api
 
-    saved_provider = trace_api._TRACER_PROVIDER  # type: ignore[attr-defined]
-    saved_done = trace_api._TRACER_PROVIDER_SET_ONCE._done  # type: ignore[attr-defined]
+    saved_provider = trace_api._TRACER_PROVIDER
+    saved_done = trace_api._TRACER_PROVIDER_SET_ONCE._done
 
-    trace_api._TRACER_PROVIDER = None  # type: ignore[attr-defined]
-    trace_api._TRACER_PROVIDER_SET_ONCE._done = False  # type: ignore[attr-defined]
+    trace_api._TRACER_PROVIDER = None
+    trace_api._TRACER_PROVIDER_SET_ONCE._done = False
 
     if "no_otel_provider" in {m.name for m in request.node.iter_markers()}:
 
         def _restore() -> None:
-            trace_api._TRACER_PROVIDER = saved_provider  # type: ignore[attr-defined]
-            trace_api._TRACER_PROVIDER_SET_ONCE._done = saved_done  # type: ignore[attr-defined]
+            trace_api._TRACER_PROVIDER = saved_provider
+            trace_api._TRACER_PROVIDER_SET_ONCE._done = saved_done
 
         request.addfinalizer(_restore)
         return None
@@ -54,8 +54,8 @@ def _otel_provider(
 
     def _cleanup() -> None:
         provider.shutdown()
-        trace_api._TRACER_PROVIDER = saved_provider  # type: ignore[attr-defined]
-        trace_api._TRACER_PROVIDER_SET_ONCE._done = saved_done  # type: ignore[attr-defined]
+        trace_api._TRACER_PROVIDER = saved_provider
+        trace_api._TRACER_PROVIDER_SET_ONCE._done = saved_done
 
     request.addfinalizer(_cleanup)
     return exporter
@@ -279,8 +279,5 @@ class TestMultipleInferenceBatches:
         spans = exporter.get_finished_spans()
         inf_spans = [s for s in spans if s.name == "evalhub.evaluation.inference"]
         assert len(inf_spans) == 3
-        sizes = sorted(
-            int(s.attributes["batch.size"])  # type: ignore[index,arg-type]
-            for s in inf_spans
-        )
+        sizes = sorted(int(s.attributes["batch.size"]) for s in inf_spans)
         assert sizes == [16, 32, 64]
