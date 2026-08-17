@@ -110,10 +110,12 @@ def _resolve_config_dir(ctx: click.Context) -> Path:
 
 def _ensure_config(config_dir: Path) -> None:
     config_path = config_dir / "config.yaml"
-    if config_path.exists():
-        return
     config_dir.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(_DEFAULT_SERVER_CONFIG)
+    try:
+        with open(config_path, "x") as f:
+            f.write(_DEFAULT_SERVER_CONFIG)
+    except FileExistsError:
+        return
     click.echo(f"No server config found. Writing defaults to {config_path}.")
 
 

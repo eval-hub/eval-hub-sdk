@@ -893,7 +893,7 @@ def test_ensure_config_writes_default(tmp_path: Path) -> None:
     loaded = yaml.safe_load(config_path.read_text())
     assert loaded["service"]["port"] == 8080
     assert loaded["database"]["driver"] == "sqlite"
-    assert "eval_hub" in loaded["database"]["url"]
+    assert loaded["database"]["url"] == "file::eval_hub:?mode=memory&cache=shared"
 
 
 def test_ensure_config_preserves_existing(tmp_path: Path) -> None:
