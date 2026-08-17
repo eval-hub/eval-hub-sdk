@@ -28,14 +28,24 @@ def _otel_provider(
     Tests decorated with ``@pytest.mark.no_otel_provider`` skip the provider
     setup so the global no-op tracer is exercised instead.
     """
-    if "no_otel_provider" in {m.name for m in request.node.iter_markers()}:
-        return None
-
     from opentelemetry import trace as trace_api
-    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+
+    saved_provider = trace_api._TRACER_PROVIDER  # type: ignore[attr-defined]
+    saved_done = trace_api._TRACER_PROVIDER_SET_ONCE._done  # type: ignore[attr-defined]
 
     trace_api._TRACER_PROVIDER = None  # type: ignore[attr-defined]
     trace_api._TRACER_PROVIDER_SET_ONCE._done = False  # type: ignore[attr-defined]
+
+    if "no_otel_provider" in {m.name for m in request.node.iter_markers()}:
+
+        def _restore() -> None:
+            trace_api._TRACER_PROVIDER = saved_provider  # type: ignore[attr-defined]
+            trace_api._TRACER_PROVIDER_SET_ONCE._done = saved_done  # type: ignore[attr-defined]
+
+        request.addfinalizer(_restore)
+        return None
+
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 
     exporter = InMemorySpanExporter()
     provider = TracerProvider(sampler=ALWAYS_ON)
@@ -44,8 +54,8 @@ def _otel_provider(
 
     def _cleanup() -> None:
         provider.shutdown()
-        trace_api._TRACER_PROVIDER = None  # type: ignore[attr-defined]
-        trace_api._TRACER_PROVIDER_SET_ONCE._done = False  # type: ignore[attr-defined]
+        trace_api._TRACER_PROVIDER = saved_provider  # type: ignore[attr-defined]
+        trace_api._TRACER_PROVIDER_SET_ONCE._done = saved_done  # type: ignore[attr-defined]
 
     request.addfinalizer(_cleanup)
     return exporter
@@ -224,10 +234,6 @@ class TestW3cTraceparentExtraction:
 @pytest.mark.no_otel_provider
 class TestNoOtelConfiguredNoop:
     def test_noop_no_errors(self) -> None:
-        from opentelemetry import trace as trace_api
-
-        trace_api.set_tracer_provider(trace_api.NoOpTracerProvider())
-
         tracer = EvalTracer()
         with tracer.evaluation_run():
             with tracer.dataset_load(source="x"):

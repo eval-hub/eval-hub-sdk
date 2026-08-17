@@ -25,7 +25,6 @@ from typing import TYPE_CHECKING
 from opentelemetry import context as otel_context
 from opentelemetry import trace
 from opentelemetry.propagate import extract
-from opentelemetry.trace import StatusCode
 
 if TYPE_CHECKING:
     from .models.job import JobSpec
@@ -56,6 +55,14 @@ class _EnvCarrier(dict[str, str]):
 class EvalTracer:
     """Thin wrapper around an OTEL ``Tracer`` scoped to one evaluation job.
 
+    This class is an **instrumentation library** and intentionally does *not*
+    create or configure a ``TracerProvider``.  The host application (or the
+    Kubernetes sidecar / OTEL auto-configuration) must set up a
+    ``TracerProvider`` with the desired ``Resource``, exporter, and span
+    processor *before* any spans are created.  When no provider is configured,
+    ``trace.get_tracer()`` returns a no-op tracer and all context managers
+    become zero-cost no-ops.
+
     Typical usage via ``DefaultCallbacks``::
 
         callbacks = DefaultCallbacks.from_adapter(adapter)
@@ -74,9 +81,8 @@ class EvalTracer:
                 callbacks.report_results(results)
     """
 
-    def __init__(self, service_name: str = "evalhub-adapter") -> None:
+    def __init__(self) -> None:
         self._tracer = trace.get_tracer(_TRACER_NAME, schema_url=None)
-        self._service_name = service_name
         self._job_id: str | None = None
         self._provider: str | None = None
         self._collection: str | None = None
@@ -125,12 +131,7 @@ class EvalTracer:
             context=ctx,
             attributes=attrs,
         ) as span:
-            try:
-                yield span
-            except BaseException as exc:
-                span.set_status(StatusCode.ERROR, str(exc))
-                span.record_exception(exc)
-                raise
+            yield span
 
     @contextmanager
     def dataset_load(
@@ -149,12 +150,7 @@ class EvalTracer:
             "evalhub.evaluation.dataset_load",
             attributes=attrs,
         ) as span:
-            try:
-                yield span
-            except BaseException as exc:
-                span.set_status(StatusCode.ERROR, str(exc))
-                span.record_exception(exc)
-                raise
+            yield span
 
     @contextmanager
     def inference_batch(
@@ -179,12 +175,7 @@ class EvalTracer:
             "evalhub.evaluation.inference",
             attributes=attrs,
         ) as span:
-            try:
-                yield span
-            except BaseException as exc:
-                span.set_status(StatusCode.ERROR, str(exc))
-                span.record_exception(exc)
-                raise
+            yield span
 
     @contextmanager
     def scoring(
@@ -203,12 +194,7 @@ class EvalTracer:
             "evalhub.evaluation.scoring",
             attributes=attrs,
         ) as span:
-            try:
-                yield span
-            except BaseException as exc:
-                span.set_status(StatusCode.ERROR, str(exc))
-                span.record_exception(exc)
-                raise
+            yield span
 
     @contextmanager
     def result_log(self) -> Generator[trace.Span, None, None]:
@@ -216,9 +202,4 @@ class EvalTracer:
         with self._tracer.start_as_current_span(
             "evalhub.evaluation.result_log",
         ) as span:
-            try:
-                yield span
-            except BaseException as exc:
-                span.set_status(StatusCode.ERROR, str(exc))
-                span.record_exception(exc)
-                raise
+            yield span
