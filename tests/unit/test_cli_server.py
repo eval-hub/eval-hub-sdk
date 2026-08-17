@@ -166,7 +166,7 @@ def test_server_run_generates_default_config_when_missing(
         result = runner.invoke(main, ["server", "run"])
 
     assert result.exit_code == 0, result.output
-    assert "Writing defaults" in result.output
+    assert "Using default server config" in result.output
 
     generated = tmp_path / "default" / "config.yaml"
     assert generated.exists()
@@ -395,7 +395,7 @@ def test_server_start_generates_default_config_when_missing(
         result = runner.invoke(main, ["server", "start"])
 
     assert result.exit_code == 0, result.output
-    assert "Writing defaults" in result.output
+    assert "Using default server config" in result.output
     assert "12345" in result.output
 
     generated = tmp_path / "default" / "config.yaml"
@@ -896,15 +896,14 @@ def test_ensure_config_writes_default(tmp_path: Path) -> None:
     assert loaded["database"]["url"] == "file::eval_hub:?mode=memory&cache=shared"
 
 
-def test_ensure_config_preserves_existing(tmp_path: Path) -> None:
-    from evalhub.cli.server_cmd import _ensure_config
+def test_ensure_config_overwrites_existing(tmp_path: Path) -> None:
+    from evalhub.cli.server_cmd import _DEFAULT_SERVER_CONFIG, _ensure_config
 
     config_dir = tmp_path / "profile"
     config_dir.mkdir(parents=True)
     config_path = config_dir / "config.yaml"
-    custom = yaml.safe_dump({"service": {"port": 9999}})
-    config_path.write_text(custom)
+    config_path.write_text(yaml.safe_dump({"service": {"port": 9999}}))
 
     _ensure_config(config_dir)
 
-    assert config_path.read_text() == custom
+    assert config_path.read_text() == _DEFAULT_SERVER_CONFIG
