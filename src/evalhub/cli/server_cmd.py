@@ -31,6 +31,15 @@ _STARTUP_POLL = 0.5
 _STOP_TIMEOUT = 5.0
 _DEFAULT_PORT = 8080
 
+_DEFAULT_SERVER_CONFIG = """\
+service:
+  port: 8080
+
+database:
+  driver: sqlite
+  url: "file::eval_hub:?mode=memory&cache=shared"
+"""
+
 
 def _read_server_config(config_dir: Path) -> tuple[int, bool]:
     config_path = config_dir / "config.yaml"
@@ -99,12 +108,13 @@ def _resolve_config_dir(ctx: click.Context) -> Path:
     )
 
 
-def _require_config(config_dir: Path) -> None:
-    if not (config_dir / "config.yaml").exists():
-        raise click.ClickException(
-            f"No server config found at {config_dir / 'config.yaml'}.\n"
-            "Set one first with: evalhub config set server_config_file <path>"
-        )
+def _ensure_config(config_dir: Path) -> None:
+    config_path = config_dir / "config.yaml"
+    if config_path.exists():
+        return
+    config_dir.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(_DEFAULT_SERVER_CONFIG)
+    click.echo(f"No server config found. Writing defaults to {config_path}.")
 
 
 @click.group()
@@ -124,7 +134,7 @@ def server_run(ctx: click.Context) -> None:
     """
     binary = find_binary("eval-hub-server", "EVALHUB_SERVER_BIN")
     cfg_dir = _resolve_config_dir(ctx)
-    _require_config(cfg_dir)
+    _ensure_config(cfg_dir)
 
     run_foreground([binary, "-local", "-configdir", str(cfg_dir)], ctx)
 
@@ -143,7 +153,7 @@ def server_start(ctx: click.Context) -> None:
 
     binary = find_binary("eval-hub-server", "EVALHUB_SERVER_BIN")
     cfg_dir = _resolve_config_dir(ctx)
-    _require_config(cfg_dir)
+    _ensure_config(cfg_dir)
 
     port, tls = _read_server_config(cfg_dir)
     scheme = "https" if tls else "http"
