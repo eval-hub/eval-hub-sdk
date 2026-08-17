@@ -95,6 +95,7 @@ from .models import (
 )
 from .oci import OCIArtifactPersister
 from .settings import AdapterSettings
+from .telemetry import EvalTracer
 
 # Legacy API is available but deprecated
 # from evalhub.adapter.legacy import ...
@@ -129,6 +130,8 @@ __all__ = [
     "ModelCredentials",
     "read_model_auth_key",
     "resolve_model_credentials",
+    # Telemetry
+    "EvalTracer",
     # Common models (re-exported for convenience)
     "JobStatus",
     "ModelConfig",
