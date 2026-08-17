@@ -733,6 +733,12 @@ class DefaultCallbacks(JobCallbacks):
                 status_event["metrics"] = metrics
                 status_event["completed_at"] = results.completed_at.isoformat()
 
+                if results.metrics_schema:
+                    status_event["metrics_schema"] = [
+                        {"name": ms.name, "type": ms.type.value}
+                        for ms in results.metrics_schema
+                    ]
+
                 if results.mlflow_run_id:
                     status_event["mlflow_run_id"] = results.mlflow_run_id
 

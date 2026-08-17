@@ -26,12 +26,14 @@ from evalhub.models.api import (
     JobsList,
     JobStatus,
     JobSubmissionRequest,
+    MetricSchema,
     ModelConfig,
     OCIConnectionConfig,
     OCICoordinates,
     ProviderList,
     PVCTestDataRef,
     QueueConfig,
+    ResultType,
     S3TestDataRef,
     TestDataRef,
 )
@@ -1434,3 +1436,103 @@ class TestGitTestDataRef:
         from evalhub.models import GitTestDataRef as Imported
 
         assert Imported is GitTestDataRef
+
+
+class TestResultTypeEnum:
+    """Tests for the ResultType enum."""
+
+    def test_all_values_present(self) -> None:
+        values = {rt.value for rt in ResultType}
+        assert values == {
+            "numeric",
+            "categorical",
+            "array_ordered",
+            "array_unordered",
+            "time_series",
+        }
+
+    def test_str_subclass(self) -> None:
+        assert ResultType.NUMERIC == "numeric"
+        assert ResultType.TIME_SERIES == "time_series"
+
+    def test_importable_from_models_package(self) -> None:
+        from evalhub.models import ResultType as Imported
+
+        assert Imported is ResultType
+
+
+class TestMetricSchema:
+    """Tests for the MetricSchema model."""
+
+    def test_basic_construction(self) -> None:
+        ms = MetricSchema(name="accuracy", type=ResultType.NUMERIC)
+        assert ms.name == "accuracy"
+        assert ms.type == ResultType.NUMERIC
+
+    def test_all_result_types_accepted(self) -> None:
+        for rt in ResultType:
+            ms = MetricSchema(name="m", type=rt)
+            assert ms.type == rt
+
+    def test_serializes_type_as_string_value(self) -> None:
+        ms = MetricSchema(name="score", type=ResultType.CATEGORICAL)
+        data = ms.model_dump()
+        assert data["type"] == "categorical"
+
+    def test_roundtrip_from_dict(self) -> None:
+        data: dict[str, Any] = {"name": "latency_p99", "type": "time_series"}
+        ms = MetricSchema.model_validate(data)
+        assert ms.name == "latency_p99"
+        assert ms.type == ResultType.TIME_SERIES
+
+    def test_invalid_type_raises(self) -> None:
+        with pytest.raises(Exception):
+            MetricSchema(name="x", type="unknown_type")  # type: ignore[arg-type]
+
+    def test_importable_from_models_package(self) -> None:
+        from evalhub.models import MetricSchema as Imported
+
+        assert Imported is MetricSchema
+
+
+class TestBenchmarkResultMetricsSchema:
+    """Tests for metrics_schema field on BenchmarkResult."""
+
+    def test_metrics_schema_defaults_to_none(self) -> None:
+        result = BenchmarkResult(id="mmlu", provider_id="lm_eval")
+        assert result.metrics_schema is None
+
+    def test_metrics_schema_round_trip(self) -> None:
+        result = BenchmarkResult(
+            id="mmlu",
+            provider_id="lm_eval",
+            metrics={"accuracy": 0.85, "f1": 0.82},
+            metrics_schema=[
+                MetricSchema(name="accuracy", type=ResultType.NUMERIC),
+                MetricSchema(name="f1", type=ResultType.NUMERIC),
+            ],
+        )
+        assert result.metrics_schema is not None
+        assert len(result.metrics_schema) == 2
+        assert result.metrics_schema[0].name == "accuracy"
+        assert result.metrics_schema[1].type == ResultType.NUMERIC
+
+    def test_metrics_schema_deserialized_from_server_response(self) -> None:
+        data: dict[str, Any] = {
+            "id": "mmlu",
+            "provider_id": "lm_eval",
+            "metrics": {"accuracy": 0.85},
+            "metrics_schema": [{"name": "accuracy", "type": "numeric"}],
+        }
+        result = BenchmarkResult.model_validate(data)
+        assert result.metrics_schema is not None
+        assert result.metrics_schema[0].type == ResultType.NUMERIC
+
+    def test_metrics_schema_absent_in_server_response_is_none(self) -> None:
+        data: dict[str, Any] = {
+            "id": "mmlu",
+            "provider_id": "lm_eval",
+            "metrics": {"accuracy": 0.85},
+        }
+        result = BenchmarkResult.model_validate(data)
+        assert result.metrics_schema is None

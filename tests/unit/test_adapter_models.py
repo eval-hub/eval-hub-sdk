@@ -25,6 +25,8 @@ from evalhub.adapter import (
     OCIArtifactSpec,
     SafetyEvalEntry,
 )
+from evalhub.models import MetricSchema, ResultType
+from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit
 
@@ -1071,3 +1073,56 @@ class TestJobResultsWithCards:
             additional_info=info,
         )
         assert results.additional_info == info
+
+
+@pytest.mark.adapter
+class TestJobResultsMetricsSchemaValidation:
+    """Tests for metrics_schema name validation against results."""
+
+    def _base_results(self, **kwargs: Any) -> JobResults:
+        return JobResults(
+            id="j",
+            benchmark_id="b",
+            benchmark_index=0,
+            model_name="m",
+            results=[
+                EvaluationResult(metric_name="accuracy", metric_value=0.85),
+                EvaluationResult(metric_name="f1", metric_value=0.82),
+            ],
+            num_examples_evaluated=10,
+            duration_seconds=1.0,
+            **kwargs,
+        )
+
+    def test_valid_schema_names_accepted(self) -> None:
+        r = self._base_results(
+            metrics_schema=[
+                MetricSchema(name="accuracy", type=ResultType.NUMERIC),
+                MetricSchema(name="f1", type=ResultType.NUMERIC),
+            ]
+        )
+        assert r.metrics_schema is not None
+        assert len(r.metrics_schema) == 2
+
+    def test_schema_name_absent_from_results_raises(self) -> None:
+        with pytest.raises(
+            ValidationError,
+            match="metrics_schema contains names not present in results",
+        ):
+            self._base_results(
+                metrics_schema=[
+                    MetricSchema(name="accuracy", type=ResultType.NUMERIC),
+                    MetricSchema(name="typo_metric", type=ResultType.NUMERIC),
+                ]
+            )
+
+    def test_none_schema_always_valid(self) -> None:
+        r = self._base_results(metrics_schema=None)
+        assert r.metrics_schema is None
+
+    def test_partial_schema_valid_when_names_match(self) -> None:
+        r = self._base_results(
+            metrics_schema=[MetricSchema(name="accuracy", type=ResultType.NUMERIC)]
+        )
+        assert r.metrics_schema is not None
+        assert r.metrics_schema[0].name == "accuracy"

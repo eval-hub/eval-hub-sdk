@@ -16,6 +16,7 @@ from ...models.api import (
     JobPhase,
     JobStatus,
     MessageOrigin,
+    MetricSchema,
     ModelConfig,
     OCICoordinates,
 )
@@ -329,6 +330,13 @@ class JobResults(BaseModel):
         description="Environment Card metadata. Serialized into artifacts['evalhub.env_card'].",
     )
 
+    metrics_schema: list[MetricSchema] | None = Field(
+        default=None,
+        description="Declared result types for each metric. When provided, serialized "
+        "into status_event['metrics_schema'] so the server can interpret metric values. "
+        "If omitted the server defaults each metric to 'numeric'.",
+    )
+
     additional_info: dict[str, Any] | None = Field(
         default=None,
         description="Supplementary key-value pairs for evaluation "
@@ -337,6 +345,18 @@ class JobResults(BaseModel):
         "Serialized into status_event['additional_info'] and available to "
         "downstream consumers such as EvalCard generation.",
     )
+
+    @model_validator(mode="after")
+    def check_metrics_schema_names(self) -> JobResults:
+        if not self.metrics_schema:
+            return self
+        result_names = {r.metric_name for r in self.results}
+        unknown = [ms.name for ms in self.metrics_schema if ms.name not in result_names]
+        if unknown:
+            raise ValueError(
+                f"metrics_schema contains names not present in results: {unknown}"
+            )
+        return self
 
 
 class JobCallbacks(ABC):
