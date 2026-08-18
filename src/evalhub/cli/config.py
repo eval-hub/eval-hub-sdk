@@ -17,6 +17,7 @@ Config is stored at ~/.config/evalhub/config.yaml with structure:
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import stat
 from pathlib import Path
@@ -41,6 +42,36 @@ SENSITIVE_KEYS = frozenset({"token"})
 FILE_KEYS = frozenset({"mcp_config_file", "server_config_file"})
 
 DEFAULT_PROFILE = "default"
+
+_PROFILE_NAME_RE = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$")
+
+
+def validate_profile_name(name: str) -> None:
+    """Reject profile names that could escape filesystem boundaries.
+
+    Raises ``click.ClickException`` if *name* contains path separators,
+    traversal components, or characters outside a safe identifier set.
+    """
+    if not name or not _PROFILE_NAME_RE.fullmatch(name) or ".." in name:
+        raise click.ClickException(
+            f"Invalid profile name '{name}'. "
+            "Names must be non-empty, use only [a-zA-Z0-9._-], "
+            "start and end with an alphanumeric character, "
+            "and must not contain '..'."
+        )
+
+
+def _validate_path_within(path: Path, base: Path) -> None:
+    """Ensure *path* resolves inside *base*.
+
+    Raises ``click.ClickException`` if the resolved path escapes *base*.
+    """
+    try:
+        path.resolve().relative_to(base.resolve())
+    except ValueError:
+        raise click.ClickException(
+            f"Resolved path '{path}' escapes base directory '{base}'."
+        )
 
 
 def mask_value(
@@ -199,8 +230,10 @@ def store_file_key(key: str, src: Path, profile_name: str) -> str:
 
     Returns the absolute path of the stored copy.
     """
+    validate_profile_name(profile_name)
     base = _FILE_KEY_STORE_DIRS[key]
     dest_dir = base / profile_name
+    _validate_path_within(dest_dir, base)
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / "config.yaml"
     shutil.copy2(str(src), str(dest))
@@ -210,8 +243,10 @@ def store_file_key(key: str, src: Path, profile_name: str) -> str:
 
 def remove_file_key(key: str, profile_name: str) -> None:
     """Delete the stored file for *key* and clean up the directory if empty."""
+    validate_profile_name(profile_name)
     base = _FILE_KEY_STORE_DIRS[key]
     dest_dir = base / profile_name
+    _validate_path_within(dest_dir, base)
     dest = dest_dir / "config.yaml"
     if dest.exists():
         dest.unlink()
@@ -234,6 +269,41 @@ def resolve_component_config_dir(
 def set_active_profile(data: dict[str, Any], profile: str) -> dict[str, Any]:
     """Switch the active profile."""
     data["active_profile"] = profile
+    return data
+
+
+def create_profile(data: dict[str, Any], name: str) -> dict[str, Any]:
+    """Explicitly create an empty profile.
+
+    Raises ``click.ClickException`` if a profile with *name* already exists.
+    """
+    validate_profile_name(name)
+    profiles = data.setdefault("profiles", {})
+    if name in profiles:
+        raise click.ClickException(f"Profile '{name}' already exists.")
+    profiles[name] = {}
+    return data
+
+
+def delete_profile(data: dict[str, Any], name: str) -> dict[str, Any]:
+    """Remove a profile and its stored file-key artefacts.
+
+    Raises ``click.ClickException`` if *name* is the active profile or does
+    not exist.
+    """
+    validate_profile_name(name)
+    active = get_active_profile(data)
+    if name == active:
+        raise click.ClickException(
+            f"Cannot delete the active profile '{name}'. "
+            f"Switch to another profile first with 'config use'."
+        )
+    profiles = data.get("profiles", {})
+    if name not in profiles:
+        raise click.ClickException(f"Profile '{name}' does not exist.")
+    del profiles[name]
+    for key in FILE_KEYS:
+        remove_file_key(key, name)
     return data
 
 

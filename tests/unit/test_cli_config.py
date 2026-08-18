@@ -17,6 +17,9 @@ from evalhub.cli.config import (
     OPTIONAL_KEYS,
     REQUIRED_KEYS,
     SENSITIVE_KEYS,
+    _validate_path_within,
+    create_profile,
+    delete_profile,
     get_active_profile,
     get_profile,
     get_value,
@@ -30,6 +33,7 @@ from evalhub.cli.config import (
     set_active_profile,
     set_value,
     unset_value,
+    validate_profile_name,
 )
 from evalhub.cli.main import main
 
@@ -636,3 +640,231 @@ class TestConfigUnsetCommand:
         assert "profile 'prod'" in result.output
         data = load_config()
         assert "token" not in data["profiles"]["prod"]
+
+
+# --- create / delete profile unit tests ---
+
+
+class TestCreateProfile:
+    def test_creates_empty_profile(self) -> None:
+        data: dict[str, Any] = {"active_profile": "default", "profiles": {}}
+        create_profile(data, "staging")
+        assert "staging" in data["profiles"]
+        assert data["profiles"]["staging"] == {}
+
+    def test_errors_on_duplicate(self) -> None:
+        data: dict[str, Any] = {
+            "active_profile": "default",
+            "profiles": {"staging": {"base_url": "http://localhost"}},
+        }
+        with pytest.raises(Exception, match="already exists"):
+            create_profile(data, "staging")
+
+    def test_does_not_change_active_profile(self) -> None:
+        data: dict[str, Any] = {"active_profile": "default", "profiles": {}}
+        create_profile(data, "new")
+        assert data["active_profile"] == "default"
+
+    def test_rejects_traversal_name(self) -> None:
+        data: dict[str, Any] = {"active_profile": "default", "profiles": {}}
+        with pytest.raises(Exception, match="Invalid profile name"):
+            create_profile(data, "../escape")
+
+
+class TestDeleteProfile:
+    def test_deletes_existing_profile(self) -> None:
+        data: dict[str, Any] = {
+            "active_profile": "default",
+            "profiles": {
+                "default": {"base_url": "http://localhost"},
+                "staging": {"base_url": "http://staging"},
+            },
+        }
+        delete_profile(data, "staging")
+        assert "staging" not in data["profiles"]
+        assert "default" in data["profiles"]
+
+    def test_errors_on_active_profile(self) -> None:
+        data: dict[str, Any] = {
+            "active_profile": "default",
+            "profiles": {"default": {}},
+        }
+        with pytest.raises(Exception, match="Cannot delete the active profile"):
+            delete_profile(data, "default")
+
+    def test_errors_on_nonexistent_profile(self) -> None:
+        data: dict[str, Any] = {"active_profile": "default", "profiles": {}}
+        with pytest.raises(Exception, match="does not exist"):
+            delete_profile(data, "ghost")
+
+    def test_rejects_traversal_name(self) -> None:
+        data: dict[str, Any] = {
+            "active_profile": "default",
+            "profiles": {"default": {}},
+        }
+        with pytest.raises(Exception, match="Invalid profile name"):
+            delete_profile(data, "../escape")
+
+
+class TestValidateProfileName:
+    @pytest.mark.parametrize("name", ["default", "prod", "my-profile", "v1.2", "a"])
+    def test_accepts_valid_names(self, name: str) -> None:
+        validate_profile_name(name)
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "",
+            "..",
+            "../etc",
+            "foo/../bar",
+            "/absolute",
+            "has/slash",
+            "has space",
+            ".leading-dot",
+            "-leading-dash",
+            "trailing-dot.",
+            "trailing-dash-",
+            "staging\n",
+        ],
+    )
+    def test_rejects_unsafe_names(self, name: str) -> None:
+        with pytest.raises(Exception, match="Invalid profile name"):
+            validate_profile_name(name)
+
+
+class TestValidatePathWithin:
+    def test_accepts_path_within_base(self, tmp_path: Path) -> None:
+        base = tmp_path / "base"
+        base.mkdir()
+        _validate_path_within(base / "child", base)
+
+    def test_rejects_path_escaping_base(self, tmp_path: Path) -> None:
+        base = tmp_path / "base"
+        base.mkdir()
+        with pytest.raises(Exception, match="escapes base directory"):
+            _validate_path_within(base / ".." / "outside", base)
+
+
+# --- config create / delete CLI tests ---
+
+
+class TestConfigCreateCommand:
+    def test_create_new_profile(self, runner: CliRunner, config_file: Path) -> None:
+        result = runner.invoke(main, ["config", "create", "staging"])
+        assert result.exit_code == 0
+        assert "Created profile 'staging'" in result.output
+        data = load_config()
+        assert "staging" in data["profiles"]
+        assert data["profiles"]["staging"] == {}
+
+    def test_create_with_activate(self, runner: CliRunner, config_file: Path) -> None:
+        result = runner.invoke(main, ["config", "create", "prod", "--activate"])
+        assert result.exit_code == 0
+        assert "(active)" in result.output
+        data = load_config()
+        assert data["active_profile"] == "prod"
+
+    def test_create_without_activate_keeps_active(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
+        result = runner.invoke(main, ["config", "create", "staging"])
+        assert result.exit_code == 0
+        data = load_config()
+        assert data["active_profile"] == DEFAULT_PROFILE
+
+    def test_create_duplicate_errors(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
+        runner.invoke(main, ["config", "create", "staging"])
+        result = runner.invoke(main, ["config", "create", "staging"])
+        assert result.exit_code != 0
+        assert "already exists" in result.output
+
+    def test_create_then_set_values(self, runner: CliRunner, config_file: Path) -> None:
+        runner.invoke(main, ["config", "create", "staging", "--activate"])
+        runner.invoke(main, ["config", "set", "base_url", "http://staging:8080"])
+        data = load_config()
+        assert data["profiles"]["staging"]["base_url"] == "http://staging:8080"
+
+    def test_create_then_use(self, runner: CliRunner, config_file: Path) -> None:
+        runner.invoke(main, ["config", "create", "staging"])
+        result = runner.invoke(main, ["config", "use", "staging"])
+        assert result.exit_code == 0
+        assert "Active profile set to 'staging'" in result.output
+
+
+class TestConfigDeleteCommand:
+    def test_delete_inactive_profile(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
+        runner.invoke(main, ["config", "create", "staging"])
+        result = runner.invoke(main, ["config", "delete", "staging"])
+        assert result.exit_code == 0
+        assert "Deleted profile 'staging'" in result.output
+        data = load_config()
+        assert "staging" not in data["profiles"]
+
+    def test_delete_active_profile_errors(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
+        runner.invoke(main, ["config", "create", "staging", "--activate"])
+        result = runner.invoke(main, ["config", "delete", "staging"])
+        assert result.exit_code != 0
+        assert "Cannot delete the active profile" in result.output
+
+    def test_delete_nonexistent_profile_errors(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
+        result = runner.invoke(main, ["config", "delete", "ghost"])
+        assert result.exit_code != 0
+        assert "does not exist" in result.output
+
+    def test_delete_preserves_other_profiles(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
+        runner.invoke(main, ["config", "set", "base_url", "http://default:8080"])
+        runner.invoke(main, ["config", "create", "staging"])
+        runner.invoke(
+            main,
+            [
+                "--profile",
+                "staging",
+                "config",
+                "set",
+                "base_url",
+                "http://staging:8080",
+            ],
+        )
+        runner.invoke(main, ["config", "delete", "staging"])
+        data = load_config()
+        assert "default" in data["profiles"]
+        assert data["profiles"]["default"]["base_url"] == "http://default:8080"
+
+
+class TestConfigListHint:
+    def test_hint_shown_when_multiple_profiles(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
+        runner.invoke(main, ["config", "set", "base_url", "http://default:8080"])
+        runner.invoke(main, ["config", "create", "staging"])
+        result = runner.invoke(main, ["config", "list"])
+        assert result.exit_code == 0
+        assert "(use --all to see all profiles)" in result.output
+
+    def test_hint_not_shown_for_single_profile(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
+        runner.invoke(main, ["config", "set", "base_url", "http://default:8080"])
+        result = runner.invoke(main, ["config", "list"])
+        assert result.exit_code == 0
+        assert "--all" not in result.output
+
+    def test_hint_not_shown_with_all_flag(
+        self, runner: CliRunner, config_file: Path
+    ) -> None:
+        runner.invoke(main, ["config", "set", "base_url", "http://default:8080"])
+        runner.invoke(main, ["config", "create", "staging"])
+        result = runner.invoke(main, ["config", "list", "--all"])
+        assert result.exit_code == 0
+        assert "(use --all to see all profiles)" not in result.output
