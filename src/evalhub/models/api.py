@@ -106,7 +106,11 @@ class ModelAuth(BaseModel):
     """Authentication configuration for the model endpoint."""
 
     secret_ref: str = Field(
-        ..., description="Kubernetes Secret name containing model credentials"
+        ...,
+        description=(
+            "Kubernetes Secret name (k8s mode) or file:/// URL pointing to a "
+            "local directory containing credential files (local mode)"
+        ),
     )
 
     @field_validator("secret_ref")
