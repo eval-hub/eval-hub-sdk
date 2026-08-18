@@ -17,8 +17,10 @@ from evalhub.cli.config import (
     OPTIONAL_KEYS,
     REQUIRED_KEYS,
     SENSITIVE_KEYS,
+    _validate_path_within,
     create_profile,
     delete_profile,
+    validate_profile_name,
     get_active_profile,
     get_profile,
     get_value,
@@ -663,6 +665,11 @@ class TestCreateProfile:
         create_profile(data, "new")
         assert data["active_profile"] == "default"
 
+    def test_rejects_traversal_name(self) -> None:
+        data: dict[str, Any] = {"active_profile": "default", "profiles": {}}
+        with pytest.raises(Exception, match="Invalid profile name"):
+            create_profile(data, "../escape")
+
 
 class TestDeleteProfile:
     def test_deletes_existing_profile(self) -> None:
@@ -689,6 +696,54 @@ class TestDeleteProfile:
         data: dict[str, Any] = {"active_profile": "default", "profiles": {}}
         with pytest.raises(Exception, match="does not exist"):
             delete_profile(data, "ghost")
+
+    def test_rejects_traversal_name(self) -> None:
+        data: dict[str, Any] = {
+            "active_profile": "default",
+            "profiles": {"default": {}},
+        }
+        with pytest.raises(Exception, match="Invalid profile name"):
+            delete_profile(data, "../escape")
+
+
+class TestValidateProfileName:
+    @pytest.mark.parametrize("name", ["default", "prod", "my-profile", "v1.2", "a"])
+    def test_accepts_valid_names(self, name: str) -> None:
+        validate_profile_name(name)
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "",
+            "..",
+            "../etc",
+            "foo/../bar",
+            "/absolute",
+            "has/slash",
+            "has space",
+            ".leading-dot",
+            "-leading-dash",
+            "trailing-dot.",
+            "trailing-dash-",
+        ],
+    )
+    def test_rejects_unsafe_names(self, name: str) -> None:
+        with pytest.raises(Exception, match="Invalid profile name"):
+            validate_profile_name(name)
+
+
+class TestValidatePathWithin:
+    def test_accepts_path_within_base(self, tmp_path: Path) -> None:
+        base = tmp_path / "base"
+        base.mkdir()
+        _validate_path_within(base / "child", base)
+
+    def test_rejects_path_escaping_base(self, tmp_path: Path) -> None:
+        base = tmp_path / "base"
+        base.mkdir()
+        with pytest.raises(Exception, match="escapes base directory"):
+            _validate_path_within(base / ".." / "outside", base)
+
 
 
 # --- config create / delete CLI tests ---
