@@ -1364,12 +1364,14 @@ def config(ctx: click.Context) -> None:
 
     \b
     Examples:
+      evalhub config create staging --activate
       evalhub config set base_url http://localhost:8080
       evalhub config set mcp_config_file mcp-config.yaml
       evalhub config set server_config_file myserver-config.yaml
       evalhub config get mcp_config_file --unfold
       evalhub config list
       evalhub config use prod
+      evalhub config delete staging
     """
 
 
@@ -1557,6 +1559,56 @@ def config_list(ctx: click.Context, *, show_all: bool = False) -> None:
         profile_name = profile or active
         prof = cfg.get_profile(data, profile=profile)
         _render_profile(profile_name, prof, data)
+        if len(data.get("profiles", {})) > 1:
+            click.echo("\n(use --all to see all profiles)")
+
+
+@config.command("create")
+@click.argument("name")
+@click.option(
+    "--activate",
+    is_flag=True,
+    default=False,
+    help="Set the new profile as the active profile.",
+)
+def config_create(name: str, *, activate: bool) -> None:
+    """Create a new configuration profile.
+
+    \b
+    Creates an empty profile that can then be populated with
+    'config set'. Use --activate to also switch to the new profile.
+
+    \b
+    Examples:
+      evalhub config create staging
+      evalhub config create prod --activate
+    """
+    data = cfg.load_config()
+    cfg.create_profile(data, name)
+    if activate:
+        cfg.set_active_profile(data, name)
+    cfg.save_config(data)
+    click.echo(f"Created profile '{name}'" + (" (active)" if activate else ""))
+
+
+@config.command("delete")
+@click.argument("name")
+def config_delete(name: str) -> None:
+    """Delete a configuration profile.
+
+    \b
+    Removes the profile and any stored file-key artefacts. The active
+    profile cannot be deleted — switch to another profile first.
+
+    \b
+    Examples:
+      evalhub config delete staging
+      evalhub config use default && evalhub config delete old-profile
+    """
+    data = cfg.load_config()
+    cfg.delete_profile(data, name)
+    cfg.save_config(data)
+    click.echo(f"Deleted profile '{name}'")
 
 
 @config.command("use")
@@ -1566,8 +1618,7 @@ def config_use(profile: str) -> None:
 
     \b
     Sets the given profile as the default for all subsequent commands.
-    The profile must already exist (create it by setting a value with
-    --profile).
+    The profile must already exist (create one with 'config create').
 
     \b
     Examples:

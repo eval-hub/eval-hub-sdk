@@ -237,6 +237,39 @@ def set_active_profile(data: dict[str, Any], profile: str) -> dict[str, Any]:
     return data
 
 
+def create_profile(data: dict[str, Any], name: str) -> dict[str, Any]:
+    """Explicitly create an empty profile.
+
+    Raises ``click.ClickException`` if a profile with *name* already exists.
+    """
+    profiles = data.setdefault("profiles", {})
+    if name in profiles:
+        raise click.ClickException(f"Profile '{name}' already exists.")
+    profiles[name] = {}
+    return data
+
+
+def delete_profile(data: dict[str, Any], name: str) -> dict[str, Any]:
+    """Remove a profile and its stored file-key artefacts.
+
+    Raises ``click.ClickException`` if *name* is the active profile or does
+    not exist.
+    """
+    active = get_active_profile(data)
+    if name == active:
+        raise click.ClickException(
+            f"Cannot delete the active profile '{name}'. "
+            f"Switch to another profile first with 'config use'."
+        )
+    profiles = data.get("profiles", {})
+    if name not in profiles:
+        raise click.ClickException(f"Profile '{name}' does not exist.")
+    del profiles[name]
+    for key in FILE_KEYS:
+        remove_file_key(key, name)
+    return data
+
+
 def parse_bool(value: Any, *, default: bool = False) -> bool:
     """Parse a config value as a boolean."""
     if value is None:
