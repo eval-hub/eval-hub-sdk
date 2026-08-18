@@ -52,7 +52,7 @@ def validate_profile_name(name: str) -> None:
     Raises ``click.ClickException`` if *name* contains path separators,
     traversal components, or characters outside a safe identifier set.
     """
-    if not name or not _PROFILE_NAME_RE.match(name) or ".." in name:
+    if not name or not _PROFILE_NAME_RE.fullmatch(name) or ".." in name:
         raise click.ClickException(
             f"Invalid profile name '{name}'. "
             "Names must be non-empty, use only [a-zA-Z0-9._-], "

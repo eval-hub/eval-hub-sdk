@@ -725,6 +725,7 @@ class TestValidateProfileName:
             "-leading-dash",
             "trailing-dot.",
             "trailing-dash-",
+            "staging\n",
         ],
     )
     def test_rejects_unsafe_names(self, name: str) -> None:
