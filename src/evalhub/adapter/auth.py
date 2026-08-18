@@ -3,8 +3,8 @@
 In Kubernetes the auth files live under a well-known mount
 (``/var/run/secrets/model``).  In local mode, when ``job_spec.model.auth``
 is present, the directory is derived from its ``secret_ref`` field which
-points to a user-provided filesystem path that may contain ``api-key``,
-``hf-token``, and ``ca_cert`` files.
+must be a ``file:///`` URL pointing to a directory that may contain
+``api-key``, ``hf-token``, and ``ca_cert`` files.
 
 The job spec is discovered automatically from ``EVALHUB_JOB_SPEC_PATH``
 (or the mode-dependent default) — callers do not need to pass it in.
@@ -13,6 +13,7 @@ The job spec is discovered automatically from ``EVALHUB_JOB_SPEC_PATH``
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlparse
 
 from .config import EvalHubMode, get_job_spec_path
 from .models.job import JobSpec
@@ -20,6 +21,17 @@ from .settings import AdapterSettings
 
 logger = logging.getLogger(__name__)
 _MODEL_AUTH_DIR = Path("/var/run/secrets/model")
+
+
+def _parse_file_url(url: str) -> Path:
+    parsed = urlparse(url)
+    if parsed.scheme != "file" or parsed.path == "":
+        raise ValueError(f"secret_ref must be a file:/// URL in local mode, got: {url}")
+    if parsed.netloc:
+        raise ValueError(
+            f"Malformed file URL (use file:///path, not file://path): {url}"
+        )
+    return Path(parsed.path)
 
 
 def _resolve_auth_dir() -> Path:
@@ -31,9 +43,12 @@ def _resolve_auth_dir() -> Path:
 
     settings = AdapterSettings.from_env()
     if settings.mode == EvalHubMode.LOCAL and job_spec.model.auth is not None:
-        ref = Path(job_spec.model.auth.secret_ref)
-        if ref.is_dir():
-            return ref
+        ref = _parse_file_url(job_spec.model.auth.secret_ref)
+        if not ref.is_dir():
+            raise ValueError(
+                f"secret_ref does not point to an existing directory: {ref}"
+            )
+        return ref
     return _MODEL_AUTH_DIR
 
 

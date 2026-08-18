@@ -25,6 +25,10 @@ _MINIMAL_JOB_SPEC_FIELDS: dict[str, Any] = {
 }
 
 
+def _file_url(path: Path) -> str:
+    return path.as_uri()
+
+
 def _make_job_spec(secret_ref: str) -> JobSpec:
     return JobSpec(
         model=ModelConfig(
@@ -71,7 +75,7 @@ class TestResolveAuthDir:
         monkeypatch.setenv("EVALHUB_MODE", "k8s")
         auth_dir = tmp_path / "model-auth"
         auth_dir.mkdir()
-        spec = _make_job_spec(str(auth_dir))
+        spec = _make_job_spec(_file_url(auth_dir))
         job_json = _write_job_json(tmp_path, spec)
         monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(job_json))
 
@@ -83,7 +87,7 @@ class TestResolveAuthDir:
         monkeypatch.setenv("EVALHUB_MODE", "local")
         auth_dir = tmp_path / "model-auth"
         auth_dir.mkdir()
-        spec = _make_job_spec(str(auth_dir))
+        spec = _make_job_spec(_file_url(auth_dir))
         job_json = _write_job_json(tmp_path, spec)
         monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(job_json))
 
@@ -99,15 +103,42 @@ class TestResolveAuthDir:
 
         assert _resolve_auth_dir() == Path("/var/run/secrets/model")
 
-    def test_local_mode_nonexistent_dir_returns_default(
+    def test_local_mode_nonexistent_dir_raises(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         monkeypatch.setenv("EVALHUB_MODE", "local")
-        spec = _make_job_spec(str(tmp_path / "does-not-exist"))
+        spec = _make_job_spec(_file_url(tmp_path / "does-not-exist"))
         job_json = _write_job_json(tmp_path, spec)
         monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(job_json))
 
-        assert _resolve_auth_dir() == Path("/var/run/secrets/model")
+        with pytest.raises(ValueError, match="existing directory"):
+            _resolve_auth_dir()
+
+    def test_local_mode_plain_path_raises(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("EVALHUB_MODE", "local")
+        auth_dir = tmp_path / "model-auth"
+        auth_dir.mkdir()
+        spec = _make_job_spec(str(auth_dir))
+        job_json = _write_job_json(tmp_path, spec)
+        monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(job_json))
+
+        with pytest.raises(ValueError, match="must be a file:/// URL"):
+            _resolve_auth_dir()
+
+    def test_local_mode_malformed_file_url_raises(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("EVALHUB_MODE", "local")
+        auth_dir = tmp_path / "model-auth"
+        auth_dir.mkdir()
+        spec = _make_job_spec(f"file://{auth_dir.name}/{auth_dir}")
+        job_json = _write_job_json(tmp_path, spec)
+        monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(job_json))
+
+        with pytest.raises(ValueError, match="file:///path, not file://path"):
+            _resolve_auth_dir()
 
 
 # ---------------------------------------------------------------------------
@@ -123,7 +154,7 @@ class TestReadModelAuthKey:
         auth_dir = tmp_path / "model-auth"
         auth_dir.mkdir()
         (auth_dir / "api-key").write_text("my-secret-key\n")
-        spec = _make_job_spec(str(auth_dir))
+        spec = _make_job_spec(_file_url(auth_dir))
         job_json = _write_job_json(tmp_path, spec)
         monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(job_json))
 
@@ -135,7 +166,7 @@ class TestReadModelAuthKey:
         monkeypatch.setenv("EVALHUB_MODE", "local")
         auth_dir = tmp_path / "model-auth"
         auth_dir.mkdir()
-        spec = _make_job_spec(str(auth_dir))
+        spec = _make_job_spec(_file_url(auth_dir))
         job_json = _write_job_json(tmp_path, spec)
         monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(job_json))
 
@@ -152,7 +183,7 @@ class TestReadModelAuthKey:
         auth_dir = tmp_path / "model-auth"
         auth_dir.mkdir()
         (auth_dir / "api-key").write_text("")
-        spec = _make_job_spec(str(auth_dir))
+        spec = _make_job_spec(_file_url(auth_dir))
         job_json = _write_job_json(tmp_path, spec)
         monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(job_json))
 
@@ -165,7 +196,7 @@ class TestReadModelAuthKey:
         auth_dir = tmp_path / "model-auth"
         auth_dir.mkdir()
         (auth_dir / "api-key").write_text("  key-with-whitespace  \n")
-        spec = _make_job_spec(str(auth_dir))
+        spec = _make_job_spec(_file_url(auth_dir))
         job_json = _write_job_json(tmp_path, spec)
         monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(job_json))
 
@@ -192,7 +223,7 @@ class TestReadModelAuthKey:
         monkeypatch.setenv("EVALHUB_MODE", "local")
         auth_dir = tmp_path / "model-auth"
         auth_dir.mkdir()
-        spec = _make_job_spec(str(auth_dir))
+        spec = _make_job_spec(_file_url(auth_dir))
         job_json = _write_job_json(tmp_path, spec)
         monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(job_json))
 
@@ -221,7 +252,7 @@ class TestResolveModelCredentials:
         (auth_dir / "api-key").write_text("real-api-key")
         (auth_dir / "hf-token").write_text("hf-abc123")
         (auth_dir / "ca_cert").write_text("-----BEGIN CERTIFICATE-----")
-        spec = _make_job_spec(str(auth_dir))
+        spec = _make_job_spec(_file_url(auth_dir))
         job_json = _write_job_json(tmp_path, spec)
         monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(job_json))
 
@@ -238,7 +269,7 @@ class TestResolveModelCredentials:
         auth_dir = tmp_path / "model-auth"
         auth_dir.mkdir()
         (auth_dir / "api-key").write_text("only-api-key")
-        spec = _make_job_spec(str(auth_dir))
+        spec = _make_job_spec(_file_url(auth_dir))
         job_json = _write_job_json(tmp_path, spec)
         monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(job_json))
 
@@ -255,7 +286,7 @@ class TestResolveModelCredentials:
         auth_dir = tmp_path / "model-auth"
         auth_dir.mkdir()
         (auth_dir / "ca_cert").mkdir()
-        spec = _make_job_spec(str(auth_dir))
+        spec = _make_job_spec(_file_url(auth_dir))
         job_json = _write_job_json(tmp_path, spec)
         monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(job_json))
 
