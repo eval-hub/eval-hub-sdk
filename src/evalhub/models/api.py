@@ -372,7 +372,7 @@ class GitTestDataRef(BaseModel):
     )
 
     @model_validator(mode="after")
-    def check_url_scheme(self) -> "GitTestDataRef":
+    def check_url_scheme(self) -> GitTestDataRef:
         parsed_url = urlsplit(self.url)
         if parsed_url.scheme not in ("http", "https") or not parsed_url.hostname:
             raise ValueError("git url must use http or https scheme and include a host")
