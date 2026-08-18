@@ -1,5 +1,7 @@
 """Core API models for the EvalHub SDK common interface."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from enum import Enum
 from typing import Any, cast
@@ -370,7 +372,7 @@ class GitTestDataRef(BaseModel):
     )
 
     @model_validator(mode="after")
-    def check_url_scheme(self) -> "GitTestDataRef":
+    def check_url_scheme(self) -> GitTestDataRef:
         parsed_url = urlsplit(self.url)
         if parsed_url.scheme not in ("http", "https") or not parsed_url.hostname:
             raise ValueError("git url must use http or https scheme and include a host")
@@ -397,7 +399,7 @@ class TestDataRef(BaseModel):
     )
 
     @model_validator(mode="after")
-    def check_exactly_one_source(self) -> "TestDataRef":
+    def check_exactly_one_source(self) -> TestDataRef:
         sources = [s for s in (self.s3, self.pvc, self.git) if s is not None]
         if len(sources) > 1:
             raise ValueError(
@@ -426,6 +428,12 @@ class BenchmarkConfig(BaseModel):
     provider_id: str = Field(..., description="Provider identifier")
     parameters: dict[str, Any] = Field(
         default_factory=dict, description="Benchmark-specific parameters"
+    )
+    primary_score: PrimaryScore | None = Field(
+        default=None, description="Override the benchmark's primary score metric"
+    )
+    pass_criteria: PassCriteria | None = Field(
+        default=None, description="Override pass/fail threshold for this benchmark"
     )
     test_data_ref: TestDataRef | None = Field(
         default=None, description="Reference to custom external test data"
@@ -557,7 +565,7 @@ class JobSubmissionRequest(BaseModel):
     )
 
     @model_validator(mode="after")
-    def check_benchmarks_or_collection(self) -> "JobSubmissionRequest":
+    def check_benchmarks_or_collection(self) -> JobSubmissionRequest:
         if self.benchmarks and self.collection:
             raise ValueError("Cannot specify both 'benchmarks' and 'collection'")
         if not self.benchmarks and not self.collection:
