@@ -20,7 +20,6 @@ from evalhub.cli.config import (
     _validate_path_within,
     create_profile,
     delete_profile,
-    validate_profile_name,
     get_active_profile,
     get_profile,
     get_value,
@@ -34,6 +33,7 @@ from evalhub.cli.config import (
     set_active_profile,
     set_value,
     unset_value,
+    validate_profile_name,
 )
 from evalhub.cli.main import main
 
@@ -743,7 +743,6 @@ class TestValidatePathWithin:
         base.mkdir()
         with pytest.raises(Exception, match="escapes base directory"):
             _validate_path_within(base / ".." / "outside", base)
-
 
 
 # --- config create / delete CLI tests ---
