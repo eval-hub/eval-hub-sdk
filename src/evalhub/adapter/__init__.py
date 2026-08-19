@@ -14,7 +14,11 @@ Quick Start:
         JobStatus,
         JobPhase,
         JobStatusUpdate,
+        configure_telemetry,
     )
+
+    # Enable OTEL span export (no-op when OTEL env vars are absent)
+    configure_telemetry()
 
     class MyAdapter(FrameworkAdapter):
         def run_benchmark_job(
@@ -95,7 +99,7 @@ from .models import (
 )
 from .oci import OCIArtifactPersister
 from .settings import AdapterSettings
-from .telemetry import EvalTracer
+from .telemetry import EvalTracer, configure_telemetry
 
 # Legacy API is available but deprecated
 # from evalhub.adapter.legacy import ...
@@ -132,6 +136,7 @@ __all__ = [
     "resolve_model_credentials",
     # Telemetry
     "EvalTracer",
+    "configure_telemetry",
     # Common models (re-exported for convenience)
     "JobStatus",
     "ModelConfig",
