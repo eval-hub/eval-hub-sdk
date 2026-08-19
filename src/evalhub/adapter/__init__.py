@@ -97,6 +97,20 @@ from .models import (
     OCIArtifactSpec,
     SafetyEvalEntry,
 )
+from .collector import (
+    CollectedRecord,
+    CollectionManifest,
+    CollectorConfig,
+    CollectorError,
+    CollectorProtocol,
+    LiveQuestion,
+    collect_responses,
+    collect_responses_from_parameters,
+    extract_by_path,
+    is_configured as is_collection_configured,
+    load_questions,
+    substitute_template,
+)
 from .oci import OCIArtifactPersister
 from .settings import AdapterSettings
 from .telemetry import EvalTracer, configure_telemetry
@@ -142,4 +156,17 @@ __all__ = [
     "ModelConfig",
     "EvaluationResult",
     "OCICoordinates",
+    # Live endpoint collection (experimental)
+    "CollectorConfig",
+    "CollectorProtocol",
+    "CollectorError",
+    "CollectedRecord",
+    "CollectionManifest",
+    "LiveQuestion",
+    "collect_responses",
+    "collect_responses_from_parameters",
+    "is_collection_configured",
+    "load_questions",
+    "extract_by_path",
+    "substitute_template",
 ]

@@ -571,6 +571,66 @@ results = JobResults(..., eval_card=eval_card, env_card=env_card)
 callbacks.report_results(results)
 ```
 
+## Live Endpoint Response Collection (Experimental)
+
+The SDK includes a collector utility that adapters can call during `LOADING_DATA`
+to query a chatbot endpoint with test questions and collect responses for evaluation.
+
+### OpenAI-Compatible Endpoint
+
+```python
+from evalhub.adapter import (
+    CollectorConfig, collect_responses, is_collection_configured,
+    resolve_model_credentials,
+)
+
+# In your adapter's run_benchmark_job():
+if is_collection_configured(config.parameters):
+    creds = resolve_model_credentials()
+    collector_config = CollectorConfig.from_parameters(config.parameters)
+    manifest = collect_responses(collector_config, credentials=creds)
+    # manifest.output_path -> responses.jsonl for your evaluation framework
+```
+
+Job parameters:
+```json
+{
+  "live_collection": {
+    "questions_path": "/test_data/questions.csv",
+    "output_dir": "/tmp/collected",
+    "endpoint_url": "https://my-chatbot.example/v1",
+    "model": "my-chatbot-v2",
+    "protocol": "openai_chat_completions"
+  }
+}
+```
+
+### Generic HTTP Endpoint (MCP, Langflow, custom APIs)
+
+```json
+{
+  "live_collection": {
+    "questions_path": "/test_data/questions.csv",
+    "output_dir": "/tmp/collected",
+    "endpoint_url": "https://mcp-chatbot.example/mcp",
+    "protocol": "generic_http",
+    "request_template": {
+      "jsonrpc": "2.0",
+      "method": "tools/call",
+      "params": {"name": "chat", "arguments": {"message": "{question}"}},
+      "id": "{question_id}"
+    },
+    "response_path": "result.content.0.text",
+    "extra_response_paths": {
+      "retrieved_contexts": "result.sources"
+    }
+  }
+}
+```
+
+The collector uses SDK auth patterns (`resolve_model_credentials()`) and
+TLS auto-detection by default. See the module docstring in
+`src/evalhub/adapter/collector.py` for all configuration options.
 **additional_info** - supplementary evaluation metadata:
 
 `additional_info` is a `dict[str, Any]` of supplementary key-value pairs for
