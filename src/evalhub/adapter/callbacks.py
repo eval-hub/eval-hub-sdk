@@ -25,6 +25,7 @@ from .models import (
 )
 from .oci import DEFAULT_OCI_PROXY_HOST, OCIArtifactPersister
 from .oci.persister import OCIArtifactContext
+from .telemetry import EvalTracer
 
 _MLFLOW_SAVE_FAILED = MessageInfo(
     message="Failed to save evaluation results to MLflow.",
@@ -345,6 +346,7 @@ class DefaultCallbacks(JobCallbacks):
         generate_additional_info_fn: (
             Callable[[JobResults], dict[str, Any] | None] | None
         ) = None,
+        tracer: EvalTracer | None = None,
     ):
         """Initialize default callbacks.
 
@@ -420,6 +422,8 @@ class DefaultCallbacks(JobCallbacks):
         self.mlflow = _MlflowOps(backend=mlflow_backend, callbacks=self)
 
         self.generate_additional_info_fn = generate_additional_info_fn
+
+        self.tracer: EvalTracer = tracer if tracer is not None else EvalTracer()
 
         # Try to import httpx for sidecar communication
         self._httpx_available = False
@@ -830,4 +834,5 @@ class DefaultCallbacks(JobCallbacks):
                 is not FrameworkAdapter.generate_additional_info
                 else None
             ),
+            tracer=EvalTracer.from_job_spec(adapter.job_spec),
         )
