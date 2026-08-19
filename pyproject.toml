@@ -42,8 +42,8 @@ adapter = [
     "eval-hub-sdk[core]",
     "olot>=0.1.15",
     "oras>=0.2.39",
-    "opentelemetry-api>=1.20.0",
-    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-api>=1.44.0",
+    "opentelemetry-sdk>=1.44.0",
 ]
 
 # Client API - for end users in Jupyter notebooks and scripts
@@ -75,7 +75,7 @@ dev = [
     "ruff==0.1.6",  # Match ruff-pre-commit v0.1.6
     "mypy==1.19.1",  # Match mirrors-mypy v1.19.1
     "pre-commit>=3.4.0",
-    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-sdk>=1.44.0",
 ]
 
 # Example framework integrations
