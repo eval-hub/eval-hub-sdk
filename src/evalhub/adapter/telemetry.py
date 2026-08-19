@@ -26,6 +26,7 @@ from __future__ import annotations
 import atexit
 import logging
 import os
+import threading
 from collections.abc import Generator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
@@ -43,7 +44,9 @@ logger = logging.getLogger(__name__)
 
 _TRACER_NAME = "evalhub.adapter"
 _DEFAULT_SERVICE_NAME = "evalhub-adapter"
+_lock = threading.Lock()
 _provider_installed: TracerProvider | None = None
+_owns_provider: bool = False
 
 
 def configure_telemetry(
@@ -54,8 +57,13 @@ def configure_telemetry(
     """Install a ``TracerProvider`` with an OTLP exporter if OTEL is configured.
 
     Call this once at adapter startup — before any ``EvalTracer`` is created —
-    to enable span export.  The function is **idempotent**: subsequent calls
-    return ``True`` immediately without reinstalling the provider.
+    to enable span export.  The function is **thread-safe** and
+    **idempotent**: concurrent or repeated calls are serialised by a lock and
+    return ``True`` immediately once a provider has been accepted.
+
+    If a ``TracerProvider`` was already installed globally (e.g. by OTEL
+    auto-instrumentation or a test harness), it is reused and no new provider
+    is created.
 
     Configuration is resolved from arguments first, then from standard OTEL
     environment variables:
@@ -74,65 +82,111 @@ def configure_telemetry(
         endpoint: Override for ``OTEL_EXPORTER_OTLP_ENDPOINT``.
 
     Returns:
-        ``True`` if a ``TracerProvider`` was installed (or was already
-        installed by a previous call), ``False`` if OTEL is not configured.
+        ``True`` if a ``TracerProvider`` is active (installed by us, reused
+        from an existing global, or already accepted by a previous call),
+        ``False`` if OTEL is not configured.
     """
-    global _provider_installed  # noqa: PLW0603
+    global _provider_installed, _owns_provider  # noqa: PLW0603
 
     if _provider_installed is not None:
         return True
 
-    resolved_endpoint = endpoint or os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
-    if not resolved_endpoint:
-        logger.debug(
-            "OTEL_EXPORTER_OTLP_ENDPOINT not set — skipping TracerProvider setup"
+    with _lock:
+        if _provider_installed is not None:
+            return True
+
+        resolved_endpoint = endpoint or os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+        if not resolved_endpoint:
+            logger.debug(
+                "OTEL_EXPORTER_OTLP_ENDPOINT not set — skipping TracerProvider setup"
+            )
+            return False
+
+        try:
+            from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+                OTLPSpanExporter,
+            )
+            from opentelemetry.sdk.resources import Resource
+            from opentelemetry.sdk.trace import TracerProvider as _TracerProvider
+            from opentelemetry.sdk.trace.export import BatchSpanProcessor
+        except ImportError:
+            logger.warning(
+                "opentelemetry-exporter-otlp-proto-grpc is not installed. "
+                "Install it with: pip install opentelemetry-exporter-otlp-proto-grpc"
+            )
+            return False
+
+        # If an SDK TracerProvider is already globally active (e.g. from OTEL
+        # auto-instrumentation or a test harness), reuse it rather than
+        # creating a second provider that set_tracer_provider would discard.
+        current = trace.get_tracer_provider()
+        if isinstance(current, _TracerProvider):
+            _provider_installed = current
+            _owns_provider = False
+            logger.info(
+                "Reusing existing TracerProvider (service=%s)",
+                dict(current.resource.attributes).get("service.name", "unknown"),
+            )
+            return True
+
+        resolved_name = (
+            service_name or os.environ.get("OTEL_SERVICE_NAME") or _DEFAULT_SERVICE_NAME
         )
-        return False
 
-    try:
-        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
-            OTLPSpanExporter,
+        resource = Resource.create({"service.name": resolved_name})
+        exporter = OTLPSpanExporter(endpoint=resolved_endpoint)
+        provider = _TracerProvider(resource=resource)
+        provider.add_span_processor(BatchSpanProcessor(exporter))
+        trace.set_tracer_provider(provider)
+
+        # set_tracer_provider uses a set-once guard.  If another thread won
+        # the race between our isinstance check above and the set call, our
+        # provider was silently discarded.  Detect that and clean up.
+        active = trace.get_tracer_provider()
+        if active is not provider:
+            provider.shutdown()
+            if isinstance(active, _TracerProvider):
+                _provider_installed = active
+                _owns_provider = False
+                logger.info(
+                    "Another TracerProvider was installed concurrently — "
+                    "reusing it (service=%s)",
+                    dict(active.resource.attributes).get("service.name", "unknown"),
+                )
+                return True
+            logger.warning(
+                "set_tracer_provider was ignored and no SDK provider is active. "
+                "Spans will be emitted via the no-op tracer."
+            )
+            return False
+
+        _provider_installed = provider
+        _owns_provider = True
+        atexit.register(_shutdown_provider)
+
+        logger.info(
+            "TracerProvider installed (service=%s, endpoint=%s)",
+            resolved_name,
+            resolved_endpoint,
         )
-        from opentelemetry.sdk.resources import Resource
-        from opentelemetry.sdk.trace import TracerProvider as _TracerProvider
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor
-    except ImportError:
-        logger.warning(
-            "opentelemetry-exporter-otlp-proto-grpc is not installed. "
-            "Install it with: pip install opentelemetry-exporter-otlp-proto-grpc"
-        )
-        return False
-
-    resolved_name = (
-        service_name or os.environ.get("OTEL_SERVICE_NAME") or _DEFAULT_SERVICE_NAME
-    )
-
-    resource = Resource.create({"service.name": resolved_name})
-    exporter = OTLPSpanExporter(endpoint=resolved_endpoint)
-    provider = _TracerProvider(resource=resource)
-    provider.add_span_processor(BatchSpanProcessor(exporter))
-    trace.set_tracer_provider(provider)
-
-    _provider_installed = provider
-    atexit.register(_shutdown_provider)
-
-    logger.info(
-        "TracerProvider installed (service=%s, endpoint=%s)",
-        resolved_name,
-        resolved_endpoint,
-    )
-    return True
+        return True
 
 
 def _shutdown_provider() -> None:
-    """Flush and shut down the provider registered by :func:`configure_telemetry`."""
-    global _provider_installed  # noqa: PLW0603
-    if _provider_installed is not None:
-        try:
-            _provider_installed.shutdown()
-        except Exception:
-            logger.debug("TracerProvider shutdown error", exc_info=True)
+    """Flush and shut down the provider registered by :func:`configure_telemetry`.
+
+    Only shuts down the provider if we created it (not when we reused an
+    existing global provider).
+    """
+    global _provider_installed, _owns_provider  # noqa: PLW0603
+    with _lock:
+        if _provider_installed is not None and _owns_provider:
+            try:
+                _provider_installed.shutdown()
+            except Exception:
+                logger.debug("TracerProvider shutdown error", exc_info=True)
         _provider_installed = None
+        _owns_provider = False
 
 
 class _EnvCarrier(dict[str, str]):
