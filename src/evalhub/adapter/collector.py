@@ -353,10 +353,8 @@ def _resolve_auth_headers(
     credentials: ModelCredentials | None,
 ) -> dict[str, str]:
     headers: dict[str, str] = {}
-    if credentials:
-        headers.update(credentials.auth_headers)
-        if credentials.api_key:
-            headers["Authorization"] = f"Bearer {credentials.api_key}"
+    if credentials and credentials.api_key:
+        headers["Authorization"] = f"Bearer {credentials.api_key}"
     if config.api_key_env:
         api_key = os.getenv(config.api_key_env)
         if not api_key:
@@ -375,7 +373,7 @@ def _resolve_verify(
     if config.ca_bundle:
         return config.ca_bundle
     if credentials and credentials.ca_cert_path:
-        return credentials.ca_cert_path
+        return str(credentials.ca_cert_path)
     for candidate in _CA_BUNDLE_CANDIDATES:
         if candidate.exists():
             return str(candidate)
