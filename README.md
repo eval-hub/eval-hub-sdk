@@ -238,6 +238,66 @@ results = adapter.run_benchmark_job(adapter.job_spec, callbacks)
 - **Status updates**: Sent to sidecar if `sidecar_url` is provided, otherwise logged locally. Both `report_status` and `report_results` events always include `benchmark_index` (and `provider_id` when set) so the service can associate events with the correct benchmark in multi-benchmark jobs.
 - **OCI artifacts**: Created via SDK callbacks and pushed to the OCI registry through the sidecar-authenticated flow when mode is Kubernetes.
 
+### Experimental Live Response Collection
+
+Adapters that need to evaluate a live chatbot or RAG endpoint can opt into the
+experimental live collection helper during `JobPhase.LOADING_DATA`. The first
+collector reads questions from CSV, JSON, or JSONL, calls an OpenAI-compatible
+`/v1/chat/completions` endpoint, then writes `responses.jsonl` and
+`manifest.json` into an output directory for the adapter's evaluation framework
+to load.
+
+```python
+from evalhub.adapter import (
+    JobPhase,
+    JobStatus,
+    JobStatusUpdate,
+    LiveCollectionConfig,
+    MessageInfo,
+    collect_openai_chat_completions,
+)
+
+callbacks.report_status(JobStatusUpdate(
+    status=JobStatus.RUNNING,
+    phase=JobPhase.LOADING_DATA,
+    message=MessageInfo(
+        message="Collecting live endpoint responses",
+        message_code="live_collection",
+    ),
+))
+
+config = LiveCollectionConfig.from_parameters(adapter.job_spec.parameters)
+manifest = collect_openai_chat_completions(config)
+
+# Your framework can now load manifest.output_path, a JSONL file with one
+# row per question and either a response or an error field.
+```
+
+Example `parameters["live_collection"]` shape:
+
+```json
+{
+  "live_collection": {
+    "endpoint_type": "openai_chat_completions",
+    "endpoint_url": "https://example.com/v1/chat/completions",
+    "model": "my-chatbot",
+    "questions_path": "/data/questions.jsonl",
+    "output_dir": "/tmp/live_collection",
+    "api_key_env": "CHATBOT_API_KEY"
+  }
+}
+```
+
+The helper does not require server/API changes. Redirects are not followed, and
+per-row request failures are recorded in the JSONL output instead of aborting
+the whole job. When `max_retries` is set, failed row requests use capped
+exponential backoff between attempts.
+
+Because `endpoint_url`, `request_headers`, and `api_key_env` come from adapter
+parameters, use this helper only when the job submitter is trusted to choose the
+endpoint and referenced secret. Hosted/server-side submission should add URL and
+secret-reference policy before promoting this shape into the API.
+
 ### 4. Containerise Your Adapter
 
 Create a Dockerfile for your adapter:
