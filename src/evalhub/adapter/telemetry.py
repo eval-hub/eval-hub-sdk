@@ -12,10 +12,18 @@ evaluation span types defined by the EvalHub observability contract:
 When no ``TracerProvider`` is configured (i.e. OTEL environment variables are
 absent), the underlying ``trace.get_tracer()`` returns a no-op tracer and all
 context managers become zero-cost no-ops.
+
+Use :func:`configure_telemetry` to install a ``TracerProvider`` with an OTLP
+exporter before creating any ``EvalTracer`` instances::
+
+    from evalhub.adapter.telemetry import configure_telemetry
+
+    configure_telemetry()  # reads OTEL_* env vars; no-op when unconfigured
 """
 
 from __future__ import annotations
 
+import atexit
 import logging
 import os
 from collections.abc import Generator
@@ -27,11 +35,104 @@ from opentelemetry import trace
 from opentelemetry.propagate import extract
 
 if TYPE_CHECKING:
+    from opentelemetry.sdk.trace import TracerProvider
+
     from .models.job import JobSpec
 
 logger = logging.getLogger(__name__)
 
 _TRACER_NAME = "evalhub.adapter"
+_DEFAULT_SERVICE_NAME = "evalhub-adapter"
+_provider_installed: TracerProvider | None = None
+
+
+def configure_telemetry(
+    service_name: str | None = None,
+    *,
+    endpoint: str | None = None,
+) -> bool:
+    """Install a ``TracerProvider`` with an OTLP exporter if OTEL is configured.
+
+    Call this once at adapter startup — before any ``EvalTracer`` is created —
+    to enable span export.  The function is **idempotent**: subsequent calls
+    return ``True`` immediately without reinstalling the provider.
+
+    Configuration is resolved from arguments first, then from standard OTEL
+    environment variables:
+
+    * ``OTEL_EXPORTER_OTLP_ENDPOINT`` — collector endpoint
+      (e.g. ``http://localhost:4317``)
+    * ``OTEL_SERVICE_NAME`` — logical service name
+      (defaults to ``evalhub-adapter``)
+
+    When neither ``endpoint`` nor ``OTEL_EXPORTER_OTLP_ENDPOINT`` is set the
+    function returns ``False`` and no provider is installed, preserving the
+    default no-op tracer behaviour.
+
+    Args:
+        service_name: Override for ``OTEL_SERVICE_NAME``.
+        endpoint: Override for ``OTEL_EXPORTER_OTLP_ENDPOINT``.
+
+    Returns:
+        ``True`` if a ``TracerProvider`` was installed (or was already
+        installed by a previous call), ``False`` if OTEL is not configured.
+    """
+    global _provider_installed  # noqa: PLW0603
+
+    if _provider_installed is not None:
+        return True
+
+    resolved_endpoint = endpoint or os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+    if not resolved_endpoint:
+        logger.debug(
+            "OTEL_EXPORTER_OTLP_ENDPOINT not set — skipping TracerProvider setup"
+        )
+        return False
+
+    try:
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+            OTLPSpanExporter,
+        )
+        from opentelemetry.sdk.resources import Resource
+        from opentelemetry.sdk.trace import TracerProvider as _TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    except ImportError:
+        logger.warning(
+            "opentelemetry-exporter-otlp-proto-grpc is not installed. "
+            "Install it with: pip install opentelemetry-exporter-otlp-proto-grpc"
+        )
+        return False
+
+    resolved_name = (
+        service_name or os.environ.get("OTEL_SERVICE_NAME") or _DEFAULT_SERVICE_NAME
+    )
+
+    resource = Resource.create({"service.name": resolved_name})
+    exporter = OTLPSpanExporter(endpoint=resolved_endpoint)
+    provider = _TracerProvider(resource=resource)
+    provider.add_span_processor(BatchSpanProcessor(exporter))
+    trace.set_tracer_provider(provider)
+
+    _provider_installed = provider
+    atexit.register(_shutdown_provider)
+
+    logger.info(
+        "TracerProvider installed (service=%s, endpoint=%s)",
+        resolved_name,
+        resolved_endpoint,
+    )
+    return True
+
+
+def _shutdown_provider() -> None:
+    """Flush and shut down the provider registered by :func:`configure_telemetry`."""
+    global _provider_installed  # noqa: PLW0603
+    if _provider_installed is not None:
+        try:
+            _provider_installed.shutdown()
+        except Exception:
+            logger.debug("TracerProvider shutdown error", exc_info=True)
+        _provider_installed = None
 
 
 class _EnvCarrier(dict[str, str]):

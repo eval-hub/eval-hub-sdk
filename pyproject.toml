@@ -44,6 +44,7 @@ adapter = [
     "oras>=0.2.39",
     "opentelemetry-api>=1.44.0",
     "opentelemetry-sdk>=1.44.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.44.0",
 ]
 
 # Client API - for end users in Jupyter notebooks and scripts
