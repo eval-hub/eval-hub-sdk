@@ -13,6 +13,11 @@ from opentelemetry import trace as trace_api
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.sampling import ALWAYS_ON
 
+pytest.importorskip(
+    "opentelemetry.exporter.otlp.proto.grpc.trace_exporter",
+    reason="opentelemetry-exporter-otlp-proto-grpc not installed",
+)
+
 pytestmark = pytest.mark.unit
 
 
