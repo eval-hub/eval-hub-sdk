@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from evalhub.adapter.config import EvalHubMode
 
@@ -39,6 +39,9 @@ class FrameworkAdapter(ABC):
 
     Framework adapters should:
     - Implement run_benchmark_job() to execute the benchmark
+    - Optionally override generate_additional_info() to supply supplementary
+      evaluation metadata beyond metrics; called automatically by
+      DefaultCallbacks.report_results()
     - Use the config parameter for job configuration (passed as adapter.job_spec in production)
     - Access self.settings for runtime configuration (service_url, registry, etc.)
     - Use callbacks.report_status() to report progress
@@ -69,13 +72,9 @@ class FrameworkAdapter(ABC):
         # export EVALHUB_JOB_SPEC_PATH=/path/to/job.json
         adapter = MyAdapter()
 
-        # Run the job
-        callbacks = DefaultCallbacks(
-            job_id=adapter.job_spec.id,
-            sidecar_url=adapter.job_spec.callback_url,
-            ...
-        )
+        callbacks = DefaultCallbacks.from_adapter(adapter)
         results = adapter.run_benchmark_job(adapter.job_spec, callbacks)
+        callbacks.report_results(results)
         ```
     """
 
@@ -228,6 +227,28 @@ class FrameworkAdapter(ABC):
                 f"got: {s.job_spec_path}"
             )
         return job_spec.parent.parent
+
+    def generate_additional_info(self, results: JobResults) -> dict[str, Any] | None:
+        """Generate supplementary key-value pairs for the evaluation.
+
+        Override this to supply additional evaluation information beyond
+        metrics (e.g. ``zero_shot``, ``alt_prompting``, ``dataset_sha``).
+        These are included in the ``benchmark_status_event`` payload and
+        are available to downstream consumers such as EvalCard generation.
+        The default returns ``None``.
+        Values may be any JSON-serializable type.
+
+        Called automatically by ``DefaultCallbacks.report_results()`` when
+        ``results.additional_info`` is not already set.
+
+        Args:
+            results: The completed evaluation results (metrics, scores, etc.).
+                     Use ``results.benchmark_id`` for benchmark-specific logic.
+
+        Returns:
+            Dict of key-value pairs, or None to skip.
+        """
+        return None
 
     @abstractmethod
     def run_benchmark_job(self, config: JobSpec, callbacks: JobCallbacks) -> JobResults:

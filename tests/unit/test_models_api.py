@@ -7,6 +7,7 @@ import pytest
 from evalhub.models.api import (
     BenchmarkConfig,
     BenchmarkInfo,
+    BenchmarkResult,
     BenchmarksList,
     CollectionList,
     CollectionRef,
@@ -15,21 +16,32 @@ from evalhub.models.api import (
     EvaluationExports,
     EvaluationExportsOCI,
     EvaluationJob,
+    EvaluationJobResults,
     EvaluationResponse,
     EvaluationResult,
     EvaluationStatus,
     FrameworkInfo,
+    GitTestDataRef,
     HealthResponse,
     JobsList,
     JobStatus,
     JobSubmissionRequest,
+    MetricSchema,
     ModelConfig,
     OCIConnectionConfig,
     OCICoordinates,
+    PassCriteria,
+    PrimaryScore,
     ProviderList,
+    PVCTestDataRef,
     QueueConfig,
+    ResultType,
+    S3TestDataRef,
+    TestDataRef,
 )
 from pydantic import ValidationError
+
+pytestmark = pytest.mark.unit
 
 
 class TestModelConfig:
@@ -339,6 +351,90 @@ class TestEffectiveState:
             ],
         )
         assert job.effective_state == JobStatus.PENDING
+
+
+class TestBenchmarkConfig:
+    """Test cases for BenchmarkConfig model — primary_score and pass_criteria overrides."""
+
+    def test_defaults_are_none(self) -> None:
+        cfg = BenchmarkConfig(id="hellaswag", provider_id="lighteval")
+        assert cfg.primary_score is None
+        assert cfg.pass_criteria is None
+
+    def test_primary_score_accepted(self) -> None:
+        cfg = BenchmarkConfig(
+            id="hellaswag",
+            provider_id="lighteval",
+            primary_score=PrimaryScore(metric="hellaswag.em"),
+        )
+        assert cfg.primary_score is not None
+        assert cfg.primary_score.metric == "hellaswag.em"
+        assert cfg.primary_score.lower_is_better is False
+
+    def test_pass_criteria_accepted(self) -> None:
+        cfg = BenchmarkConfig(
+            id="hellaswag",
+            provider_id="lighteval",
+            pass_criteria=PassCriteria(threshold=0.99),
+        )
+        assert cfg.pass_criteria is not None
+        assert cfg.pass_criteria.threshold == 0.99
+
+    def test_both_fields_serialized(self) -> None:
+        """primary_score and pass_criteria must appear in model_dump output so the
+        server receives the per-benchmark threshold override."""
+        cfg = BenchmarkConfig(
+            id="hellaswag",
+            provider_id="lighteval",
+            primary_score=PrimaryScore(metric="hellaswag.em"),
+            pass_criteria=PassCriteria(threshold=0.99),
+        )
+        data = cfg.model_dump(exclude_none=True)
+        assert data["primary_score"] == {
+            "metric": "hellaswag.em",
+            "lower_is_better": False,
+        }
+        assert data["pass_criteria"] == {"threshold": 0.99}
+
+    def test_fields_omitted_when_none(self) -> None:
+        cfg = BenchmarkConfig(id="hellaswag", provider_id="lighteval")
+        data = cfg.model_dump(exclude_none=True)
+        assert "primary_score" not in data
+        assert "pass_criteria" not in data
+
+    def test_roundtrip_via_job_submission_request(self) -> None:
+        """Regression test: per-benchmark overrides must survive YAML→model→dump→server."""
+        import yaml
+
+        raw = yaml.safe_load(
+            """
+name: violations-demo
+model:
+  url: http://vllm:8000/v1
+  name: my-model
+benchmarks:
+  - id: hellaswag
+    provider_id: lighteval
+    primary_score:
+      metric: hellaswag.em
+    pass_criteria:
+      threshold: 0.99
+    parameters:
+      num_examples: 10
+"""
+        )
+        req = JobSubmissionRequest(**raw)
+        assert req.benchmarks is not None
+        b = req.benchmarks[0]
+        assert b.primary_score is not None
+        assert b.primary_score.metric == "hellaswag.em"
+        assert b.pass_criteria is not None
+        assert b.pass_criteria.threshold == 0.99
+        # Verify the fields survive serialisation (what the CLI sends to the server)
+        payload = req.model_dump(exclude_none=True)
+        bench_payload = payload["benchmarks"][0]
+        assert bench_payload["primary_score"]["metric"] == "hellaswag.em"
+        assert bench_payload["pass_criteria"]["threshold"] == 0.99
 
 
 class TestCollectionRef:
@@ -664,6 +760,65 @@ class TestExperimentConfig:
         assert restored.tags[0].key == "k1"
 
 
+class TestBenchmarkResult:
+    """Test cases for BenchmarkResult model."""
+
+    def test_additional_info_default_none(self) -> None:
+        result = BenchmarkResult(id="mmlu", provider_id="lm_eval")
+        assert result.additional_info is None
+
+    def test_additional_info_with_nested_values(self) -> None:
+        info: dict[str, Any] = {
+            "dataset": [
+                {
+                    "hf_repo": "openai/gsm8k",
+                    "hf_subset": "main",
+                    "sha": "740312add88f",
+                }
+            ],
+            "generation_parameters": {"temperature": 0},
+            "zero_shot": 0.8,
+        }
+        result = BenchmarkResult(id="mmlu", provider_id="lm_eval", additional_info=info)
+        assert result.additional_info == info
+
+    def test_additional_info_roundtrip(self) -> None:
+        info: dict[str, Any] = {
+            "prompting_strategy": "chain-of-thought",
+            "dataset_sha": "abc123",
+        }
+        result = BenchmarkResult(
+            id="mmlu",
+            provider_id="lm_eval",
+            metrics={"accuracy": 0.85},
+            additional_info=info,
+        )
+        data = result.model_dump(mode="json")
+        assert data["additional_info"] == info
+        restored = BenchmarkResult.model_validate(data)
+        assert restored.additional_info == info
+
+    def test_additional_info_excluded_when_none(self) -> None:
+        result = BenchmarkResult(id="mmlu", provider_id="lm_eval")
+        data = result.model_dump(mode="json", exclude_none=True)
+        assert "additional_info" not in data
+
+    def test_additional_info_in_job_results(self) -> None:
+        info: dict[str, Any] = {"zero_shot": 0.8}
+        results = EvaluationJobResults(
+            benchmarks=[
+                BenchmarkResult(
+                    id="mmlu",
+                    provider_id="lm_eval",
+                    metrics={"accuracy": 0.85},
+                    additional_info=info,
+                ),
+            ],
+        )
+        data = results.model_dump(mode="json")
+        assert data["benchmarks"][0]["additional_info"] == info
+
+
 class TestEvaluationResult:
     """Test cases for EvaluationResult model."""
 
@@ -958,6 +1113,36 @@ class TestListModelsServerCompatibility:
         assert len(collection_list.items) == 1
         assert collection_list.items[0].resource.id == "healthcare_v1"
 
+    def test_collection_list_without_description(self) -> None:
+        """Test CollectionList parses when server omits description."""
+        server_response = {
+            "items": [
+                {
+                    "resource": {
+                        "id": "c566c23d-8f79-4643-9d61-a6392e810184",
+                        "tenant": "dataplane",
+                        "created_at": "2026-07-28T15:25:38Z",
+                        "updated_at": "2026-07-28T15:25:38Z",
+                    },
+                    "name": "my-safety-suite",
+                    "category": "safety",
+                    "benchmarks": [
+                        {
+                            "id": "truthfulqa_mc1",
+                            "provider_id": "lm_evaluation_harness",
+                        },
+                        {"id": "owasp_llm_top_10", "provider_id": "garak"},
+                    ],
+                }
+            ],
+            "total_count": 1,
+        }
+
+        collection_list = CollectionList.model_validate(server_response)
+        assert collection_list.total_count == 1
+        assert len(collection_list.items) == 1
+        assert collection_list.items[0].description == ""
+
     def test_jobs_list_with_server_fields(self) -> None:
         """Test JobsList parses server response format."""
         # Go API returns 'items' and 'total_count' with nested structure
@@ -1100,3 +1285,340 @@ class TestQueueConfig:
         )
         assert req.queue is None
         assert "queue" not in req.model_dump(exclude_none=True)
+
+
+class TestBenchmarkStatusPhase:
+    """Test cases for JobPhase support on BenchmarkStatus."""
+
+    def test_benchmark_status_without_phase(self) -> None:
+        """BenchmarkStatus should default phase to None for backward compat."""
+        from evalhub.models.api import BenchmarkStatus
+
+        status = BenchmarkStatus(
+            id="mmlu",
+            provider_id="lm_eval",
+            status=JobStatus.RUNNING,
+        )
+        assert status.phase is None
+
+    def test_benchmark_status_with_phase(self) -> None:
+        """BenchmarkStatus should accept and expose a JobPhase value."""
+        from evalhub.models.api import BenchmarkStatus, JobPhase
+
+        status = BenchmarkStatus(
+            id="mmlu",
+            provider_id="lm_eval",
+            status=JobStatus.RUNNING,
+            phase=JobPhase.RUNNING_EVALUATION,
+        )
+        assert status.phase == JobPhase.RUNNING_EVALUATION
+
+    def test_benchmark_status_phase_from_json(self) -> None:
+        """BenchmarkStatus should deserialize phase from raw JSON (server response)."""
+        from evalhub.models.api import BenchmarkStatus, JobPhase
+
+        data: dict[str, Any] = {
+            "id": "mmlu",
+            "provider_id": "lm_eval",
+            "status": "running",
+            "phase": "loading_data",
+        }
+        status = BenchmarkStatus(**data)
+        assert status.phase == JobPhase.LOADING_DATA
+
+    def test_benchmark_status_phase_serializes(self) -> None:
+        """BenchmarkStatus should serialize phase in model_dump output."""
+        from evalhub.models.api import BenchmarkStatus, JobPhase
+
+        status = BenchmarkStatus(
+            id="mmlu",
+            provider_id="lm_eval",
+            status=JobStatus.RUNNING,
+            phase=JobPhase.POST_PROCESSING,
+        )
+        data = status.model_dump(mode="json")
+        assert data["phase"] == "post_processing"
+
+    def test_benchmark_status_phase_excluded_when_none(self) -> None:
+        """Phase should be absent from exclude_none dumps when unset."""
+        from evalhub.models.api import BenchmarkStatus
+
+        status = BenchmarkStatus(
+            id="mmlu",
+            provider_id="lm_eval",
+            status=JobStatus.RUNNING,
+        )
+        data = status.model_dump(exclude_none=True)
+        assert "phase" not in data
+
+    def test_job_phase_enum_values(self) -> None:
+        """Verify all expected JobPhase values exist in the common models."""
+        from evalhub.models.api import JobPhase
+
+        expected = {
+            "initializing",
+            "loading_data",
+            "running_evaluation",
+            "post_processing",
+            "persisting_artifacts",
+            "completed",
+        }
+        actual = {p.value for p in JobPhase}
+        assert actual == expected
+
+    def test_job_phase_importable_from_models_package(self) -> None:
+        """JobPhase should be importable from evalhub.models."""
+        from evalhub.models import JobPhase
+
+        assert JobPhase.RUNNING_EVALUATION.value == "running_evaluation"
+
+    def test_adapter_job_phase_is_same_as_common(self) -> None:
+        """Adapter JobPhase should be the same class as the common models JobPhase."""
+        from evalhub.adapter.models import JobPhase as AdapterJobPhase
+        from evalhub.models import JobPhase as CommonJobPhase
+
+        assert AdapterJobPhase is CommonJobPhase
+
+
+class TestPVCTestDataRef:
+    """Tests for PVCTestDataRef and TestDataRef PVC support."""
+
+    def test_pvc_ref_basic(self) -> None:
+        ref = PVCTestDataRef(claim_name="my-pvc")
+        assert ref.claim_name == "my-pvc"
+        assert ref.sub_path is None
+
+    def test_pvc_ref_with_sub_path(self) -> None:
+        ref = PVCTestDataRef(claim_name="my-pvc", sub_path="staging")
+        assert ref.sub_path == "staging"
+
+    def test_pvc_ref_serializes_correctly(self) -> None:
+        ref = PVCTestDataRef(claim_name="my-pvc", sub_path="staging")
+        data = ref.model_dump(exclude_none=True)
+        assert data == {"claim_name": "my-pvc", "sub_path": "staging"}
+
+    def test_pvc_ref_omits_none_sub_path(self) -> None:
+        ref = PVCTestDataRef(claim_name="my-pvc")
+        data = ref.model_dump(exclude_none=True)
+        assert "sub_path" not in data
+
+    def test_test_data_ref_with_pvc(self) -> None:
+        ref = TestDataRef(pvc=PVCTestDataRef(claim_name="my-pvc"))
+        assert ref.pvc is not None
+        assert ref.s3 is None
+        data = ref.model_dump(exclude_none=True)
+        assert data == {"pvc": {"claim_name": "my-pvc"}}
+
+    def test_test_data_ref_with_s3(self) -> None:
+        ref = TestDataRef(s3=S3TestDataRef(bucket="b", key="k", secret_ref="s"))
+        assert ref.s3 is not None
+        assert ref.pvc is None
+
+    def test_test_data_ref_rejects_both(self) -> None:
+        with pytest.raises(ValidationError, match="Cannot specify more than one"):
+            TestDataRef(
+                s3=S3TestDataRef(bucket="b", key="k", secret_ref="s"),
+                pvc=PVCTestDataRef(claim_name="my-pvc"),
+            )
+
+    def test_test_data_ref_rejects_neither(self) -> None:
+        with pytest.raises(ValidationError, match="Must specify exactly one"):
+            TestDataRef()
+
+    def test_pvc_importable_from_models_package(self) -> None:
+        from evalhub.models import PVCTestDataRef as Imported
+
+        assert Imported is PVCTestDataRef
+
+    def test_benchmark_config_with_pvc(self) -> None:
+        cfg = BenchmarkConfig(
+            id="arc_easy",
+            provider_id="lm_evaluation_harness",
+            test_data_ref=TestDataRef(
+                pvc=PVCTestDataRef(claim_name="my-pvc", sub_path="staging")
+            ),
+        )
+        data = cfg.model_dump(exclude_none=True)
+        assert data["test_data_ref"]["pvc"]["claim_name"] == "my-pvc"
+        assert data["test_data_ref"]["pvc"]["sub_path"] == "staging"
+
+
+class TestGitTestDataRef:
+    """Tests for GitTestDataRef and TestDataRef git support."""
+
+    def test_git_ref_basic(self) -> None:
+        ref = GitTestDataRef(url="https://github.com/org/repo.git", ref="main")
+        assert ref.url == "https://github.com/org/repo.git"
+        assert ref.ref == "main"
+        assert ref.sub_path is None
+        assert ref.secret_ref is None
+
+    def test_git_ref_with_all_fields(self) -> None:
+        ref = GitTestDataRef(
+            url="https://github.com/org/repo.git",
+            ref="v1.0",
+            sub_path="arc_easy",
+            secret_ref="my-git-secret",
+        )
+        assert ref.sub_path == "arc_easy"
+        assert ref.secret_ref == "my-git-secret"
+
+    def test_git_ref_http_without_credentials_allowed(self) -> None:
+        ref = GitTestDataRef(url="http://github.com/org/repo.git", ref="main")
+        assert ref.url.startswith("http://")
+
+    def test_git_ref_rejects_non_http_scheme(self) -> None:
+        with pytest.raises(ValidationError, match="http or https scheme"):
+            GitTestDataRef(url="git@github.com:org/repo.git", ref="main")
+
+    def test_git_ref_rejects_hostless_https_url(self) -> None:
+        with pytest.raises(ValidationError, match="include a host"):
+            GitTestDataRef(url="https://", ref="main")
+
+    def test_git_ref_rejects_hostless_http_url(self) -> None:
+        with pytest.raises(ValidationError, match="include a host"):
+            GitTestDataRef(url="http://", ref="main")
+
+    def test_git_ref_rejects_http_with_secret_ref(self) -> None:
+        with pytest.raises(ValidationError, match="https URL"):
+            GitTestDataRef(
+                url="http://github.com/org/repo.git",
+                ref="main",
+                secret_ref="my-secret",
+            )
+
+    def test_test_data_ref_with_git(self) -> None:
+        ref = TestDataRef(
+            git=GitTestDataRef(url="https://github.com/org/repo.git", ref="main")
+        )
+        assert ref.git is not None
+        assert ref.s3 is None
+        assert ref.pvc is None
+
+    def test_resolved_sha_visible_in_response(self) -> None:
+        ref = TestDataRef(
+            git=GitTestDataRef(url="https://github.com/org/repo.git", ref="main"),
+            resolved_sha="abc123def456",
+        )
+        data = ref.model_dump(exclude_none=True)
+        assert data["resolved_sha"] == "abc123def456"
+
+    def test_resolved_sha_stripped_from_submission_payload(self) -> None:
+        ref = TestDataRef(
+            git=GitTestDataRef(url="https://github.com/org/repo.git", ref="main"),
+            resolved_sha="abc123def456",
+        )
+        data = ref.model_dump(exclude_none=True, context={"for_submission": True})
+        assert "resolved_sha" not in data
+
+    def test_resolved_sha_absent_means_not_in_dump(self) -> None:
+        ref = TestDataRef(
+            git=GitTestDataRef(url="https://github.com/org/repo.git", ref="main"),
+        )
+        data = ref.model_dump(exclude_none=True, context={"for_submission": True})
+        assert "resolved_sha" not in data
+
+    def test_git_importable_from_models_package(self) -> None:
+        from evalhub.models import GitTestDataRef as Imported
+
+        assert Imported is GitTestDataRef
+
+
+class TestResultTypeEnum:
+    """Tests for the ResultType enum."""
+
+    def test_all_values_present(self) -> None:
+        values = {rt.value for rt in ResultType}
+        assert values == {
+            "numeric",
+            "categorical",
+            "array_ordered",
+            "array_unordered",
+            "time_series",
+        }
+
+    def test_str_subclass(self) -> None:
+        assert ResultType.NUMERIC == "numeric"
+        assert ResultType.TIME_SERIES == "time_series"
+
+    def test_importable_from_models_package(self) -> None:
+        from evalhub.models import ResultType as Imported
+
+        assert Imported is ResultType
+
+
+class TestMetricSchema:
+    """Tests for the MetricSchema model."""
+
+    def test_basic_construction(self) -> None:
+        ms = MetricSchema(name="accuracy", type=ResultType.NUMERIC)
+        assert ms.name == "accuracy"
+        assert ms.type == ResultType.NUMERIC
+
+    def test_all_result_types_accepted(self) -> None:
+        for rt in ResultType:
+            ms = MetricSchema(name="m", type=rt)
+            assert ms.type == rt
+
+    def test_serializes_type_as_string_value(self) -> None:
+        ms = MetricSchema(name="score", type=ResultType.CATEGORICAL)
+        data = ms.model_dump()
+        assert data["type"] == "categorical"
+
+    def test_roundtrip_from_dict(self) -> None:
+        data: dict[str, Any] = {"name": "latency_p99", "type": "time_series"}
+        ms = MetricSchema.model_validate(data)
+        assert ms.name == "latency_p99"
+        assert ms.type == ResultType.TIME_SERIES
+
+    def test_invalid_type_raises(self) -> None:
+        with pytest.raises(Exception):
+            MetricSchema(name="x", type="unknown_type")  # type: ignore[arg-type]
+
+    def test_importable_from_models_package(self) -> None:
+        from evalhub.models import MetricSchema as Imported
+
+        assert Imported is MetricSchema
+
+
+class TestBenchmarkResultMetricsSchema:
+    """Tests for metrics_schema field on BenchmarkResult."""
+
+    def test_metrics_schema_defaults_to_none(self) -> None:
+        result = BenchmarkResult(id="mmlu", provider_id="lm_eval")
+        assert result.metrics_schema is None
+
+    def test_metrics_schema_round_trip(self) -> None:
+        result = BenchmarkResult(
+            id="mmlu",
+            provider_id="lm_eval",
+            metrics={"accuracy": 0.85, "f1": 0.82},
+            metrics_schema=[
+                MetricSchema(name="accuracy", type=ResultType.NUMERIC),
+                MetricSchema(name="f1", type=ResultType.NUMERIC),
+            ],
+        )
+        assert result.metrics_schema is not None
+        assert len(result.metrics_schema) == 2
+        assert result.metrics_schema[0].name == "accuracy"
+        assert result.metrics_schema[1].type == ResultType.NUMERIC
+
+    def test_metrics_schema_deserialized_from_server_response(self) -> None:
+        data: dict[str, Any] = {
+            "id": "mmlu",
+            "provider_id": "lm_eval",
+            "metrics": {"accuracy": 0.85},
+            "metrics_schema": [{"name": "accuracy", "type": "numeric"}],
+        }
+        result = BenchmarkResult.model_validate(data)
+        assert result.metrics_schema is not None
+        assert result.metrics_schema[0].type == ResultType.NUMERIC
+
+    def test_metrics_schema_absent_in_server_response_is_none(self) -> None:
+        data: dict[str, Any] = {
+            "id": "mmlu",
+            "provider_id": "lm_eval",
+            "metrics": {"accuracy": 0.85},
+        }
+        result = BenchmarkResult.model_validate(data)
+        assert result.metrics_schema is None

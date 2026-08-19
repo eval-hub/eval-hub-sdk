@@ -8,11 +8,23 @@ import tempfile
 import time
 from collections.abc import Generator
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
 
 logger = logging.getLogger(__name__)
+
+
+def pytest_configure(config: Any) -> None:
+    """Configure logging for E2E tests."""
+    if config.getoption("--e2e-debug", default=False):
+        e2e_logger = logging.getLogger("tests.e2e.conftest")
+        e2e_logger.setLevel(logging.DEBUG)
+        handler = logging.StreamHandler()
+        handler.setLevel(logging.DEBUG)
+        handler.setFormatter(logging.Formatter("%(name)s %(levelname)s: %(message)s"))
+        e2e_logger.addHandler(handler)
 
 
 def _kill_process_on_port(port: int) -> bool:

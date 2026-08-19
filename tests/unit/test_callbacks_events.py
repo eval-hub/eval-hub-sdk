@@ -13,6 +13,8 @@ from evalhub.adapter.models.job import (
 )
 from evalhub.models.api import EvaluationResult, JobStatus, ModelConfig
 
+pytestmark = pytest.mark.unit
+
 
 def _results(mlflow_run_id: str | None = None) -> JobResults:
     return JobResults(
@@ -154,7 +156,6 @@ def test_mlflow_save_returns_run_id_from_upstream_path() -> None:
     m.assert_called_once()
 
 
-@pytest.mark.unit
 def test_mlflow_save_posts_failed_event_on_mlflow_error() -> None:
     callbacks, mock_http = _make_callbacks()
 
@@ -173,6 +174,7 @@ def test_mlflow_save_posts_failed_event_on_mlflow_error() -> None:
         == "Failed to save evaluation results to MLflow."
     )
     assert body["error_message"]["message_code"] == "mlflow_save_failed"
+    assert body["error_message"]["message_origin"] == "sdk"
     assert "mlflow offline" not in body["error_message"]["message"]
     assert "warning_message" not in body
 
@@ -263,7 +265,11 @@ def test_report_status_sends_error_message() -> None:
 
     body = mock_http.post.call_args.kwargs["json"]
     event = body["benchmark_status_event"]
-    assert event["error_message"] == {"message": "boom", "message_code": "kaboom"}
+    assert event["error_message"] == {
+        "message": "boom",
+        "message_code": "kaboom",
+        "message_origin": "adapter",
+    }
 
 
 def test_report_status_sends_warning_message() -> None:
@@ -286,7 +292,29 @@ def test_report_status_sends_warning_message() -> None:
     assert event["warning_message"] == {
         "message": "slow",
         "message_code": "slow_response",
+        "message_origin": "adapter",
     }
+
+
+def test_report_status_preserves_explicit_message_origin() -> None:
+    from evalhub.adapter.models.job import JobStatusUpdate, MessageInfo
+    from evalhub.models.api import JobStatus, MessageOrigin
+
+    callbacks, mock_http = _make_callbacks()
+    callbacks.report_status(
+        JobStatusUpdate(
+            status=JobStatus.FAILED,
+            error_message=MessageInfo(
+                message="sdk boom",
+                message_code="sdk_err",
+                message_origin=MessageOrigin.SDK,
+            ),
+        )
+    )
+
+    body = mock_http.post.call_args.kwargs["json"]
+    event = body["benchmark_status_event"]
+    assert event["error_message"]["message_origin"] == "sdk"
 
 
 def test_report_status_always_includes_provider_id() -> None:
@@ -368,3 +396,70 @@ def test_report_results_always_includes_provider_id() -> None:
     event = body["benchmark_status_event"]
     assert "provider_id" in event
     assert event["provider_id"] == ""
+
+
+# ---------------------------------------------------------------------------
+# additional_info payload tests
+# ---------------------------------------------------------------------------
+
+
+def test_report_results_includes_additional_info_when_set() -> None:
+    callbacks, mock_http = _make_callbacks()
+    results = _results()
+    results.additional_info = {
+        "dataset_sha": "abc123",
+        "zero_shot": "0.85",
+    }
+    callbacks.report_results(results)
+
+    body = mock_http.post.call_args.kwargs["json"]
+    event = body["benchmark_status_event"]
+    assert event["additional_info"] == {
+        "dataset_sha": "abc123",
+        "zero_shot": "0.85",
+    }
+
+
+def test_report_results_omits_additional_info_when_not_set() -> None:
+    callbacks, mock_http = _make_callbacks()
+    callbacks.report_results(_results())
+
+    body = mock_http.post.call_args.kwargs["json"]
+    event = body["benchmark_status_event"]
+    assert "additional_info" not in event
+
+
+def test_report_results_additional_info_passes_arbitrary_keys() -> None:
+    callbacks, mock_http = _make_callbacks()
+    results = _results()
+    results.additional_info = {
+        "alt_prompting": "0.91",
+        "alt_prompting_description": "5-Shot CoT",
+        "custom_key": 42,
+    }
+    callbacks.report_results(results)
+
+    body = mock_http.post.call_args.kwargs["json"]
+    event = body["benchmark_status_event"]
+    assert event["additional_info"] == {
+        "alt_prompting": "0.91",
+        "alt_prompting_description": "5-Shot CoT",
+        "custom_key": 42,
+    }
+
+
+def test_report_results_additional_info_passes_nested_values() -> None:
+    callbacks, mock_http = _make_callbacks()
+    results = _results()
+    results.additional_info = {
+        "config": {"shots": 5, "cot": True},
+        "tags": ["a", "b"],
+    }
+    callbacks.report_results(results)
+
+    body = mock_http.post.call_args.kwargs["json"]
+    event = body["benchmark_status_event"]
+    assert event["additional_info"] == {
+        "config": {"shots": 5, "cot": True},
+        "tags": ["a", "b"],
+    }

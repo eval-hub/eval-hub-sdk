@@ -54,6 +54,7 @@ from .base import (
     JobNotFoundError,
 )
 from .evalhub import AsyncEvalHubClient, EvalHubClient, SyncEvalHubClient
+from .job_logs import JobLogOptions, JobLogUpdate
 
 __all__ = [
     # Base classes
@@ -62,6 +63,9 @@ __all__ = [
     "ClientError",
     "JobNotFoundError",
     "JobCanNotBeCancelledError",
+    # Job log types
+    "JobLogOptions",
+    "JobLogUpdate",
     # Main clients (recommended)
     "AsyncEvalHubClient",
     "SyncEvalHubClient",

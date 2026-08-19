@@ -8,6 +8,8 @@ from click.testing import CliRunner
 from evalhub.cli.completion import PowerShellComplete
 from evalhub.cli.main import main
 
+pytestmark = pytest.mark.unit
+
 
 @pytest.fixture()
 def runner() -> CliRunner:

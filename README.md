@@ -11,7 +11,7 @@ The EvalHub SDK provides a standardized way to create framework adapters that ca
 
 The SDK creates a common API layer that allows EvalHub to communicate with ANY evaluation framework. Users only need to write minimal "glue" code to connect their framework to the standardized interface.
 
-```
+```text
 EvalHub → (Standard API) → Your Framework Adapter → Your Evaluation Framework
 ```
 
@@ -58,17 +58,21 @@ graph TB
 The SDK is organized into distinct, focused packages:
 
 **Core (`evalhub.models`)** - Shared data models
+
 - Request/response models for API communication
 - Common data structures for evaluations and benchmarks
 
 **Adapter SDK (`evalhub.adapter`)** - Framework adapter components
+
 - `FrameworkAdapter` base class with `run_benchmark_job()` method
 - Job specification models (`JobSpec`, `JobResults`)
 - Callback interface for status updates and OCI artifacts
 - Example implementations
 
 **Client SDK (`evalhub.client`)** - REST API client for EvalHub service
+
 - HTTP client for submitting evaluations to EvalHub
+- Job lifecycle: submit, status, cancel, wait, and **log fetch/watch**
 - Resource navigation (providers, benchmarks, collections)
 - See [Getting Started with the CLI](https://eval-hub.github.io/getting-started/cli/)
 
@@ -80,7 +84,17 @@ The SDK is organized into distinct, focused packages:
 4. **JobResults** - Evaluation results returned when job completes
 5. **EvalCardMetadata** - Standardized evaluation disclosure (Dhar et al., arXiv:2511.21695): modalities, languages, capability and safety evaluations
 6. **EnvironmentCardMetadata** - Operational context of an evaluation run: hardware, software, Kubernetes, model identity, and run provenance
-7. **Sidecar** - Container that handles service communication (provided by platform)
+7. **additional_info** - Supplementary key-value pairs for evaluation information beyond metrics (e.g. dataset provenance, zero-shot/alt-prompting scores)
+8. **Sidecar** - Container that handles service communication (provided by platform)
+
+## Breaking Changes
+
+### MCP command (> 0.4.1)
+
+The `evalhub mcp` command no longer starts a stdio MCP server directly. MCP
+hosts (Claude, etc.) that previously used `evalhub mcp` must switch to
+`evalhub mcp run`. The old `evalhub mcp` interface works only on versions
+<= 0.4.1.
 
 ## Quick Start
 
@@ -220,6 +234,7 @@ results = adapter.run_benchmark_job(adapter.job_spec, callbacks)
 ```
 
 **Key Points:**
+
 - **Status updates**: Sent to sidecar if `sidecar_url` is provided, otherwise logged locally. Both `report_status` and `report_results` events always include `benchmark_index` (and `provider_id` when set) so the service can associate events with the correct benchmark in multi-benchmark jobs.
 - **OCI artifacts**: Created via SDK callbacks and pushed to the OCI registry through the sidecar-authenticated flow when mode is Kubernetes.
 
@@ -306,7 +321,7 @@ The EvalHub SDK is organized into distinct packages based on your use case:
 ### Which Package Should I Use?
 
 | Use Case | Primary Package | Description |
-|----------|----------------|-------------|
+| -------- | --------------- | ----------- |
 | **Building an Adapter** | `evalhub.adapter` | Create a framework adapter for your evaluation framework |
 | **Interacting with EvalHub** | `evalhub.client` | REST API client for submitting evaluations |
 | **Data Models** | `evalhub.models` | Request/response models for API communication |
@@ -314,6 +329,7 @@ The EvalHub SDK is organized into distinct packages based on your use case:
 ### Import Patterns
 
 **Framework Adapter Developer:**
+
 ```python
 # Building your adapter
 from evalhub.adapter import (
@@ -334,21 +350,41 @@ from evalhub.adapter import (
 ```
 
 **EvalHub Service User:**
+
 ```python
 # Interacting with EvalHub REST API
 from evalhub import (
-    EvalHubClient,
+    JobLogOptions,
+    SyncEvalHubClient,
     BenchmarkConfig,
     EvaluationExports,
     EvaluationExportsOCI,
+    JobLogOptions,
     JobSubmissionRequest,
     ModelConfig,
     OCIConnectionConfig,
     OCICoordinates,
 )
+
+# Watch job logs while polling status until the job completes
+with SyncEvalHubClient() as client:
+    for update in client.jobs.watch_logs(
+        "job-id",
+        options=JobLogOptions(tail_lines=500),
+        poll_interval=2.0,
+    ):
+        if update.logs:
+            print(update.logs, end="")
 ```
 
 ## Examples
+
+### Watch job logs
+
+Stream workload logs while a job runs using the client API or the example script:
+
+- **Script:** [`examples/watch_job_logs.py`](examples/watch_job_logs.py) — runnable against a local or remote cluster; see [`examples/README.md`](examples/README.md)
+- **Client API:** `client.jobs.get_logs()` for a one-shot snapshot; `client.jobs.watch_logs()` to poll logs and status until the job reaches a terminal state (yields `JobLogUpdate` with incremental `logs` and current `job`)
 
 ### Contributed Adapters
 
@@ -363,6 +399,7 @@ The SDK includes a reference implementation showing all adapter patterns:
 **Example Adapter**: `examples/simple_adapter/simple_adapter.py`
 
 This example demonstrates:
+
 - Loading JobSpec from mounted ConfigMap
 - Validating configuration
 - Loading benchmark data
@@ -427,6 +464,7 @@ class MyFrameworkAdapter(FrameworkAdapter):
 ### Key Data Models
 
 **JobSpec** - Configuration loaded from ConfigMap:
+
 ```python
 class JobSpec(BaseModel):
     # Mandatory fields
@@ -449,6 +487,7 @@ class JobSpec(BaseModel):
 ```
 
 Load a job spec from file:
+
 ```python
 from evalhub.adapter import JobSpec
 
@@ -460,6 +499,7 @@ spec = JobSpec.from_file(settings.resolved_job_spec_path)
 ```
 
 **JobCallbacks** - Interface for service communication:
+
 ```python
 class JobCallbacks(ABC):
     @abstractmethod
@@ -474,6 +514,7 @@ class JobCallbacks(ABC):
 When using `DefaultCallbacks`, pass `benchmark_index` (and optionally `provider_id`) from the job spec so that status and result events sent to the service always include `benchmark_index`, allowing the service to associate events with the correct benchmark in multi-benchmark jobs.
 
 **JobResults** - Returned when job completes:
+
 ```python
 class JobResults(BaseModel):
     id: str
@@ -488,6 +529,7 @@ class JobResults(BaseModel):
     oci_artifact: Optional[OCIArtifactResult] # OCI artifact info if persisted
     eval_card: Optional[EvalCardMetadata]     # EvalCard disclosure metadata
     env_card: Optional[EnvironmentCardMetadata] # Environment Card metadata
+    additional_info: Optional[Dict[str, Any]]  # Supplementary evaluation info beyond metrics
 ```
 
 **EvalCard & Environment Card** - Evaluation documentation artifacts:
@@ -589,6 +631,93 @@ Job parameters:
 The collector uses SDK auth patterns (`resolve_model_credentials()`) and
 TLS auto-detection by default. See the module docstring in
 `src/evalhub/adapter/collector.py` for all configuration options.
+**additional_info** - supplementary evaluation metadata:
+
+`additional_info` is a `dict[str, Any]` of supplementary key-value pairs for
+evaluation information beyond metrics. Values can be any JSON-serializable
+type, including nested objects and lists. Use `additional_info` to supply
+fields such as `dataset` (list of dataset provenance records), `zero_shot`,
+`alt_prompting`, and `alt_prompting_description`.
+It is serialized as a top-level `additional_info` key in the
+`benchmark_status_event` payload and is available to downstream consumers
+such as EvalCard generation.
+
+Override `generate_additional_info()` on your `FrameworkAdapter` subclass to
+centralise the derivation logic. It is called automatically by
+`DefaultCallbacks.report_results()` when `results.additional_info` is not
+already set. If a framework has no implementation the base class returns
+`None` and it becomes a no-op.
+
+The adapter is not opinionated about where the key-value pairs come from —
+they can be derived from user input or from the framework's evaluation
+output. It is up to the implementer to decide. For example, when deriving
+from lm-evaluation-harness results it could look like:
+
+```python
+from evalhub.adapter import (
+    FrameworkAdapter,
+    JobSpec,
+    JobCallbacks,
+    JobResults,
+)
+
+
+class LMEvalAdapter(FrameworkAdapter):
+
+    def generate_additional_info(
+        self, results: JobResults
+    ) -> dict[str, Any] | None:
+        """Derive supplementary EvalCard fields from lm-eval output."""
+        benchmark_id = results.benchmark_id
+
+        # Resolved n-shot (after task YAML override of the CLI value)
+        n_shot = self._n_shot.get(benchmark_id, 0)
+
+        # CoT detection — layered heuristic (no single reliable signal)
+        task_config = self._task_configs.get(benchmark_id, {})
+        tags = task_config.get("tag", [])
+        if isinstance(tags, str):
+            tags = [tags]
+        doc_to_text = str(task_config.get("doc_to_text", ""))
+
+        is_cot = (
+            "chain_of_thought" in tags
+            or "cot" in benchmark_id.lower().replace("-", "_").split("_")
+            or "think step by step" in doc_to_text.lower()
+        )
+
+        is_zero_shot = n_shot == 0 and not is_cot
+        score = results.overall_score
+
+        # Build prompting strategy description
+        alt_desc = None
+        if not is_zero_shot:
+            parts = []
+            if n_shot > 0:
+                parts.append(f"{n_shot}-Shot")
+            if is_cot:
+                parts.append("CoT")
+            alt_desc = " ".join(parts) if parts else None
+
+        return {
+            "zero_shot": score if is_zero_shot else None,
+            "alt_prompting": score if not is_zero_shot else None,
+            "alt_prompting_description": alt_desc,
+        }
+
+    def run_benchmark_job(
+        self, config: JobSpec, callbacks: JobCallbacks
+    ) -> JobResults:
+        from lm_eval import simple_evaluate
+
+        lmeval_results = simple_evaluate(...)
+
+        # Store framework output on self for generate_additional_info()
+        self._n_shot = lmeval_results.get("n-shot", {})
+        self._task_configs = lmeval_results.get("configs", {})
+
+        return JobResults(...)
+```
 
 ## Deployment
 
@@ -706,8 +835,8 @@ def test_settings_parse(monkeypatch):
 
 ### Quality Assurance
 
-
 Run all quality checks:
+
 ```bash
 # Format code
 ruff format .

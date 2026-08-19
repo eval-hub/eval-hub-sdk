@@ -17,21 +17,61 @@ Config is stored at ~/.config/evalhub/config.yaml with structure:
 from __future__ import annotations
 
 import os
+import re
+import shutil
 import stat
 from pathlib import Path
 from typing import Any
 
+import click
 import yaml
 
 DEFAULT_CONFIG_DIR = Path.home() / ".config" / "evalhub"
 DEFAULT_CONFIG_FILE = DEFAULT_CONFIG_DIR / "config.yaml"
 
 REQUIRED_KEYS = ("base_url", "token", "tenant")
-OPTIONAL_KEYS = ("provider", "insecure", "timeout")
+OPTIONAL_KEYS = (
+    "provider",
+    "insecure",
+    "timeout",
+    "mcp_config_file",
+    "server_config_file",
+)
 KNOWN_KEYS = set(REQUIRED_KEYS) | set(OPTIONAL_KEYS)
 SENSITIVE_KEYS = frozenset({"token"})
+FILE_KEYS = frozenset({"mcp_config_file", "server_config_file"})
 
 DEFAULT_PROFILE = "default"
+
+_PROFILE_NAME_RE = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$")
+
+
+def validate_profile_name(name: str) -> None:
+    """Reject profile names that could escape filesystem boundaries.
+
+    Raises ``click.ClickException`` if *name* contains path separators,
+    traversal components, or characters outside a safe identifier set.
+    """
+    if not name or not _PROFILE_NAME_RE.fullmatch(name) or ".." in name:
+        raise click.ClickException(
+            f"Invalid profile name '{name}'. "
+            "Names must be non-empty, use only [a-zA-Z0-9._-], "
+            "start and end with an alphanumeric character, "
+            "and must not contain '..'."
+        )
+
+
+def _validate_path_within(path: Path, base: Path) -> None:
+    """Ensure *path* resolves inside *base*.
+
+    Raises ``click.ClickException`` if the resolved path escapes *base*.
+    """
+    try:
+        path.resolve().relative_to(base.resolve())
+    except ValueError:
+        raise click.ClickException(
+            f"Resolved path '{path}' escapes base directory '{base}'."
+        )
 
 
 def mask_value(
@@ -41,6 +81,13 @@ def mask_value(
     if len(value) < min_len:
         return "***"
     return f"{value[:prefix_len]}***{value[-suffix_len:]}"
+
+
+def mask_mapping(mapping: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of *mapping* with sensitive values masked."""
+    return {
+        k: mask_value(str(v)) if k in SENSITIVE_KEYS else v for k, v in mapping.items()
+    }
 
 
 def _config_path() -> Path:
@@ -83,6 +130,18 @@ def get_active_profile(data: dict[str, Any]) -> str:
     return active
 
 
+def list_profiles(data: dict[str, Any]) -> dict[str, Any]:
+    """Return the profiles mapping, safely handling corrupt data."""
+    profiles = data.get("profiles", {})
+    if not isinstance(profiles, dict):
+        return {}
+    return {
+        name: prof
+        for name, prof in profiles.items()
+        if isinstance(name, str) and isinstance(prof, dict)
+    }
+
+
 def get_profile(data: dict[str, Any], profile: str | None = None) -> dict[str, Any]:
     """Return the settings dict for a profile (empty dict if it doesn't exist yet)."""
     name = profile or get_active_profile(data)
@@ -112,6 +171,18 @@ def get_value(data: dict[str, Any], key: str, profile: str | None = None) -> str
     return prof.get(key)
 
 
+def unset_value(data: dict[str, Any], key: str, profile: str | None = None) -> bool:
+    """Remove a key from a profile. Returns True if the key was present."""
+    name = profile or get_active_profile(data)
+    profiles = data.get("profiles")
+    if profiles is None:
+        return False
+    prof = profiles.get(name)
+    if prof is None:
+        return False
+    return prof.pop(key, None) is not None
+
+
 def missing_required_keys(
     data: dict[str, Any], profile: str | None = None
 ) -> list[str]:
@@ -125,7 +196,119 @@ def is_known_key(key: str) -> bool:
     return key in KNOWN_KEYS
 
 
+def is_file_key(key: str) -> bool:
+    """Check whether a key references an external file."""
+    return key in FILE_KEYS
+
+
+_FILE_KEY_STORE_DIRS: dict[str, Path] = {
+    "mcp_config_file": DEFAULT_CONFIG_DIR / "mcp",
+    "server_config_file": DEFAULT_CONFIG_DIR / "server",
+}
+
+
+def validate_config_file(path: Path) -> None:
+    """Validate that *path* exists and contains a YAML mapping.
+
+    Raises ``click.ClickException`` on any validation failure.
+    """
+    if not path.is_file():
+        raise click.ClickException(f"File not found: {path}")
+    try:
+        with path.open() as f:
+            parsed = yaml.safe_load(f)
+    except yaml.YAMLError as exc:
+        raise click.ClickException(f"Invalid YAML: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise click.ClickException(
+            f"Config file must contain a YAML mapping, got {type(parsed).__name__}"
+        )
+
+
+def store_file_key(key: str, src: Path, profile_name: str) -> str:
+    """Copy *src* into the profile-specific storage dir for *key*.
+
+    Returns the absolute path of the stored copy.
+    """
+    validate_profile_name(profile_name)
+    base = _FILE_KEY_STORE_DIRS[key]
+    dest_dir = base / profile_name
+    _validate_path_within(dest_dir, base)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / "config.yaml"
+    shutil.copy2(str(src), str(dest))
+    dest.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    return str(dest)
+
+
+def remove_file_key(key: str, profile_name: str) -> None:
+    """Delete the stored file for *key* and clean up the directory if empty."""
+    validate_profile_name(profile_name)
+    base = _FILE_KEY_STORE_DIRS[key]
+    dest_dir = base / profile_name
+    _validate_path_within(dest_dir, base)
+    dest = dest_dir / "config.yaml"
+    if dest.exists():
+        dest.unlink()
+    try:
+        dest_dir.rmdir()
+    except OSError:
+        pass
+
+
+def resolve_component_config_dir(
+    data: dict[str, Any],
+    state_dir: Path,
+    profile: str | None = None,
+) -> Path:
+    """Return the config directory for a component (MCP, server, etc.)."""
+    profile_name = profile or get_active_profile(data)
+    return state_dir / profile_name
+
+
 def set_active_profile(data: dict[str, Any], profile: str) -> dict[str, Any]:
     """Switch the active profile."""
     data["active_profile"] = profile
     return data
+
+
+def create_profile(data: dict[str, Any], name: str) -> dict[str, Any]:
+    """Explicitly create an empty profile.
+
+    Raises ``click.ClickException`` if a profile with *name* already exists.
+    """
+    validate_profile_name(name)
+    profiles = data.setdefault("profiles", {})
+    if name in profiles:
+        raise click.ClickException(f"Profile '{name}' already exists.")
+    profiles[name] = {}
+    return data
+
+
+def delete_profile(data: dict[str, Any], name: str) -> dict[str, Any]:
+    """Remove a profile and its stored file-key artefacts.
+
+    Raises ``click.ClickException`` if *name* is the active profile or does
+    not exist.
+    """
+    validate_profile_name(name)
+    active = get_active_profile(data)
+    if name == active:
+        raise click.ClickException(
+            f"Cannot delete the active profile '{name}'. "
+            f"Switch to another profile first with 'config use'."
+        )
+    profiles = data.get("profiles", {})
+    if name not in profiles:
+        raise click.ClickException(f"Profile '{name}' does not exist.")
+    del profiles[name]
+    for key in FILE_KEYS:
+        remove_file_key(key, name)
+    return data
+
+
+def parse_bool(value: Any, *, default: bool = False) -> bool:
+    """Parse a config value as a boolean."""
+    if value is None:
+        return default
+    return str(value).lower() in ("true", "1", "yes")

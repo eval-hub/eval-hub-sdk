@@ -1,5 +1,6 @@
 """Adapter models for the simplified BYOF SDK."""
 
+from ...models.api import MessageOrigin
 from .adapter import FrameworkAdapter
 from .cards import (
     CapabilityEvalEntry,
@@ -35,6 +36,7 @@ __all__ = [
     "JobPhase",
     "ErrorInfo",
     "MessageInfo",
+    "MessageOrigin",
     # OCI models
     "OCIArtifactSpec",
     "OCIArtifactResult",

@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from evalhub.adapter.models.adapter import FrameworkAdapter
 
-from ..models.api import JobStatus
+from ..models.api import JobStatus, MessageOrigin
 from .config import EvalHubMode, MlflowBackend
 from .mlflow import MlflowArtifact
 from .models import (
     EnvironmentCardMetadata,
+    ErrorInfo,
     JobCallbacks,
     JobResults,
     JobSpec,
@@ -23,10 +25,12 @@ from .models import (
 )
 from .oci import DEFAULT_OCI_PROXY_HOST, OCIArtifactPersister
 from .oci.persister import OCIArtifactContext
+from .telemetry import EvalTracer
 
 _MLFLOW_SAVE_FAILED = MessageInfo(
     message="Failed to save evaluation results to MLflow.",
     message_code="mlflow_save_failed",
+    message_origin=MessageOrigin.SDK,
 )
 
 logger = logging.getLogger(__name__)
@@ -339,6 +343,10 @@ class DefaultCallbacks(JobCallbacks):
         oci_insecure: bool = False,
         oci_proxy_host: str | None = None,
         mlflow_backend: MlflowBackend = MlflowBackend.ODH,
+        generate_additional_info_fn: (
+            Callable[[JobResults], dict[str, Any] | None] | None
+        ) = None,
+        tracer: EvalTracer | None = None,
     ):
         """Initialize default callbacks.
 
@@ -367,6 +375,10 @@ class DefaultCallbacks(JobCallbacks):
                            MlflowBackend.UPSTREAM for the official mlflow library.
                            Can also be set via EVALHUB_MLFLOW_BACKEND env var when
                            constructing via from_adapter().
+            generate_additional_info_fn: Optional callable that derives supplementary
+                           evaluation key-value pairs from JobResults. Called by
+                           report_results() when results.additional_info is not
+                           already set. Automatically wired via from_adapter().
         """
         self.job_id = job_id
         self.benchmark_id = benchmark_id
@@ -408,6 +420,10 @@ class DefaultCallbacks(JobCallbacks):
 
         # MLflow integration (single-method API via callbacks.mlflow.save)
         self.mlflow = _MlflowOps(backend=mlflow_backend, callbacks=self)
+
+        self.generate_additional_info_fn = generate_additional_info_fn
+
+        self.tracer: EvalTracer = tracer if tracer is not None else EvalTracer()
 
         # Try to import httpx for sidecar communication
         self._httpx_available = False
@@ -572,8 +588,29 @@ class DefaultCallbacks(JobCallbacks):
             "status": status,
         }
 
+    @staticmethod
+    def _message_payload(
+        msg: MessageInfo | ErrorInfo,
+        *,
+        default_origin: MessageOrigin = MessageOrigin.ADAPTER,
+    ) -> dict[str, Any]:
+        """Serialize a message for /events, stamping message_origin when unset.
+
+        Adapter-driven ``report_status`` calls default to ``adapter``. Errors
+        from the SDK itself (e.g. MLflow save failure) should set
+        ``message_origin=sdk`` on the MessageInfo before calling report_status.
+        """
+        data = msg.model_dump(mode="json")
+        if not data.get("message_origin"):
+            data["message_origin"] = default_origin.value
+        return data
+
     def report_status(self, update: JobStatusUpdate) -> None:
         """Report status update to evalhub or log it.
+
+        Message fields (``error_message``, ``warning_message``) are stamped with
+        ``message_origin=adapter`` when unset. Errors from the SDK itself should
+        set ``message_origin=sdk`` explicitly before calling this method.
 
         Args:
             update: Status update to report
@@ -589,13 +626,13 @@ class DefaultCallbacks(JobCallbacks):
                     status_event["phase"] = update.phase.value
 
                 if update.resolved_error:
-                    status_event["error_message"] = update.resolved_error.model_dump(
-                        mode="json"
+                    status_event["error_message"] = self._message_payload(
+                        update.resolved_error
                     )
 
                 if update.warning_message:
-                    status_event["warning_message"] = update.warning_message.model_dump(
-                        mode="json"
+                    status_event["warning_message"] = self._message_payload(
+                        update.warning_message
                     )
 
                 data = {"benchmark_status_event": status_event}
@@ -665,6 +702,14 @@ class DefaultCallbacks(JobCallbacks):
         Args:
             results: Final job results to report
         """
+        # Resolve additional_info without mutating the caller's results object.
+        additional_info = results.additional_info
+        if additional_info is None and self.generate_additional_info_fn:
+            try:
+                additional_info = self.generate_additional_info_fn(results)
+            except Exception:
+                logger.debug("generate_additional_info_fn failed", exc_info=True)
+
         # Resolve the Environment Card without mutating the caller's results object.
         # If the provider did not supply one, capture a best-effort card locally.
         env_card = results.env_card
@@ -692,6 +737,12 @@ class DefaultCallbacks(JobCallbacks):
                 status_event["metrics"] = metrics
                 status_event["completed_at"] = results.completed_at.isoformat()
 
+                if results.metrics_schema:
+                    status_event["metrics_schema"] = [
+                        {"name": ms.name, "type": ms.type.value}
+                        for ms in results.metrics_schema
+                    ]
+
                 if results.mlflow_run_id:
                     status_event["mlflow_run_id"] = results.mlflow_run_id
 
@@ -717,6 +768,9 @@ class DefaultCallbacks(JobCallbacks):
 
                 if artifacts:
                     status_event["artifacts"] = artifacts
+
+                if additional_info is not None:
+                    status_event["additional_info"] = additional_info
 
                 data = {"benchmark_status_event": status_event}
                 logger.debug("Events report_results body: %s", data)
@@ -774,4 +828,11 @@ class DefaultCallbacks(JobCallbacks):
                 else None
             ),
             mlflow_backend=adapter.settings.mlflow_backend,
+            generate_additional_info_fn=(
+                adapter.generate_additional_info
+                if type(adapter).generate_additional_info
+                is not FrameworkAdapter.generate_additional_info
+                else None
+            ),
+            tracer=EvalTracer.from_job_spec(adapter.job_spec),
         )

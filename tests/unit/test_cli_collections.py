@@ -12,12 +12,16 @@ import pytest
 import yaml
 from click.testing import CliRunner
 from evalhub.cli.main import main
+from evalhub.client.job_logs import JobLogUpdate
 from evalhub.models.api import (
     BenchmarkReference,
     Collection,
+    JobStatus,
     PassCriteria,
     Resource,
 )
+
+pytestmark = pytest.mark.unit
 
 
 def _make_benchmark_ref(
@@ -554,6 +558,40 @@ class TestCollectionsRun:
         submitted = mock_client.jobs.submit.call_args[0][0]
         assert submitted.name == "my-custom-run"
 
+    def test_run_with_model_auth_secret(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        collection = _make_collection(
+            id="rag-safety",
+            benchmarks=[_make_benchmark_ref()],
+        )
+        mock_client.collections.get.return_value = collection
+
+        job = MagicMock()
+        job.id = "job-xyz"
+        job.state.value = "running"
+        mock_client.jobs.submit.return_value = job
+
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(
+                main,
+                [
+                    "collections",
+                    "run",
+                    "rag-safety",
+                    "--model-url",
+                    "http://vllm:8000/v1",
+                    "--model-name",
+                    "llama3",
+                    "--model-auth-secret",
+                    "my-model-credentials",
+                ],
+            )
+        assert result.exit_code == 0
+        submitted = mock_client.jobs.submit.call_args[0][0]
+        assert submitted.model.auth is not None
+        assert submitted.model.auth.secret_ref == "my-model-credentials"
+
     def test_run_empty_collection_errors(
         self, runner: CliRunner, config_file: Path, mock_client: MagicMock
     ) -> None:
@@ -686,6 +724,42 @@ class TestCollectionsRun:
         req = mock_client.jobs.submit.call_args[0][0]
         assert req.queue is None
 
+    def test_run_with_watch(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        collection = _make_collection(
+            id="rag-safety",
+            benchmarks=[_make_benchmark_ref()],
+        )
+        mock_client.collections.get.return_value = collection
+
+        job = MagicMock()
+        job.id = "job-abc"
+        mock_client.jobs.submit.return_value = job
+        completed = MagicMock()
+        completed.effective_state = JobStatus.COMPLETED
+        mock_client.jobs.watch_logs.return_value = iter(
+            [JobLogUpdate(logs="log line\n", job=completed)]
+        )
+
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(
+                main,
+                [
+                    "collections",
+                    "run",
+                    "rag-safety",
+                    "--model-url",
+                    "http://vllm:8000/v1",
+                    "--model-name",
+                    "llama3",
+                    "--watch",
+                ],
+            )
+        assert result.exit_code == 0
+        assert "log line" in result.output
+        mock_client.jobs.watch_logs.assert_called_once()
+
 
 # ---------------------------------------------------------------------------
 # Help
@@ -713,4 +787,6 @@ class TestCollectionsHelp:
         assert result.exit_code == 0
         assert "--model-url" in result.output
         assert "--model-name" in result.output
+        assert "--model-auth-secret" in result.output
         assert "--wait" in result.output
+        assert "--watch" in result.output

@@ -7,6 +7,8 @@ import pytest
 from evalhub.adapter.config import get_job_spec_path
 from evalhub.adapter.settings import AdapterSettings
 
+pytestmark = pytest.mark.unit
+
 
 class TestAdapterSettingsModeNormalization:
     """Tests for case-insensitive EVALHUB_MODE handling."""

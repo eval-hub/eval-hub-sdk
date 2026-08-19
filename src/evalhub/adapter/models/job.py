@@ -6,13 +6,20 @@ import json
 import warnings
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
-from enum import Enum
 from pathlib import Path
 from typing import Any, Self
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ...models.api import EvaluationResult, JobStatus, ModelConfig, OCICoordinates
+from ...models.api import (
+    EvaluationResult,
+    JobPhase,
+    JobStatus,
+    MessageOrigin,
+    MetricSchema,
+    ModelConfig,
+    OCICoordinates,
+)
 from .cards import EnvironmentCardMetadata, EvalCardMetadata
 
 
@@ -24,6 +31,14 @@ class MessageInfo(BaseModel):
 
     message: str = Field(..., description="Message text")
     message_code: str = Field(..., description="Message code identifier")
+    message_origin: MessageOrigin | None = Field(
+        default=None,
+        description=(
+            "Origin of the message. Set by the SDK when posting /events: "
+            "'adapter' for a message from the adapter, 'sdk' for a message "
+            "from the SDK."
+        ),
+    )
 
 
 class ErrorInfo(BaseModel):
@@ -34,17 +49,14 @@ class ErrorInfo(BaseModel):
 
     message: str = Field(..., description="Error message")
     message_code: str = Field(..., description="Error code identifier")
-
-
-class JobPhase(str, Enum):
-    """Job execution phases."""
-
-    INITIALIZING = "initializing"
-    LOADING_DATA = "loading_data"
-    RUNNING_EVALUATION = "running_evaluation"
-    POST_PROCESSING = "post_processing"
-    PERSISTING_ARTIFACTS = "persisting_artifacts"
-    COMPLETED = "completed"
+    message_origin: MessageOrigin | None = Field(
+        default=None,
+        description=(
+            "Origin of the error. Set by the SDK when posting /events: "
+            "'adapter' for an error from the adapter, 'sdk' for an error "
+            "from the SDK."
+        ),
+    )
 
 
 class JobSpec(BaseModel):
@@ -270,6 +282,8 @@ class JobResults(BaseModel):
     This is returned synchronously when the job completes.
     """
 
+    model_config = ConfigDict(validate_assignment=True)
+
     # Core results
     id: str = Field(..., description="Job identifier")
     benchmark_id: str = Field(..., description="Benchmark that was evaluated")
@@ -315,6 +329,34 @@ class JobResults(BaseModel):
         default=None,
         description="Environment Card metadata. Serialized into artifacts['evalhub.env_card'].",
     )
+
+    metrics_schema: list[MetricSchema] | None = Field(
+        default=None,
+        description="Declared result types for each metric. When provided, serialized "
+        "into status_event['metrics_schema'] so the server can interpret metric values. "
+        "If omitted the server defaults each metric to 'numeric'.",
+    )
+
+    additional_info: dict[str, Any] | None = Field(
+        default=None,
+        description="Supplementary key-value pairs for evaluation "
+        "information beyond metrics (e.g. prompting strategy, dataset SHA). "
+        "Accepts any JSON-serializable values. "
+        "Serialized into status_event['additional_info'] and available to "
+        "downstream consumers such as EvalCard generation.",
+    )
+
+    @model_validator(mode="after")
+    def check_metrics_schema_names(self) -> JobResults:
+        if not self.metrics_schema:
+            return self
+        result_names = {r.metric_name for r in self.results}
+        unknown = [ms.name for ms in self.metrics_schema if ms.name not in result_names]
+        if unknown:
+            raise ValueError(
+                f"metrics_schema contains names not present in results: {unknown}"
+            )
+        return self
 
 
 class JobCallbacks(ABC):

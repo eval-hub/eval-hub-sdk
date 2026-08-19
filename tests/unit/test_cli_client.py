@@ -21,6 +21,8 @@ from evalhub.cli.config import (
 from evalhub.cli.main import main
 from evalhub.client import ClientError, JobNotFoundError
 
+pytestmark = pytest.mark.unit
+
 
 @pytest.fixture()
 def config_file(tmp_path: Path) -> Iterator[Path]:

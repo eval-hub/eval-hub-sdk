@@ -3,6 +3,7 @@
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 from evalhub.adapter import (
@@ -24,6 +25,10 @@ from evalhub.adapter import (
     OCIArtifactSpec,
     SafetyEvalEntry,
 )
+from evalhub.models import MetricSchema, ResultType
+from pydantic import ValidationError
+
+pytestmark = pytest.mark.unit
 
 
 @pytest.fixture
@@ -531,6 +536,21 @@ class TestJobResults:
         assert results.completed_at is not None
         assert isinstance(results.completed_at, datetime)
 
+    def test_additional_info_accepts_nested_values_on_assignment(self) -> None:
+        """Test that assigning nested values to additional_info is accepted."""
+        results = JobResults(
+            id="test-job-001",
+            benchmark_id="mmlu",
+            benchmark_index=0,
+            model_name="model",
+            results=[],
+            num_examples_evaluated=100,
+            duration_seconds=60.0,
+        )
+
+        results.additional_info = {"nested": {"is": "allowed"}}
+        assert results.additional_info == {"nested": {"is": "allowed"}}
+
 
 class TestJobCallbacks:
     """Tests for JobCallbacks interface."""
@@ -1013,3 +1033,96 @@ class TestJobResultsWithCards:
 
         assert results.eval_card is None
         assert results.env_card is None
+        assert results.additional_info is None
+
+    def test_additional_info_accepts_scalar_values(self) -> None:
+        info: dict[str, Any] = {
+            "dataset_sha": "sha256:abc",
+            "zero_shot": "0.85",
+            "custom_metric": 42,
+            "score": 0.95,
+            "passed": True,
+            "notes": None,
+        }
+        results = JobResults(
+            id="j",
+            benchmark_id="b",
+            benchmark_index=0,
+            model_name="m",
+            results=[],
+            num_examples_evaluated=0,
+            duration_seconds=0.0,
+            additional_info=info,
+        )
+        assert results.additional_info == info
+
+    def test_additional_info_accepts_nested_values(self) -> None:
+        info: dict[str, Any] = {
+            "nested": {"a": 1, "b": [2, 3]},
+            "tags": ["a", "b"],
+            "scalar": "still works",
+        }
+        results = JobResults(
+            id="j",
+            benchmark_id="b",
+            benchmark_index=0,
+            model_name="m",
+            results=[],
+            num_examples_evaluated=0,
+            duration_seconds=0.0,
+            additional_info=info,
+        )
+        assert results.additional_info == info
+
+
+@pytest.mark.adapter
+class TestJobResultsMetricsSchemaValidation:
+    """Tests for metrics_schema name validation against results."""
+
+    def _base_results(self, **kwargs: Any) -> JobResults:
+        return JobResults(
+            id="j",
+            benchmark_id="b",
+            benchmark_index=0,
+            model_name="m",
+            results=[
+                EvaluationResult(metric_name="accuracy", metric_value=0.85),
+                EvaluationResult(metric_name="f1", metric_value=0.82),
+            ],
+            num_examples_evaluated=10,
+            duration_seconds=1.0,
+            **kwargs,
+        )
+
+    def test_valid_schema_names_accepted(self) -> None:
+        r = self._base_results(
+            metrics_schema=[
+                MetricSchema(name="accuracy", type=ResultType.NUMERIC),
+                MetricSchema(name="f1", type=ResultType.NUMERIC),
+            ]
+        )
+        assert r.metrics_schema is not None
+        assert len(r.metrics_schema) == 2
+
+    def test_schema_name_absent_from_results_raises(self) -> None:
+        with pytest.raises(
+            ValidationError,
+            match="metrics_schema contains names not present in results",
+        ):
+            self._base_results(
+                metrics_schema=[
+                    MetricSchema(name="accuracy", type=ResultType.NUMERIC),
+                    MetricSchema(name="typo_metric", type=ResultType.NUMERIC),
+                ]
+            )
+
+    def test_none_schema_always_valid(self) -> None:
+        r = self._base_results(metrics_schema=None)
+        assert r.metrics_schema is None
+
+    def test_partial_schema_valid_when_names_match(self) -> None:
+        r = self._base_results(
+            metrics_schema=[MetricSchema(name="accuracy", type=ResultType.NUMERIC)]
+        )
+        assert r.metrics_schema is not None
+        assert r.metrics_schema[0].name == "accuracy"

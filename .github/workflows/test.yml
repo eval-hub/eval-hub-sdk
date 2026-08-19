@@ -26,7 +26,7 @@ jobs:
       run: uv sync --all-extras
     - name: Run tests with coverage
       run: |
-        uv run pytest --cov=src/evalhub --cov-report=term-missing --cov-report=xml
+        uv run pytest -m unit --cov=src/evalhub --cov-report=term-missing --cov-report=xml
 
   lint:
     runs-on: ubuntu-latest

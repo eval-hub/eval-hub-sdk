@@ -85,6 +85,8 @@ try:
     from .client import (
         AsyncEvalHubClient,
         EvalHubClient,
+        JobLogOptions,
+        JobLogUpdate,
         SyncEvalHubClient,
     )
 
@@ -93,6 +95,8 @@ try:
             "AsyncEvalHubClient",
             "SyncEvalHubClient",
             "EvalHubClient",  # Alias for AsyncEvalHubClient
+            "JobLogOptions",
+            "JobLogUpdate",
         ]
     )
 except ImportError:

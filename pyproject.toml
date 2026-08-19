@@ -12,7 +12,7 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.11"  # needed for LMEval compatibility
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
@@ -26,7 +26,7 @@ classifiers = [
 keywords = ["ai", "evaluation", "framework", "sdk", "trustyai"]
 
 dependencies = [
-    "pydantic>=2.0.0",
+    "pydantic>=2.7.0",
     "pydantic-settings>=2.0.0",
     "importlib-metadata>=6.0.0",
 ]
@@ -42,6 +42,9 @@ adapter = [
     "eval-hub-sdk[core]",
     "olot>=0.1.15",
     "oras>=0.2.39",
+    "opentelemetry-api>=1.44.0",
+    "opentelemetry-sdk>=1.44.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.44.0",
 ]
 
 # Client API - for end users in Jupyter notebooks and scripts
@@ -51,28 +54,30 @@ client = [
 
 # CLI - command-line interface
 cli = [
-    "eval-hub-sdk[mcp]",
+    "eval-hub-sdk[core]",
     "click>=8.1.0",
     "pyyaml>=6.0",
     "rich>=13.0.0",
 ]
 
-# MCP server - for AI agent access to EvalHub
+# MCP — installs the evalhub-mcp Go binary via PyPI
 mcp = [
-    "eval-hub-sdk[core]",
-    "mcp>=1.0.0",
+    "eval-hub-sdk[cli]",
+    "eval-hub-mcp>=1.0.0",
 ]
 
 # Development dependencies
 # NOTE: Versions should match .pre-commit-config.yaml and .github/workflows/pre-commit.yml
 dev = [
-    "eval-hub-sdk[cli,mcp]",
+    "eval-hub-sdk[cli]",
     "pytest>=7.4.0",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.1.0",
     "ruff==0.1.6",  # Match ruff-pre-commit v0.1.6
     "mypy==1.19.1",  # Match mirrors-mypy v1.19.1
     "pre-commit>=3.4.0",
+    "opentelemetry-sdk>=1.44.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.44.0",
 ]
 
 # Example framework integrations
@@ -83,7 +88,8 @@ examples = [
 
 # Server - eval-hub-server binary for local/embedded use
 server = [
-    "eval-hub-server>=0.4.2",
+    "eval-hub-sdk[cli]",
+    "eval-hub-server>=1.0.0",
 ]
 
 # All core functionality (excludes examples which are optional)
@@ -160,8 +166,7 @@ module = [
     "oras",
     "olot.*",
     "olot",
-    "mcp",
-    "mcp.*",
+    "opentelemetry.*",
     # Optional runtime deps detected by EnvironmentCardMetadata.capture()
     "torch",
     "torch.*",
@@ -189,6 +194,7 @@ markers = [
     "integration: Integration tests requiring external services",
     "adapter: Tests for specific framework adapters",
     "e2e: End-to-end tests",
+    "no_otel_provider: Skip OTEL TracerProvider setup (exercise no-op tracer)",
 ]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"

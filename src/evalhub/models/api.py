@@ -1,10 +1,22 @@
 """Core API models for the EvalHub SDK common interface."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, cast
+from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializationInfo,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
+from pydantic.functional_serializers import SerializerFunctionWrapHandler
 
 OCI_ARTIFACT_TYPE = "application/vnd.eval-hub.github.io"
 
@@ -36,6 +48,50 @@ class EvaluationStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class JobPhase(str, Enum):
+    """Job execution phases.
+
+    Represents the granular execution phase within a running benchmark job.
+    Sent by adapters via status events and surfaced in server responses.
+    """
+
+    INITIALIZING = "initializing"
+    LOADING_DATA = "loading_data"
+    RUNNING_EVALUATION = "running_evaluation"
+    POST_PROCESSING = "post_processing"
+    PERSISTING_ARTIFACTS = "persisting_artifacts"
+    COMPLETED = "completed"
+
+
+class ResultType(str, Enum):
+    """Declared result type for a named metric.
+
+    Matches the Go server's ResultType enum. Adapters declare this in their
+    YAML configuration or programmatically via ``JobResults.metrics_schema``.
+    The server uses it to drive result display, comparisons, and aggregation.
+    """
+
+    NUMERIC = "numeric"
+    CATEGORICAL = "categorical"
+    ARRAY_ORDERED = "array_ordered"
+    ARRAY_UNORDERED = "array_unordered"
+    TIME_SERIES = "time_series"
+
+
+class MetricSchema(BaseModel):
+    """Declared type annotation for a single named metric.
+
+    Mirrors the Go server's ``MetricSchema`` struct. A list of these is sent
+    alongside ``metrics`` in the terminal status event so the server knows how
+    to interpret each value.
+    """
+
+    name: str = Field(
+        ..., description="Metric name, must match a key in the metrics map"
+    )
+    type: ResultType = Field(..., description="Declared result type for this metric")
+
+
 class ErrorInfo(BaseModel):
     """Error information with message and code.
 
@@ -50,7 +106,11 @@ class ModelAuth(BaseModel):
     """Authentication configuration for the model endpoint."""
 
     secret_ref: str = Field(
-        ..., description="Kubernetes Secret name containing model credentials"
+        ...,
+        description=(
+            "Kubernetes Secret name (k8s mode) or file:/// URL pointing to a "
+            "local directory containing credential files (local mode)"
+        ),
     )
 
     @field_validator("secret_ref")
@@ -144,11 +204,30 @@ class EvaluationResult(BaseModel):
     )
 
 
+class MessageOrigin(str, Enum):
+    """Origin of a status, warning, or error message.
+
+    - ``adapter``: error or message from the adapter (via ``report_status``).
+    - ``sdk``: error or message from the EvalHub SDK itself (e.g. MLflow
+      save failure).
+    - ``server`` / ``runtime``: used by the EvalHub service / job runtime.
+    """
+
+    ADAPTER = "adapter"
+    SDK = "sdk"
+    SERVER = "server"
+    RUNTIME = "runtime"
+
+
 class MessageInfo(BaseModel):
     """Message information with code."""
 
     message: str = Field(..., description="Message text")
     message_code: str = Field(..., description="Message code")
+    message_origin: MessageOrigin | None = Field(
+        default=None,
+        description="Origin of the message (adapter, sdk, server, or runtime)",
+    )
 
 
 class EvaluationJobResource(BaseModel):
@@ -180,6 +259,9 @@ class BenchmarkStatus(BaseModel):
     provider_id: str = Field(..., description="Provider identifier")
     benchmark_index: int | None = Field(default=None, description="Benchmark index")
     status: JobStatus = Field(..., description="Benchmark status")
+    phase: JobPhase | None = Field(
+        default=None, description="Current execution phase of the benchmark job"
+    )
     error_message: MessageInfo | None = Field(default=None, description="Error message")
     started_at: datetime | None = Field(
         default=None, description="When benchmark started"
@@ -214,6 +296,10 @@ class BenchmarkResult(BaseModel):
     metrics: dict[str, Any] = Field(
         default_factory=dict, description="Benchmark metrics"
     )
+    metrics_schema: list[MetricSchema] | None = Field(
+        default=None,
+        description="Declared result types for each metric. Server-populated from the terminal status event.",
+    )
     artifacts: dict[str, Any] = Field(
         default_factory=dict, description="Benchmark artifacts"
     )
@@ -221,6 +307,11 @@ class BenchmarkResult(BaseModel):
         default=None, description="MLFlow run ID if tracking enabled"
     )
     logs_path: str | None = Field(default=None, description="Path to evaluation logs")
+    additional_info: dict[str, Any] | None = Field(
+        default=None,
+        description="Supplementary key-value pairs for evaluation "
+        "information beyond metrics (e.g. prompting strategy, dataset SHA).",
+    )
 
 
 class EvaluationJobResults(BaseModel):
@@ -244,10 +335,94 @@ class S3TestDataRef(BaseModel):
     )
 
 
+class PVCTestDataRef(BaseModel):
+    """PersistentVolumeClaim source for custom test data.
+
+    The PVC must already exist in the same namespace as the evaluation job.
+    It is mounted read-only at /test_data in the adapter container with no
+    init container — data must reside on the PVC before job submission.
+    """
+
+    claim_name: str = Field(
+        ...,
+        description="Name of the PersistentVolumeClaim in the evaluation job namespace",
+    )
+    sub_path: str | None = Field(
+        default=None,
+        description="Optional path within the PVC to mount at /test_data instead of the PVC root",
+    )
+
+
+class GitTestDataRef(BaseModel):
+    """Git repository source for custom test data.
+
+    The repository is cloned and checked out at ``ref`` into ``/test_data``
+    before the adapter runs. Only HTTP(S) URLs are accepted. When ``secret_ref``
+    is set the URL must use HTTPS so credentials are not sent in the clear.
+    """
+
+    url: str = Field(..., description="Git repository URL (http or https)")
+    ref: str = Field(
+        ...,
+        description="Branch, tag, or full/abbreviated commit SHA to check out",
+    )
+    sub_path: str | None = Field(
+        default=None,
+        description="Optional sub-directory within the repository to expose at /test_data",
+    )
+    secret_ref: str | None = Field(
+        default=None,
+        description="Kubernetes Secret name containing username/password keys for private repos",
+    )
+
+    @model_validator(mode="after")
+    def check_url_scheme(self) -> GitTestDataRef:
+        parsed_url = urlsplit(self.url)
+        if parsed_url.scheme not in ("http", "https") or not parsed_url.hostname:
+            raise ValueError("git url must use http or https scheme and include a host")
+        if self.secret_ref and parsed_url.scheme != "https":
+            raise ValueError(
+                "secret_ref requires an https URL to avoid sending credentials in the clear"
+            )
+        return self
+
+
 class TestDataRef(BaseModel):
-    """Reference to an external test data source."""
+    """Reference to an external test data source. Exactly one of s3, pvc, or git must be set."""
 
     s3: S3TestDataRef | None = Field(default=None, description="S3 data source")
+    pvc: PVCTestDataRef | None = Field(
+        default=None, description="PersistentVolumeClaim data source"
+    )
+    git: GitTestDataRef | None = Field(
+        default=None, description="Git repository data source"
+    )
+    resolved_sha: str | None = Field(
+        default=None,
+        description="Resolved content identity (e.g. git commit SHA). Server-populated; stripped from submission payloads.",
+    )
+
+    @model_validator(mode="after")
+    def check_exactly_one_source(self) -> TestDataRef:
+        sources = [s for s in (self.s3, self.pvc, self.git) if s is not None]
+        if len(sources) > 1:
+            raise ValueError(
+                "Cannot specify more than one test data source (s3, pvc, git)"
+            )
+        if len(sources) == 0:
+            raise ValueError(
+                "Must specify exactly one test data source (s3, pvc, or git)"
+            )
+        return self
+
+    @model_serializer(mode="wrap")
+    def _serialize(
+        self, handler: SerializerFunctionWrapHandler, info: SerializationInfo
+    ) -> dict[str, Any]:
+        data = cast(dict[str, Any], handler(self))
+        if info.context and info.context.get("for_submission"):
+            data.pop("resolved_sha", None)
+        return data
 
 
 class BenchmarkConfig(BaseModel):
@@ -257,6 +432,12 @@ class BenchmarkConfig(BaseModel):
     provider_id: str = Field(..., description="Provider identifier")
     parameters: dict[str, Any] = Field(
         default_factory=dict, description="Benchmark-specific parameters"
+    )
+    primary_score: PrimaryScore | None = Field(
+        default=None, description="Override the benchmark's primary score metric"
+    )
+    pass_criteria: PassCriteria | None = Field(
+        default=None, description="Override pass/fail threshold for this benchmark"
     )
     test_data_ref: TestDataRef | None = Field(
         default=None, description="Reference to custom external test data"
@@ -388,7 +569,7 @@ class JobSubmissionRequest(BaseModel):
     )
 
     @model_validator(mode="after")
-    def check_benchmarks_or_collection(self) -> "JobSubmissionRequest":
+    def check_benchmarks_or_collection(self) -> JobSubmissionRequest:
         if self.benchmarks and self.collection:
             raise ValueError("Cannot specify both 'benchmarks' and 'collection'")
         if not self.benchmarks and not self.collection:
@@ -750,7 +931,7 @@ class Collection(BaseModel):
 
     resource: Resource = Field(..., description="Resource metadata")
     name: str = Field(..., description="Collection name")
-    description: str = Field(..., description="Collection description")
+    description: str = Field(default="", description="Collection description")
     category: str = Field(..., description="Collection category")
     tags: list[str] = Field(default_factory=list, description="Collection tags")
     custom: dict[str, Any] = Field(default_factory=dict, description="Custom metadata")
