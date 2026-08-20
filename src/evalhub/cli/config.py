@@ -263,11 +263,13 @@ def resolve_component_config_dir(
 ) -> Path:
     """Return the config directory for a component (MCP, server, etc.)."""
     profile_name = profile or get_active_profile(data)
+    validate_profile_name(profile_name)
     return state_dir / profile_name
 
 
 def set_active_profile(data: dict[str, Any], profile: str) -> dict[str, Any]:
     """Switch the active profile."""
+    validate_profile_name(profile)
     data["active_profile"] = profile
     return data
 

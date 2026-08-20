@@ -10,7 +10,6 @@ import urllib.request
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
 
 import click
 import yaml
@@ -37,7 +36,6 @@ _STARTUP_TIMEOUT = 30.0
 _STARTUP_POLL = 0.5
 _STOP_TIMEOUT = 5.0
 _DEFAULT_PORT = 8080
-_DEFAULT_SIDECAR_PORT = 8082
 _SIDECAR_STARTUP_TIMEOUT = 15.0
 _SIDECAR_MIN_VERSION = "1.0.1"
 _SIDECAR_START_RETRIES = 3
@@ -49,10 +47,6 @@ def _build_default_server_config() -> dict[str, Any]:
         "database": {
             "driver": "sqlite",
             "url": "file::eval_hub:?mode=memory&cache=shared",
-        },
-        "sidecar": {
-            "local_mode": True,
-            "base_url": f"http://localhost:{_DEFAULT_SIDECAR_PORT}",
         },
     }
 
@@ -78,38 +72,30 @@ def _require_server_version() -> None:
         )
 
 
-def _read_server_config(config_dir: Path) -> tuple[int, bool]:
+def _extract_port_tls(data: dict[str, Any]) -> tuple[int, bool]:
+    """Extract (port, tls) from a parsed server config dict."""
+    svc = data.get("service", {})
+    port = int(svc.get("port", _DEFAULT_PORT))
+    cert = svc.get("tls_cert_file", "")
+    key = svc.get("tls_key_file", "")
+    return port, bool(cert and key)
+
+
+def _load_server_config(config_dir: Path) -> dict[str, Any]:
+    """Load and return the parsed server config dict."""
     config_path = config_dir / "config.yaml"
     if not config_path.exists():
-        return _DEFAULT_PORT, False
+        return _build_default_server_config()
     try:
-        data = yaml.safe_load(config_path.read_text())
-        svc = data.get("service", {})
-        port = int(svc.get("port", _DEFAULT_PORT))
-        cert = svc.get("tls_cert_file", "")
-        key = svc.get("tls_key_file", "")
-        tls = bool(cert and key)
-        return port, tls
+        return yaml.safe_load(config_path.read_text()) or {}
     except (yaml.YAMLError, TypeError, ValueError, AttributeError) as exc:
         raise click.ClickException(
             f"Failed to parse server config {config_path}: {exc}"
         ) from exc
 
 
-def _validate_sidecar_config(
-    sidecar_section: dict[str, Any],
-) -> None:
-    """Raise if a user-provided sidecar section has local_mode: false."""
-    if not sidecar_section.get("local_mode"):
-        raise click.ClickException(
-            "sidecar.local_mode must be true in the server config.\n"
-            "The sidecar is required for all server operations."
-        )
-    if not sidecar_section.get("base_url"):
-        raise click.ClickException(
-            "sidecar.base_url is required in the server config.\n"
-            "Example: base_url: http://localhost:8082"
-        )
+def _read_server_config(config_dir: Path) -> tuple[int, bool]:
+    return _extract_port_tls(_load_server_config(config_dir))
 
 
 def _find_free_port(start: int = 1024) -> int:
@@ -122,64 +108,6 @@ def _find_free_port(start: int = 1024) -> int:
             except OSError:
                 continue
     raise click.ClickException(f"No free TCP port found in range {start}–65535.")
-
-
-def _inject_sidecar_into_config(
-    config_path: Path,
-    server_port: int,
-    *,
-    sidecar_port: int | None = None,
-) -> None:
-    """Add or update the sidecar section in the user's config.yaml.
-
-    Only the 'sidecar' key is written — all other user settings are preserved.
-    When *sidecar_port* is None, auto-discovers a free port starting at
-    ``server_port + 2``.
-    """
-    data = yaml.safe_load(config_path.read_text()) or {}
-    if sidecar_port is None:
-        sidecar_port = _find_free_port(server_port + 2)
-    data["sidecar"] = {
-        "local_mode": True,
-        "base_url": f"http://localhost:{sidecar_port}",
-    }
-    config_path.write_text(yaml.safe_dump(data, sort_keys=False))
-
-
-def _read_sidecar_settings(
-    config_dir: Path,
-) -> tuple[str, dict[str, Any] | None]:
-    """Return (sidecar_base_url, local_settings) from the server config.
-
-    Calls _validate_sidecar_config() internally — raises if the sidecar
-    section is missing, local_mode is not true, or base_url is absent.
-    """
-    config_path = config_dir / "config.yaml"
-    if not config_path.exists():
-        raise click.ClickException(
-            f"Server config not found at {config_path}.\n"
-            "Run 'evalhub server start' without a custom config to generate defaults."
-        )
-    try:
-        data = yaml.safe_load(config_path.read_text())
-    except (yaml.YAMLError, TypeError, ValueError, AttributeError) as exc:
-        raise click.ClickException(
-            f"Failed to parse server config {config_path}: {exc}"
-        ) from exc
-    sidecar = data.get("sidecar") if isinstance(data, dict) else None
-    if not isinstance(sidecar, dict):
-        raise click.ClickException(
-            "The server config must include a 'sidecar' section.\n"
-            "Add a sidecar section with 'local_mode: true' and 'base_url'."
-            f"\n\nConfig file: {config_path}"
-            "\nOr remove the custom config to use defaults:"
-            "\n  evalhub config unset server_config_file"
-        )
-    _validate_sidecar_config(sidecar)
-    base_url = str(sidecar["base_url"])
-    local_raw = sidecar.get("local")
-    local_settings = dict(local_raw) if isinstance(local_raw, dict) else None
-    return base_url, local_settings
 
 
 def _fetch_health_info(port: int, *, tls: bool = False) -> dict[str, Any] | None:
@@ -256,8 +184,10 @@ def _wait_for_sidecar_healthy(base_url: str, timeout: float) -> bool:
     return _poll_until(lambda: _sidecar_health_check(base_url), timeout)
 
 
-def _resolve_config_dir(ctx: click.Context) -> tuple[Path, bool]:
-    """Return (config_dir, user_provided) for the active profile."""
+def _resolve_config_dir(
+    ctx: click.Context,
+) -> tuple[Path, bool, dict[str, Any], str | None]:
+    """Return (config_dir, user_provided, cli_data, profile) for the active profile."""
     data = cfg.load_config()
     profile = ctx.obj.get("profile")
     profile_data = cfg.get_profile(data, profile)
@@ -267,29 +197,13 @@ def _resolve_config_dir(ctx: click.Context) -> tuple[Path, bool]:
         SERVER_STATE_DIR,
         profile=profile,
     )
-    return config_dir, user_provided
-
-
-def _resolve_sidecar_config_dir(ctx: click.Context) -> Path:
-    """Return the sidecar config directory for the active profile."""
-    data = cfg.load_config()
-    profile = ctx.obj.get("profile")
-    return cfg.resolve_component_config_dir(data, SIDECAR_STATE_DIR, profile=profile)
-
-
-def _ensure_config(config_dir: Path) -> None:
-    config_path = config_dir / "config.yaml"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    config = _build_default_server_config()
-    config_path.write_text(yaml.safe_dump(config, sort_keys=False))
-    click.echo(f"Using default server config at {config_path}.")
+    return config_dir, user_provided, data, profile
 
 
 def _generate_sidecar_config(
     server_port: int,
     sidecar_base_url: str,
     config_dir: Path,
-    local_settings: dict[str, Any] | None = None,
     *,
     server_tls: bool = False,
 ) -> Path:
@@ -303,53 +217,34 @@ def _generate_sidecar_config(
             "base_url": f"{server_scheme}://localhost:{server_port}",
         },
     }
-    if local_settings:
-        config["local"] = local_settings
     config_path = config_dir / "sidecar-server-config.json"
     config_path.write_text(json.dumps(config, indent=2) + "\n")
     return config_path
 
 
 def _start_sidecar(
-    ctx: click.Context,
+    sidecar_cfg_dir: Path,
     server_port: int,
-    sidecar_base_url: str,
-    local_settings: dict[str, Any] | None = None,
     *,
     server_tls: bool = False,
-    server_config_path: Path | None = None,
-) -> int:
-    """Start the sidecar process and return its PID.
+) -> tuple[int, str]:
+    """Start the sidecar process and return ``(pid, sidecar_base_url)``.
 
-    When *server_config_path* is set (auto-configured sidecar), retries up
-    to ``_SIDECAR_START_RETRIES`` times with a new port on each attempt
-    (handles the race between port scan and bind).
+    Discovers a free port, generates the sidecar config, and spawns the
+    binary. Retries up to ``_SIDECAR_START_RETRIES`` times with a new
+    port on each attempt (handles the race between port scan and bind).
     """
     sidecar_binary = find_binary("eval-runtime-sidecar", "EVALHUB_SIDECAR_BIN")
-    if _sidecar_health_check(sidecar_base_url):
-        raise click.ClickException(
-            f"A sidecar is already responding at {sidecar_base_url}.\n"
-            f"Stop it first with: {_STOP_HINT_SIDECAR}"
-        )
+    scan_start = server_port + 2
 
-    max_attempts = _SIDECAR_START_RETRIES if server_config_path else 1
-    sidecar_cfg_dir = _resolve_sidecar_config_dir(ctx)
-
-    for attempt in range(max_attempts):
-        if attempt > 0:
-            assert server_config_path is not None
-            failed_port = urlparse(sidecar_base_url).port or _DEFAULT_SIDECAR_PORT
-            new_port = _find_free_port(failed_port + 1)
-            sidecar_base_url = f"http://localhost:{new_port}"
-            _inject_sidecar_into_config(
-                server_config_path, server_port, sidecar_port=new_port
-            )
+    for attempt in range(_SIDECAR_START_RETRIES):
+        sidecar_port = _find_free_port(scan_start)
+        sidecar_base_url = f"http://localhost:{sidecar_port}"
 
         sidecar_config = _generate_sidecar_config(
             server_port,
             sidecar_base_url,
             sidecar_cfg_dir,
-            local_settings,
             server_tls=server_tls,
         )
 
@@ -366,21 +261,12 @@ def _start_sidecar(
             except Exception:
                 proc.kill()
                 proc.wait(timeout=2)
-            if attempt < max_attempts - 1:
-                click.echo(
-                    f"Sidecar failed to start on port "
-                    f"{urlparse(sidecar_base_url).port}, retrying..."
-                )
+            if attempt < _SIDECAR_START_RETRIES - 1:
+                scan_start = sidecar_port + 1
                 continue
-            if server_config_path:
-                raise click.ClickException(
-                    f"Sidecar failed to start after "
-                    f"{_SIDECAR_START_RETRIES} attempts.\n"
-                    f"Check logs at: {SIDECAR_LOG_FILE}"
-                )
             raise click.ClickException(
-                f"Sidecar did not become healthy "
-                f"within {_SIDECAR_STARTUP_TIMEOUT}s.\n"
+                f"Sidecar failed to start after "
+                f"{_SIDECAR_START_RETRIES} attempts.\n"
                 f"Check logs at: {SIDECAR_LOG_FILE}"
             )
 
@@ -393,28 +279,55 @@ def _start_sidecar(
 
         SIDECAR_PID_FILE.parent.mkdir(parents=True, exist_ok=True)
         SIDECAR_PID_FILE.write_text(str(proc.pid))
-        return proc.pid
+        return proc.pid, sidecar_base_url
 
     raise AssertionError("unreachable")
 
 
-def _ensure_sidecar_section(
-    cfg_dir: Path, port: int, user_provided: bool
-) -> Path | None:
-    """Ensure the sidecar section exists in config.yaml.
+def _prepare_server(ctx: click.Context) -> tuple[str, Path, int, bool]:
+    """Shared preconditions for server run/start.
 
-    Returns the config path when the section was auto-injected (so the
-    caller can pass it to ``_start_sidecar`` for retry), or ``None``
-    when the section was already present.
+    Returns (binary, cfg_dir, port, tls) after validating version,
+    checking for existing processes, resolving config, and starting
+    the sidecar.
     """
-    config_path = cfg_dir / "config.yaml"
+    _require_server_version()
+    require_not_running(PID_FILE, "Server", _STOP_HINT_SERVER)
+    require_not_running(SIDECAR_PID_FILE, "Sidecar", _STOP_HINT_SIDECAR)
+
+    binary = find_binary("eval-hub-server", "EVALHUB_SERVER_BIN")
+
+    cfg_dir, user_provided, cli_data, profile = _resolve_config_dir(ctx)
+    sidecar_cfg_dir = cfg.resolve_component_config_dir(
+        cli_data, SIDECAR_STATE_DIR, profile=profile
+    )
+
+    server_config = (
+        _load_server_config(cfg_dir)
+        if user_provided
+        else _build_default_server_config()
+    )
+    port, tls = _extract_port_tls(server_config)
+    _require_server_not_listening(port, tls=tls)
+
+    _, sidecar_base_url = _start_sidecar(sidecar_cfg_dir, port, server_tls=tls)
+    server_config.pop("sidecar", None)
+    sidecar_block = {
+        "sidecar": {
+            "base_url": sidecar_base_url,
+            "local_mode": True,
+        }
+    }
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    config_text = yaml.safe_dump(server_config, sort_keys=False)
+    config_text += "# Auto-generated by evalhub CLI\n" + yaml.safe_dump(
+        sidecar_block, sort_keys=False
+    )
+    (cfg_dir / "config.yaml").write_text(config_text)
     if not user_provided:
-        return None
-    data = yaml.safe_load(config_path.read_text()) or {}
-    if isinstance(data, dict) and "sidecar" not in data:
-        _inject_sidecar_into_config(config_path, port)
-        return config_path
-    return None
+        click.echo(f"Using default server config at {cfg_dir / 'config.yaml'}.")
+
+    return binary, cfg_dir, port, tls
 
 
 # ---------------------------------------------------------------------------
@@ -437,34 +350,12 @@ def server_run(ctx: click.Context) -> None:
       evalhub server run
       evalhub --profile staging server run
     """
-    _require_server_version()
-    require_not_running(PID_FILE, "Server", _STOP_HINT_SERVER)
-    require_not_running(SIDECAR_PID_FILE, "Sidecar", _STOP_HINT_SIDECAR)
-
-    binary = find_binary("eval-hub-server", "EVALHUB_SERVER_BIN")
-    cfg_dir, user_provided = _resolve_config_dir(ctx)
-    if not user_provided:
-        _ensure_config(cfg_dir)
-
-    port, tls = _read_server_config(cfg_dir)
-    _require_server_not_listening(port, tls=tls)
-
-    auto_config_path = _ensure_sidecar_section(cfg_dir, port, user_provided)
-    sidecar_base_url, local_settings = _read_sidecar_settings(cfg_dir)
-    sidecar_pid = _start_sidecar(
-        ctx,
-        port,
-        sidecar_base_url,
-        local_settings,
-        server_tls=tls,
-        server_config_path=auto_config_path,
-    )
-    click.echo(f"Sidecar started (PID {sidecar_pid}).")
+    binary, cfg_dir, _port, _tls = _prepare_server(ctx)
 
     try:
         run_foreground([binary, "-local", "-configdir", str(cfg_dir)], ctx)
     finally:
-        stop_daemon(SIDECAR_PID_FILE, _STOP_TIMEOUT, "Sidecar")
+        stop_daemon(SIDECAR_PID_FILE, _STOP_TIMEOUT, "Sidecar", quiet=True)
 
 
 @server.command("start")
@@ -477,35 +368,14 @@ def server_start(ctx: click.Context) -> None:
       evalhub server start
       evalhub --profile staging server start
     """
-    _require_server_version()
-    require_not_running(PID_FILE, "Server", _STOP_HINT_SERVER)
-    require_not_running(SIDECAR_PID_FILE, "Sidecar", _STOP_HINT_SIDECAR)
-
-    binary = find_binary("eval-hub-server", "EVALHUB_SERVER_BIN")
-    cfg_dir, user_provided = _resolve_config_dir(ctx)
-    if not user_provided:
-        _ensure_config(cfg_dir)
-
-    port, tls = _read_server_config(cfg_dir)
+    binary, cfg_dir, port, tls = _prepare_server(ctx)
     scheme = "https" if tls else "http"
-    _require_server_not_listening(port, tls=tls)
-
-    auto_config_path = _ensure_sidecar_section(cfg_dir, port, user_provided)
-    sidecar_base_url, local_settings = _read_sidecar_settings(cfg_dir)
-    sidecar_pid = _start_sidecar(
-        ctx,
-        port,
-        sidecar_base_url,
-        local_settings,
-        server_tls=tls,
-        server_config_path=auto_config_path,
-    )
 
     cmd = [binary, "-local", "-configdir", str(cfg_dir)]
     proc = spawn_background(cmd, SERVER_STATE_DIR, LOG_FILE)
 
     if not _wait_for_healthy(port, _STARTUP_TIMEOUT, tls=tls):
-        stop_daemon(SIDECAR_PID_FILE, _STOP_TIMEOUT, "Sidecar")
+        stop_daemon(SIDECAR_PID_FILE, _STOP_TIMEOUT, "Sidecar", quiet=True)
         if proc.poll() is not None:
             output = LOG_FILE.read_text().strip()
             msg = f"Server crashed on startup (exit code {proc.returncode})."
@@ -527,26 +397,25 @@ def server_start(ctx: click.Context) -> None:
     PID_FILE.write_text(str(proc.pid))
     click.echo(f"Server started (PID {proc.pid}).")
     click.echo(f"  URL:  {scheme}://localhost:{port}")
-    click.echo(f"  Sidecar: {sidecar_base_url} (PID {sidecar_pid})")
     click.echo(f"  Logs: {LOG_FILE}")
 
 
 @server.command("stop")
 def server_stop() -> None:
-    """Stop the background eval-hub-server and sidecar.
+    """Stop the background eval-hub-server.
 
     \b
     Examples:
       evalhub server stop
     """
     stop_daemon(PID_FILE, _STOP_TIMEOUT, "Server")
-    stop_daemon(SIDECAR_PID_FILE, _STOP_TIMEOUT, "Sidecar")
+    stop_daemon(SIDECAR_PID_FILE, _STOP_TIMEOUT, "Sidecar", quiet=True)
 
 
 @server.command("status")
 @click.pass_context
 def server_status(ctx: click.Context) -> None:
-    """Check if eval-hub-server and sidecar are running.
+    """Check if eval-hub-server is running.
 
     Works for both background (server start) and foreground (server run)
     by probing the health endpoint directly.
@@ -555,7 +424,7 @@ def server_status(ctx: click.Context) -> None:
     Examples:
       evalhub server status
     """
-    cfg_dir, _ = _resolve_config_dir(ctx)
+    cfg_dir, _, _, _ = _resolve_config_dir(ctx)
     port, tls = _read_server_config(cfg_dir)
     scheme = "https" if tls else "http"
 
@@ -578,19 +447,3 @@ def server_status(ctx: click.Context) -> None:
         click.echo(f"  URL:    {scheme}://localhost:{port}")
         if pid is not None:
             click.echo(f"  Logs:   {LOG_FILE}")
-
-    sidecar_pid = live_pid(SIDECAR_PID_FILE)
-    sidecar_base_url, _ = _read_sidecar_settings(cfg_dir)
-
-    if sidecar_pid is not None:
-        parsed = urlparse(sidecar_base_url)
-        sidecar_port = parsed.port or _DEFAULT_SIDECAR_PORT
-        healthy = _sidecar_health_check(sidecar_base_url)
-        click.echo(
-            f"Sidecar is running "
-            f"(PID {sidecar_pid}, port {sidecar_port}, mode: local)."
-        )
-        click.echo(f"  Health: {'healthy' if healthy else 'not responding'}")
-        click.echo(f"  Logs:   {SIDECAR_LOG_FILE}")
-    else:
-        click.echo("Sidecar is not running.")
