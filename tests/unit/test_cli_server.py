@@ -1079,6 +1079,19 @@ def test_generate_sidecar_config_without_local_settings(tmp_path: Path) -> None:
     assert "local" not in loaded
 
 
+def test_generate_sidecar_config_server_tls(tmp_path: Path) -> None:
+    from evalhub.cli.server_cmd import _generate_sidecar_config
+
+    config_dir = tmp_path / "sidecar" / "default"
+    result_path = _generate_sidecar_config(
+        8080, "http://localhost:8082", config_dir, server_tls=True
+    )
+
+    loaded = json.loads(result_path.read_text())
+    assert loaded["eval_hub"]["base_url"] == "https://localhost:8080"
+    assert loaded["base_url"] == "http://localhost:8082"
+
+
 # ---------------------------------------------------------------------------
 # _read_sidecar_settings
 # ---------------------------------------------------------------------------
@@ -1348,6 +1361,69 @@ def test_server_start_sidecar_fails_no_server(
     mock_proc.terminate.assert_called_once()
 
 
+@patch("evalhub.cli.server_cmd._sidecar_health_check", return_value=True)
+@patch("evalhub.cli._process.subprocess.Popen")
+@patch(
+    "evalhub.cli.server_cmd.find_binary",
+    side_effect=lambda name, _env: f"/usr/bin/{name}",
+)
+def test_server_start_sidecar_already_responding(
+    mock_find: MagicMock,
+    mock_popen: MagicMock,
+    mock_sidecar_check: MagicMock,
+    runner: CliRunner,
+    tmp_path: Path,
+    config_file: Path,
+) -> None:
+    """Reject start when a sidecar is already responding."""
+    _seed_profile(config_file)
+    _setup_server_config_with_sidecar(tmp_path, config_file)
+
+    pid_file = tmp_path / "pid"
+    with patch("evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path), patch(
+        "evalhub.cli.server_cmd.PID_FILE", pid_file
+    ), patch("evalhub.cli.server_cmd.LOG_FILE", tmp_path / "server.log"):
+        result = runner.invoke(main, ["server", "start"])
+
+    assert result.exit_code != 0
+    assert "already responding" in result.output
+    mock_popen.assert_not_called()
+
+
+@patch("evalhub.cli.server_cmd._wait_for_sidecar_healthy", return_value=True)
+@patch("evalhub.cli._process.subprocess.Popen")
+@patch(
+    "evalhub.cli.server_cmd.find_binary",
+    side_effect=lambda name, _env: f"/usr/bin/{name}",
+)
+def test_server_start_sidecar_exits_after_healthy(
+    mock_find: MagicMock,
+    mock_popen: MagicMock,
+    mock_sidecar_healthy: MagicMock,
+    runner: CliRunner,
+    tmp_path: Path,
+    config_file: Path,
+) -> None:
+    """Fail when sidecar becomes healthy but then exits immediately."""
+    _seed_profile(config_file)
+    _setup_server_config_with_sidecar(tmp_path, config_file)
+
+    mock_proc = MagicMock()
+    mock_proc.pid = 54321
+    mock_proc.poll.return_value = 1
+    mock_proc.returncode = 1
+    mock_popen.return_value = mock_proc
+
+    pid_file = tmp_path / "pid"
+    with patch("evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path), patch(
+        "evalhub.cli.server_cmd.PID_FILE", pid_file
+    ), patch("evalhub.cli.server_cmd.LOG_FILE", tmp_path / "server.log"):
+        result = runner.invoke(main, ["server", "start"])
+
+    assert result.exit_code != 0
+    assert "Sidecar exited on startup" in result.output
+
+
 @patch("evalhub.cli.server_cmd._wait_for_sidecar_healthy", return_value=True)
 @patch("evalhub.cli.server_cmd._wait_for_healthy", return_value=False)
 @patch("evalhub.cli._process.subprocess.Popen")
@@ -1370,6 +1446,7 @@ def test_server_start_server_fails_sidecar_cleanup(
 
     mock_proc_sidecar = MagicMock()
     mock_proc_sidecar.pid = 54321
+    mock_proc_sidecar.poll.return_value = None
 
     mock_proc_server = MagicMock()
     mock_proc_server.pid = 12345
@@ -1480,6 +1557,7 @@ def test_server_run_with_sidecar_cleanup(
 
     mock_proc = MagicMock()
     mock_proc.pid = 54321
+    mock_proc.poll.return_value = None
     mock_popen.return_value = mock_proc
 
     mock_run.return_value = MagicMock(returncode=0)

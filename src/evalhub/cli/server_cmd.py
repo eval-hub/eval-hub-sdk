@@ -224,14 +224,17 @@ def _generate_sidecar_config(
     sidecar_base_url: str,
     config_dir: Path,
     local_settings: dict[str, Any] | None = None,
+    *,
+    server_tls: bool = False,
 ) -> Path:
     """Generate sidecar-server-config.json for the eval-runtime-sidecar binary."""
     config_dir.mkdir(parents=True, exist_ok=True)
+    server_scheme = "https" if server_tls else "http"
     config: dict[str, Any] = {
         "base_url": sidecar_base_url,
         "local_mode": True,
         "eval_hub": {
-            "base_url": f"http://localhost:{server_port}",
+            "base_url": f"{server_scheme}://localhost:{server_port}",
         },
     }
     if local_settings:
@@ -246,12 +249,23 @@ def _start_sidecar(
     server_port: int,
     sidecar_base_url: str,
     local_settings: dict[str, Any] | None = None,
+    *,
+    server_tls: bool = False,
 ) -> int:
     """Start the sidecar process and return its PID."""
     sidecar_binary = find_binary("eval-runtime-sidecar", "EVALHUB_SIDECAR_BIN")
+    if _sidecar_health_check(sidecar_base_url):
+        raise click.ClickException(
+            f"A sidecar is already responding at {sidecar_base_url}.\n"
+            f"Stop it first with: {_STOP_HINT_SIDECAR}"
+        )
     sidecar_cfg_dir = _resolve_sidecar_config_dir(ctx)
     config_path = _generate_sidecar_config(
-        server_port, sidecar_base_url, sidecar_cfg_dir, local_settings
+        server_port,
+        sidecar_base_url,
+        sidecar_cfg_dir,
+        local_settings,
+        server_tls=server_tls,
     )
 
     proc = spawn_background(
@@ -269,6 +283,12 @@ def _start_sidecar(
             proc.wait(timeout=2)
         raise click.ClickException(
             f"Sidecar did not become healthy within {_SIDECAR_STARTUP_TIMEOUT}s.\n"
+            f"Check logs at: {SIDECAR_LOG_FILE}"
+        )
+
+    if proc.poll() is not None:
+        raise click.ClickException(
+            f"Sidecar exited on startup (exit code {proc.returncode}).\n"
             f"Check logs at: {SIDECAR_LOG_FILE}"
         )
 
@@ -312,7 +332,9 @@ def server_run(ctx: click.Context) -> None:
     sidecar_enabled, sidecar_base_url, local_settings = _read_sidecar_settings(cfg_dir)
 
     if sidecar_enabled:
-        sidecar_pid = _start_sidecar(ctx, port, sidecar_base_url, local_settings)
+        sidecar_pid = _start_sidecar(
+            ctx, port, sidecar_base_url, local_settings, server_tls=tls
+        )
         click.echo(f"Sidecar started (PID {sidecar_pid}).")
 
     try:
@@ -349,7 +371,9 @@ def server_start(ctx: click.Context) -> None:
 
     sidecar_pid = None
     if sidecar_enabled:
-        sidecar_pid = _start_sidecar(ctx, port, sidecar_base_url, local_settings)
+        sidecar_pid = _start_sidecar(
+            ctx, port, sidecar_base_url, local_settings, server_tls=tls
+        )
 
     cmd = [binary, "-local", "-configdir", str(cfg_dir)]
     proc = spawn_background(cmd, SERVER_STATE_DIR, LOG_FILE)
