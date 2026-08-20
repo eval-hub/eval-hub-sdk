@@ -56,6 +56,7 @@ client = [
 cli = [
     "eval-hub-sdk[core]",
     "click>=8.1.0",
+    "packaging>=21.0",
     "pyyaml>=6.0",
     "rich>=13.0.0",
 ]
@@ -89,7 +90,7 @@ examples = [
 # Server - eval-hub-server binary for local/embedded use
 server = [
     "eval-hub-sdk[cli]",
-    "eval-hub-server>=1.0.0",
+    "eval-hub-server>=1.0.1",
 ]
 
 # All core functionality (excludes examples which are optional)
@@ -166,6 +167,7 @@ module = [
     "oras",
     "olot.*",
     "olot",
+    "packaging.*",
     "opentelemetry.*",
     # Optional runtime deps detected by EnvironmentCardMetadata.capture()
     "torch",
