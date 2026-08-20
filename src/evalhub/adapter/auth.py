@@ -44,6 +44,8 @@ def _resolve_auth_dir() -> Path:
     settings = AdapterSettings.from_env()
     if settings.mode == EvalHubMode.LOCAL and job_spec.model.auth is not None:
         ref = _parse_file_url(job_spec.model.auth.secret_ref)
+        if ref.is_symlink():
+            raise ValueError(f"secret_ref must not be a symlink: {ref}")
         if not ref.is_dir():
             raise ValueError(
                 f"secret_ref does not point to an existing directory: {ref}"
@@ -52,11 +54,15 @@ def _resolve_auth_dir() -> Path:
     return _MODEL_AUTH_DIR
 
 
+def _is_regular_file(path: Path) -> bool:
+    return path.is_file() and not path.is_symlink()
+
+
 def _read_key_from_dir(auth_dir: Path, key_name: str) -> str | None:
     if not key_name or "/" in key_name or "\\" in key_name or key_name in (".", ".."):
         return None
     path = auth_dir / key_name
-    if not path.is_file():
+    if not _is_regular_file(path):
         return None
     try:
         value = path.read_text(encoding="utf-8").strip()
@@ -108,5 +114,5 @@ def resolve_model_credentials() -> ModelCredentials:
     return ModelCredentials(
         api_key=_read_key_from_dir(auth_dir, "api-key"),
         hf_token=_read_key_from_dir(auth_dir, "hf-token"),
-        ca_cert_path=ca_cert if ca_cert.is_file() else None,
+        ca_cert_path=ca_cert if _is_regular_file(ca_cert) else None,
     )

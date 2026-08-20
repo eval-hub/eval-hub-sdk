@@ -140,6 +140,21 @@ class TestResolveAuthDir:
         with pytest.raises(ValueError, match="file:///path, not file://path"):
             _resolve_auth_dir()
 
+    def test_local_mode_symlink_dir_raises(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("EVALHUB_MODE", "local")
+        real_dir = tmp_path / "real-auth"
+        real_dir.mkdir()
+        link = tmp_path / "link-auth"
+        link.symlink_to(real_dir)
+        spec = _make_job_spec(_file_url(link))
+        job_json = _write_job_json(tmp_path, spec)
+        monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(job_json))
+
+        with pytest.raises(ValueError, match="must not be a symlink"):
+            _resolve_auth_dir()
+
 
 # ---------------------------------------------------------------------------
 # read_model_auth_key
@@ -229,6 +244,21 @@ class TestReadModelAuthKey:
 
         assert read_model_auth_key(key_name) is None
 
+    def test_rejects_symlinked_key_file(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("EVALHUB_MODE", "local")
+        auth_dir = tmp_path / "model-auth"
+        auth_dir.mkdir()
+        real_key = tmp_path / "real-api-key"
+        real_key.write_text("secret-via-symlink")
+        (auth_dir / "api-key").symlink_to(real_key)
+        spec = _make_job_spec(_file_url(auth_dir))
+        job_json = _write_job_json(tmp_path, spec)
+        monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(job_json))
+
+        assert read_model_auth_key("api-key") is None
+
     def test_backward_compat_no_env_var(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
@@ -286,6 +316,22 @@ class TestResolveModelCredentials:
         auth_dir = tmp_path / "model-auth"
         auth_dir.mkdir()
         (auth_dir / "ca_cert").mkdir()
+        spec = _make_job_spec(_file_url(auth_dir))
+        job_json = _write_job_json(tmp_path, spec)
+        monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(job_json))
+
+        creds = resolve_model_credentials()
+        assert creds.ca_cert_path is None
+
+    def test_rejects_symlinked_ca_cert(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("EVALHUB_MODE", "local")
+        auth_dir = tmp_path / "model-auth"
+        auth_dir.mkdir()
+        real_cert = tmp_path / "real_ca_cert"
+        real_cert.write_text("-----BEGIN CERTIFICATE-----")
+        (auth_dir / "ca_cert").symlink_to(real_cert)
         spec = _make_job_spec(_file_url(auth_dir))
         job_json = _write_job_json(tmp_path, spec)
         monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(job_json))
