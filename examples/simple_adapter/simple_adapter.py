@@ -212,7 +212,7 @@ class ExampleAdapter(FrameworkAdapter):
             raise ValueError("benchmark_id is required")
 
         if not config.model.url:
-            raise ValueError("model.url is required")
+            logger.warning("model.url is empty; skipping live inference")
 
         if not config.model.name:
             raise ValueError("model.name is required")

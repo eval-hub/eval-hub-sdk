@@ -59,8 +59,17 @@ class TestModelConfig:
             ModelConfig(
                 url="http://localhost:8000/v1", name=""
             )  # Empty name should fail
-        with pytest.raises(ValidationError):
-            ModelConfig(url="", name="test-model")  # Empty URL should fail
+
+    def test_model_config_empty_url_for_prerecorded(self) -> None:
+        """Test ModelConfig accepts empty URL for pre-recorded evaluation jobs."""
+        config = ModelConfig(url="", name="test-model")
+        assert config.url == ""
+        assert config.name == "test-model"
+
+    def test_model_config_default_url_is_empty(self) -> None:
+        """Test ModelConfig defaults url to empty string when omitted."""
+        config = ModelConfig(name="test-model")
+        assert config.url == ""
 
 
 class TestBenchmarkInfo:
