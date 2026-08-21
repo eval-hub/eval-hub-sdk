@@ -75,7 +75,13 @@ def graceful_stop(
     *,
     quiet: bool = False,
 ) -> None:
-    os.kill(pid, GRACEFUL_SIGNAL)
+    try:
+        os.kill(pid, GRACEFUL_SIGNAL)
+    except ProcessLookupError:
+        pid_file.unlink(missing_ok=True)
+        if not quiet:
+            click.echo(f"{label} stopped.")
+        return
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if not is_process_alive(pid):
@@ -84,7 +90,10 @@ def graceful_stop(
                 click.echo(f"{label} stopped.")
             return
         time.sleep(0.2)
-    os.kill(pid, FORCE_SIGNAL)
+    try:
+        os.kill(pid, FORCE_SIGNAL)
+    except ProcessLookupError:
+        pass
     pid_file.unlink(missing_ok=True)
     if not quiet:
         click.echo(f"{label} force-killed.")
