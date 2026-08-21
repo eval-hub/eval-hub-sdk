@@ -13,7 +13,7 @@ import pytest
 import yaml
 from click.testing import CliRunner
 from evalhub.cli.main import main
-from evalhub.client.job_logs import JobLogUpdate
+from evalhub.client.job_logs import JobLogOptions, JobLogUpdate
 from evalhub.models.api import (
     BenchmarkConfig,
     BenchmarkResult,
@@ -1143,6 +1143,155 @@ class TestEvalResults:
         assert "hellaswag" in result.output
 
 
+# --- eval logs ---
+
+
+class TestEvalLogs:
+    def test_logs_snapshot(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        mock_client.jobs.get_logs.return_value = "line1\nline2\n"
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(main, ["eval", "logs", "eval-123"])
+        assert result.exit_code == 0
+        assert "line1" in result.output
+        assert "line2" in result.output
+        mock_client.jobs.get_logs.assert_called_once_with(
+            "eval-123",
+            benchmark_index=None,
+            options=JobLogOptions(tail_lines=1000, timestamps=False),
+        )
+
+    def test_logs_with_tail(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        mock_client.jobs.get_logs.return_value = "tail output\n"
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(main, ["eval", "logs", "eval-123", "--tail", "50"])
+        assert result.exit_code == 0
+        mock_client.jobs.get_logs.assert_called_once_with(
+            "eval-123",
+            benchmark_index=None,
+            options=JobLogOptions(tail_lines=50, timestamps=False),
+        )
+
+    def test_logs_with_timestamps(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        mock_client.jobs.get_logs.return_value = "2026-01-01T00:00:00Z line\n"
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(main, ["eval", "logs", "eval-123", "--timestamps"])
+        assert result.exit_code == 0
+        mock_client.jobs.get_logs.assert_called_once_with(
+            "eval-123",
+            benchmark_index=None,
+            options=JobLogOptions(tail_lines=1000, timestamps=True),
+        )
+
+    def test_logs_with_since(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        mock_client.jobs.get_logs.return_value = "recent log\n"
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(main, ["eval", "logs", "eval-123", "--since", "300"])
+        assert result.exit_code == 0
+        mock_client.jobs.get_logs.assert_called_once_with(
+            "eval-123",
+            benchmark_index=None,
+            options=JobLogOptions(tail_lines=1000, timestamps=False, since_seconds=300),
+        )
+
+    def test_logs_with_benchmark_index(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        mock_client.jobs.get_logs.return_value = "benchmark 0 logs\n"
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(
+                main, ["eval", "logs", "eval-123", "--benchmark-index", "0"]
+            )
+        assert result.exit_code == 0
+        mock_client.jobs.get_logs.assert_called_once_with(
+            "eval-123",
+            benchmark_index=0,
+            options=JobLogOptions(tail_lines=1000, timestamps=False),
+        )
+
+    def test_logs_follow(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        completed = _make_job(state=JobStatus.COMPLETED)
+        mock_client.jobs.watch_logs.return_value = iter(
+            [
+                JobLogUpdate(logs="starting\n", job=_make_job(state=JobStatus.RUNNING)),
+                JobLogUpdate(logs="done\n", job=completed),
+            ]
+        )
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(main, ["eval", "logs", "eval-123", "--follow"])
+        assert result.exit_code == 0
+        assert "starting" in result.output
+        assert "done" in result.output
+        assert "finished with state: completed" in result.output
+        mock_client.jobs.watch_logs.assert_called_once_with(
+            "eval-123",
+            benchmark_index=None,
+            options=JobLogOptions(tail_lines=1000, timestamps=False),
+            poll_interval=2.0,
+            timeout=None,
+        )
+
+    def test_logs_follow_timeout(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        mock_client.jobs.watch_logs.side_effect = TimeoutError
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(
+                main,
+                ["eval", "logs", "eval-123", "--follow", "--timeout", "10"],
+            )
+        assert result.exit_code == 2
+        assert "Timed out" in result.output
+        mock_client.jobs.watch_logs.assert_called_once_with(
+            "eval-123",
+            benchmark_index=None,
+            options=JobLogOptions(tail_lines=1000, timestamps=False),
+            poll_interval=2.0,
+            timeout=10.0,
+        )
+
+    def test_logs_empty(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        mock_client.jobs.get_logs.return_value = ""
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(main, ["eval", "logs", "eval-123"])
+        assert result.exit_code == 0
+        assert result.output == ""
+
+    def test_logs_timeout_without_follow_errors(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(
+                main, ["eval", "logs", "eval-123", "--timeout", "30"]
+            )
+        assert result.exit_code != 0
+        assert "--timeout requires --follow" in result.output
+
+    def test_logs_follow_incomplete_stream(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        mock_client.jobs.watch_logs.return_value = iter(
+            [
+                JobLogUpdate(logs="partial\n", job=_make_job(state=JobStatus.PENDING)),
+            ]
+        )
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(main, ["eval", "logs", "eval-123", "--follow"])
+        assert result.exit_code == 2
+        assert "Stream ended before completion" in result.output
+
+
 # --- eval cancel ---
 
 
@@ -1188,6 +1337,7 @@ class TestEvalHelp:
         assert "run" in result.output
         assert "status" in result.output
         assert "results" in result.output
+        assert "logs" in result.output
         assert "cancel" in result.output
 
     def test_eval_run_help(self, runner: CliRunner) -> None:
@@ -1204,6 +1354,15 @@ class TestEvalHelp:
         assert result.exit_code == 0
         assert "--status" in result.output
         assert "--watch" in result.output
+
+    def test_eval_logs_help(self, runner: CliRunner) -> None:
+        result = runner.invoke(main, ["eval", "logs", "--help"])
+        assert result.exit_code == 0
+        assert "--follow" in result.output
+        assert "--tail" in result.output
+        assert "--timestamps" in result.output
+        assert "--since" in result.output
+        assert "--benchmark-index" in result.output
 
     def test_eval_results_help(self, runner: CliRunner) -> None:
         result = runner.invoke(main, ["eval", "results", "--help"])
