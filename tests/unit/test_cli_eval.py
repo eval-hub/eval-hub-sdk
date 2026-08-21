@@ -1268,6 +1268,29 @@ class TestEvalLogs:
         assert result.exit_code == 0
         assert result.output == ""
 
+    def test_logs_timeout_without_follow_errors(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(
+                main, ["eval", "logs", "eval-123", "--timeout", "30"]
+            )
+        assert result.exit_code != 0
+        assert "--timeout requires --follow" in result.output
+
+    def test_logs_follow_incomplete_stream(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        mock_client.jobs.watch_logs.return_value = iter(
+            [
+                JobLogUpdate(logs="partial\n", job=_make_job(state=JobStatus.PENDING)),
+            ]
+        )
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(main, ["eval", "logs", "eval-123", "--follow"])
+        assert result.exit_code == 2
+        assert "Stream ended before completion" in result.output
+
 
 # --- eval cancel ---
 
