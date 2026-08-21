@@ -79,12 +79,21 @@ def _extract_port_tls(data: dict[str, Any]) -> tuple[int, bool]:
         raise click.ClickException(
             "Invalid server config: 'service' must be a mapping."
         )
+    port_value = svc.get("port", _DEFAULT_PORT)
+    if isinstance(port_value, bool):
+        raise click.ClickException(
+            "Invalid server config: 'service.port' must be numeric."
+        )
     try:
-        port = int(svc.get("port", _DEFAULT_PORT))
+        port = int(port_value)
     except (ValueError, TypeError) as exc:
         raise click.ClickException(
             f"Invalid server config: 'service.port' must be numeric: {exc}"
         ) from exc
+    if not 1 <= port <= 65533:
+        raise click.ClickException(
+            "Invalid server config: 'service.port' must be between 1 and 65533."
+        )
     cert = svc.get("tls_cert_file", "")
     key = svc.get("tls_key_file", "")
     return port, bool(cert and key)
