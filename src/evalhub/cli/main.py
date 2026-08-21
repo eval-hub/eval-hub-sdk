@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 import shutil
 import sys
@@ -43,6 +44,27 @@ from .completion import completion
 from .formatter import format_option, output
 from .mcp_cmd import mcp
 from .server_cmd import server
+
+
+class FiniteFloatRange(click.FloatRange):
+    """A FloatRange that additionally rejects NaN and infinity."""
+
+    name = "FINITE_FLOAT"
+
+    def convert(
+        self,
+        value: Any,
+        param: click.Parameter | None,
+        ctx: click.Context | None,
+    ) -> Any:
+        rv = super().convert(value, param, ctx)
+        if not math.isfinite(rv):
+            self.fail(
+                f"{rv} is not a finite number.",
+                param,
+                ctx,
+            )
+        return rv
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
@@ -902,13 +924,13 @@ def eval_results(ctx: click.Context, job_id: str, output_format: str) -> None:
 )
 @click.option(
     "--poll-interval",
-    type=click.FloatRange(min=0, min_open=True),
+    type=FiniteFloatRange(min=0, min_open=True),
     default=2.0,
     help="Seconds between polls when using --follow (default: 2.0).",
 )
 @click.option(
     "--timeout",
-    type=click.FloatRange(min=0, min_open=True),
+    type=FiniteFloatRange(min=0, min_open=True),
     default=None,
     help="Stop streaming after N seconds (only with --follow).",
 )

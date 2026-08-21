@@ -1278,6 +1278,31 @@ class TestEvalLogs:
         assert result.exit_code != 0
         assert "--timeout requires --follow" in result.output
 
+    @pytest.mark.parametrize(
+        "option,value",
+        [
+            ("--poll-interval", "nan"),
+            ("--poll-interval", "inf"),
+            ("--timeout", "nan"),
+            ("--timeout", "inf"),
+        ],
+    )
+    def test_logs_rejects_non_finite_floats(
+        self,
+        runner: CliRunner,
+        config_file: Path,
+        mock_client: MagicMock,
+        option: str,
+        value: str,
+    ) -> None:
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(
+                main,
+                ["eval", "logs", "eval-123", "--follow", option, value],
+            )
+        assert result.exit_code != 0
+        assert "not a finite number" in result.output
+
     def test_logs_follow_incomplete_stream(
         self, runner: CliRunner, config_file: Path, mock_client: MagicMock
     ) -> None:
