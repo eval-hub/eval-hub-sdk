@@ -690,6 +690,7 @@ all = [
     { name = "opentelemetry-exporter-otlp-proto-grpc" },
     { name = "opentelemetry-sdk" },
     { name = "oras" },
+    { name = "packaging" },
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -701,6 +702,7 @@ all = [
 cli = [
     { name = "click" },
     { name = "httpx" },
+    { name = "packaging" },
     { name = "pyyaml" },
     { name = "rich" },
 ]
@@ -716,6 +718,7 @@ dev = [
     { name = "mypy" },
     { name = "opentelemetry-exporter-otlp-proto-grpc" },
     { name = "opentelemetry-sdk" },
+    { name = "packaging" },
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -732,6 +735,7 @@ mcp = [
     { name = "click" },
     { name = "eval-hub-mcp" },
     { name = "httpx" },
+    { name = "packaging" },
     { name = "pyyaml" },
     { name = "rich" },
 ]
@@ -739,6 +743,7 @@ server = [
     { name = "click" },
     { name = "eval-hub-server" },
     { name = "httpx" },
+    { name = "packaging" },
     { name = "pyyaml" },
     { name = "rich" },
 ]
@@ -772,7 +777,7 @@ requires-dist = [
     { name = "eval-hub-sdk", extras = ["core"], marker = "extra == 'adapter'" },
     { name = "eval-hub-sdk", extras = ["core"], marker = "extra == 'cli'" },
     { name = "eval-hub-sdk", extras = ["core"], marker = "extra == 'client'" },
-    { name = "eval-hub-server", marker = "extra == 'server'", specifier = ">=1.0.0" },
+    { name = "eval-hub-server", marker = "extra == 'server'", specifier = ">=1.0.1" },
     { name = "httpx", marker = "extra == 'core'", specifier = ">=0.25.0" },
     { name = "importlib-metadata", specifier = ">=6.0.0" },
     { name = "lm-eval", marker = "extra == 'examples'", specifier = ">=0.4.0" },
@@ -784,6 +789,7 @@ requires-dist = [
     { name = "opentelemetry-sdk", marker = "extra == 'adapter'", specifier = ">=1.44.0" },
     { name = "opentelemetry-sdk", marker = "extra == 'dev'", specifier = ">=1.44.0" },
     { name = "oras", marker = "extra == 'adapter'", specifier = ">=0.2.39" },
+    { name = "packaging", marker = "extra == 'cli'", specifier = ">=21.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.4.0" },
     { name = "pydantic", specifier = ">=2.7.0" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },
@@ -817,14 +823,14 @@ dev = [
 
 [[package]]
 name = "eval-hub-server"
-version = "1.0.0"
+version = "1.0.1"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c0/0f/fb9fcd63b719a398616b391c1b15f053d31f936b55b7ca78db3e1aa065cf/eval_hub_server-1.0.0-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:b7d1962f5d0dced9f195580e9c36440ba71827169a35ec719d016c3a9b1190b8", size = 19682678, upload-time = "2026-07-30T11:42:32.778Z" },
-    { url = "https://files.pythonhosted.org/packages/12/99/47d7e105860eb60f1971afb15e1fe79d9af58c4d53a368c2937e02162f5e/eval_hub_server-1.0.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:504d0fffdea7f1c6b6aa129772f7275c9302ceb43e00dd27cf93778b347bd7fc", size = 18119859, upload-time = "2026-07-30T11:42:34.934Z" },
-    { url = "https://files.pythonhosted.org/packages/39/41/0c46aaebb07340235d90d2c94e606017a77dc541411a4accad8e9a682f68/eval_hub_server-1.0.0-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:fa657a0117de9965b1633d5bfa94cead6ccfaed6ec3f22e8755689a9221cf8b1", size = 17232527, upload-time = "2026-07-30T11:42:37.016Z" },
-    { url = "https://files.pythonhosted.org/packages/1c/61/2bcf7bf607e61156528920763d2c18d287b8ed2d1e004ce596906b10a06d/eval_hub_server-1.0.0-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:5b05c623c9dd396c969f268af133fb20b2ed1e9e936546a5dac293dc7c84b89f", size = 19278677, upload-time = "2026-07-30T11:42:38.966Z" },
-    { url = "https://files.pythonhosted.org/packages/f7/98/53454e8f1e219ae77551d6f8986b4bd1f8e709e20476a0d5442b53288c65/eval_hub_server-1.0.0-py3-none-win_amd64.whl", hash = "sha256:2e1871fb7a3ce98d0d261dec7db0dd54b93f6a4eb91bef26f108c67f3b981257", size = 19709805, upload-time = "2026-07-30T11:42:41.37Z" },
+    { url = "https://files.pythonhosted.org/packages/7d/b7/f659c96187f55d52267ad5a805c5f7662a8b5b683b9b2e2db823334bbc80/eval_hub_server-1.0.1-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:2c7a57dd472b961c186a12b0ea340f01cf21b316a491419715e0a6904d50b765", size = 33927775, upload-time = "2026-08-19T13:46:42.598Z" },
+    { url = "https://files.pythonhosted.org/packages/a5/cb/b60c8c1a64517617a0854c631e2bd19ff648123700c3aa61b6e8ebdbed36/eval_hub_server-1.0.1-py3-none-macosx_11_0_arm64.whl", hash = "sha256:de067f7fc11594dceffac9817c1e17a062a0d58b1be7b385f5e3e20fc90e6827", size = 30995938, upload-time = "2026-08-19T13:46:45.756Z" },
+    { url = "https://files.pythonhosted.org/packages/3a/d7/304d30cbd7e7e2dfecd315b469930e8533ff26623830c846e7157fe9f057/eval_hub_server-1.0.1-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:8b0df626446d506b808dcedb374aa9dfc693beb14688c47e416c97c53e04838f", size = 29527786, upload-time = "2026-08-19T13:46:48.86Z" },
+    { url = "https://files.pythonhosted.org/packages/a1/99/141ee5e11de511015bfdc41fb1a69c241b44f7e56756aefc82f86c4dee14/eval_hub_server-1.0.1-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:5d62bde22c2d57157c8501d090bf8f5e62c9227feefe49d8dc2cdfaa4096a0e4", size = 33268921, upload-time = "2026-08-19T13:46:52.376Z" },
+    { url = "https://files.pythonhosted.org/packages/54/fc/87dbfe2e0c7d3cd0e8030cccb2633159fd64b90fb432f84ef943e504f0ff/eval_hub_server-1.0.1-py3-none-win_amd64.whl", hash = "sha256:a665d6b3829b18f00853e9e46c01e4fc9c5441675e7c831558f453e1f17d45c3", size = 33999150, upload-time = "2026-08-19T13:46:55.661Z" },
 ]
 
 [[package]]

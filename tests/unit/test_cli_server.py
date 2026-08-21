@@ -2,18 +2,32 @@
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import click
 import pytest
 import yaml
 from click.testing import CliRunner
 from evalhub.cli.main import main
+from evalhub.cli.server_cmd import _find_free_port as _real_find_free_port
+from evalhub.cli.server_cmd import _require_server_version as _real_require_version
 
 pytestmark = pytest.mark.unit
+
+
+def _mock_proc(pid: int = 54321, *, exit_code: int | None = None) -> MagicMock:
+    """Create a mock subprocess with the given PID and optional exit code."""
+    proc = MagicMock()
+    proc.pid = pid
+    proc.poll.return_value = exit_code
+    if exit_code is not None:
+        proc.returncode = exit_code
+    return proc
 
 
 @pytest.fixture()
@@ -46,6 +60,22 @@ def runner() -> CliRunner:
     return CliRunner()
 
 
+@pytest.fixture(autouse=True)
+def _isolate_server_state(tmp_path: Path) -> Iterator[None]:
+    """Isolate tests from real PID/log files, version checks, and port probes."""
+    sidecar_dir = tmp_path / "sidecar_state"
+    with patch("evalhub.cli.server_cmd.SIDECAR_STATE_DIR", sidecar_dir), patch(
+        "evalhub.cli.server_cmd.SIDECAR_PID_FILE", sidecar_dir / "pid"
+    ), patch(
+        "evalhub.cli.server_cmd.SIDECAR_LOG_FILE", sidecar_dir / "sidecar.log"
+    ), patch("evalhub.cli.server_cmd._require_server_version"), patch(
+        "evalhub.cli.server_cmd._require_server_not_listening"
+    ), patch("evalhub.cli.server_cmd._sidecar_health_check", return_value=False), patch(
+        "evalhub.cli.server_cmd._find_free_port", return_value=8082
+    ):
+        yield
+
+
 # ---------------------------------------------------------------------------
 # Help / discoverability
 # ---------------------------------------------------------------------------
@@ -64,29 +94,6 @@ def test_server_subcommands_appear_in_help(runner: CliRunner) -> None:
         assert sub in result.output
 
 
-# ---------------------------------------------------------------------------
-# Shared helpers for lifecycle tests
-# ---------------------------------------------------------------------------
-
-
-def _patch_server_state(tmp_path: Path) -> tuple[Any, Any, Any]:
-    """Context manager that patches all server state dir paths to tmp_path."""
-    return (
-        patch("evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path),
-        patch("evalhub.cli.server_cmd.PID_FILE", tmp_path / "pid"),
-        patch("evalhub.cli.server_cmd.LOG_FILE", tmp_path / "server.log"),
-    )
-
-
-def _apply_patches(*patches: Any) -> list[Any]:
-    """Enter multiple patches; return list to exit later. Not a context manager."""
-    started = []
-    for p in patches:
-        p.start()
-        started.append(p)
-    return started
-
-
 def _setup_server_config(
     tmp_path: Path,
     config_file: Path,
@@ -101,8 +108,9 @@ def _setup_server_config(
     if tls:
         svc["tls_cert_file"] = "/tmp/server.crt"
         svc["tls_key_file"] = "/tmp/server.key"
+    config: dict[str, object] = {"service": svc}
     server_yaml = cfg_dir / "config.yaml"
-    server_yaml.write_text(yaml.safe_dump({"service": svc}))
+    server_yaml.write_text(yaml.safe_dump(config))
     data = (
         yaml.safe_load(config_file.read_text())
         if config_file.exists()
@@ -116,27 +124,75 @@ def _setup_server_config(
 
 
 # ---------------------------------------------------------------------------
-# server run
+# _require_server_not_listening
 # ---------------------------------------------------------------------------
 
 
-@patch("evalhub.cli._process.subprocess.run")
+@pytest.mark.parametrize("subcmd", ["start", "run"])
 @patch(
     "evalhub.cli.server_cmd.find_binary",
     return_value="/usr/bin/eval-hub-server",
 )
+def test_server_refuses_when_already_listening(
+    mock_find: MagicMock,
+    subcmd: str,
+    runner: CliRunner,
+    tmp_path: Path,
+    config_file: Path,
+) -> None:
+    """Both start and run refuse if the port already has a server responding."""
+    _seed_profile(config_file)
+    _setup_server_config(tmp_path, config_file)
+
+    pid_file = tmp_path / "pid"
+    with patch("evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path), patch(
+        "evalhub.cli.server_cmd.PID_FILE", pid_file
+    ), patch("evalhub.cli.server_cmd.LOG_FILE", tmp_path / "server.log"), patch(
+        "evalhub.cli.server_cmd._require_server_not_listening",
+        side_effect=click.ClickException(
+            "A server is already responding at http://localhost:8080.\n"
+            "Stop it first with: evalhub server stop, "
+            "or Ctrl-C if running in the foreground"
+        ),
+    ):
+        result = runner.invoke(main, ["server", subcmd])
+
+    assert result.exit_code != 0
+    assert "already responding" in result.output
+    assert "evalhub server stop" in result.output
+
+
+# ---------------------------------------------------------------------------
+# server run
+# ---------------------------------------------------------------------------
+
+
+@patch("evalhub.cli.server_cmd._wait_for_sidecar_healthy", return_value=True)
+@patch("evalhub.cli._process.subprocess.run")
+@patch("evalhub.cli._process.subprocess.Popen")
+@patch(
+    "evalhub.cli.server_cmd.find_binary",
+    side_effect=lambda name, _env: f"/usr/bin/{name}",
+)
 def test_server_run_foreground(
     mock_find: MagicMock,
+    mock_popen: MagicMock,
     mock_run: MagicMock,
+    mock_sidecar_healthy: MagicMock,
     runner: CliRunner,
     tmp_path: Path,
     config_file: Path,
 ) -> None:
     _seed_profile(config_file)
     _setup_server_config(tmp_path, config_file)
+
+    mock_popen.return_value = _mock_proc()
+
     mock_run.return_value = MagicMock(returncode=0)
 
-    with patch("evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path):
+    with patch("evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path), patch(
+        "evalhub.cli._process.is_process_alive", return_value=False
+    ):
         result = runner.invoke(main, ["server", "run"])
 
     assert result.exit_code == 0, result.output
@@ -147,22 +203,31 @@ def test_server_run_foreground(
     assert "-configdir" in cmd
 
 
+@patch("evalhub.cli.server_cmd._wait_for_sidecar_healthy", return_value=True)
 @patch("evalhub.cli._process.subprocess.run")
+@patch("evalhub.cli._process.subprocess.Popen")
 @patch(
     "evalhub.cli.server_cmd.find_binary",
-    return_value="/usr/bin/eval-hub-server",
+    side_effect=lambda name, _env: f"/usr/bin/{name}",
 )
 def test_server_run_generates_default_config_when_missing(
     mock_find: MagicMock,
+    mock_popen: MagicMock,
     mock_run: MagicMock,
+    mock_sidecar_healthy: MagicMock,
     runner: CliRunner,
     tmp_path: Path,
     config_file: Path,
 ) -> None:
     _seed_profile(config_file)
+
+    mock_popen.return_value = _mock_proc()
+
     mock_run.return_value = MagicMock(returncode=0)
 
-    with patch("evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path):
+    with patch("evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path), patch(
+        "evalhub.cli._process.is_process_alive", return_value=False
+    ):
         result = runner.invoke(main, ["server", "run"])
 
     assert result.exit_code == 0, result.output
@@ -170,9 +235,13 @@ def test_server_run_generates_default_config_when_missing(
 
     generated = tmp_path / "default" / "config.yaml"
     assert generated.exists()
-    loaded = yaml.safe_load(generated.read_text())
+    raw = generated.read_text()
+    assert "# Auto-generated by evalhub CLI" in raw
+    loaded = yaml.safe_load(raw)
     assert loaded["service"]["port"] == 8080
     assert loaded["database"]["driver"] == "sqlite"
+    assert loaded["sidecar"]["base_url"] == "http://localhost:8082"
+    assert loaded["sidecar"]["local_mode"] is True
 
 
 def test_server_run_binary_not_found(
@@ -201,16 +270,18 @@ def test_server_run_binary_not_found(
 # ---------------------------------------------------------------------------
 
 
+@patch("evalhub.cli.server_cmd._wait_for_sidecar_healthy", return_value=True)
 @patch("evalhub.cli.server_cmd._wait_for_healthy", return_value=True)
 @patch("evalhub.cli._process.subprocess.Popen")
 @patch(
     "evalhub.cli.server_cmd.find_binary",
-    return_value="/usr/bin/eval-hub-server",
+    side_effect=lambda name, _env: f"/usr/bin/{name}",
 )
 def test_server_start_launches_background(
     mock_find: MagicMock,
     mock_popen: MagicMock,
     mock_healthy: MagicMock,
+    mock_sidecar_healthy: MagicMock,
     runner: CliRunner,
     tmp_path: Path,
     config_file: Path,
@@ -218,10 +289,7 @@ def test_server_start_launches_background(
     _seed_profile(config_file)
     _setup_server_config(tmp_path, config_file)
 
-    mock_proc = MagicMock()
-    mock_proc.pid = 12345
-    mock_proc.poll.return_value = None
-    mock_popen.return_value = mock_proc
+    mock_popen.side_effect = [_mock_proc(), _mock_proc(12345)]
 
     pid_file = tmp_path / "pid"
     with patch("evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path), patch(
@@ -233,9 +301,9 @@ def test_server_start_launches_background(
     assert "12345" in result.output
     assert "http://localhost:8080" in result.output
 
-    cmd = mock_popen.call_args[0][0]
-    assert "-local" in cmd
-    assert "-configdir" in cmd
+    server_cmd = mock_popen.call_args_list[1][0][0]
+    assert "-local" in server_cmd
+    assert "-configdir" in server_cmd
 
     assert pid_file.exists()
     assert pid_file.read_text().strip() == "12345"
@@ -270,16 +338,18 @@ def test_server_start_already_running(
     mock_popen.assert_not_called()
 
 
+@patch("evalhub.cli.server_cmd._wait_for_sidecar_healthy", return_value=True)
 @patch("evalhub.cli.server_cmd._wait_for_healthy", return_value=False)
 @patch("evalhub.cli._process.subprocess.Popen")
 @patch(
     "evalhub.cli.server_cmd.find_binary",
-    return_value="/usr/bin/eval-hub-server",
+    side_effect=lambda name, _env: f"/usr/bin/{name}",
 )
 def test_server_start_crash_on_startup(
     mock_find: MagicMock,
     mock_popen: MagicMock,
     mock_healthy: MagicMock,
+    mock_sidecar_healthy: MagicMock,
     runner: CliRunner,
     tmp_path: Path,
     config_file: Path,
@@ -287,31 +357,31 @@ def test_server_start_crash_on_startup(
     _seed_profile(config_file)
     _setup_server_config(tmp_path, config_file)
 
-    mock_proc = MagicMock()
-    mock_proc.pid = 11111
-    mock_proc.poll.return_value = 1
-    mock_proc.returncode = 1
-    mock_popen.return_value = mock_proc
+    mock_popen.side_effect = [_mock_proc(), _mock_proc(11111, exit_code=1)]
 
     with patch("evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path), patch(
         "evalhub.cli.server_cmd.PID_FILE", tmp_path / "pid"
-    ), patch("evalhub.cli.server_cmd.LOG_FILE", tmp_path / "server.log"):
+    ), patch("evalhub.cli.server_cmd.LOG_FILE", tmp_path / "server.log"), patch(
+        "evalhub.cli._process.is_process_alive", return_value=False
+    ):
         result = runner.invoke(main, ["server", "start"])
 
     assert result.exit_code != 0
     assert "crashed on startup" in result.output
 
 
+@patch("evalhub.cli.server_cmd._wait_for_sidecar_healthy", return_value=True)
 @patch("evalhub.cli.server_cmd._wait_for_healthy", return_value=False)
 @patch("evalhub.cli._process.subprocess.Popen")
 @patch(
     "evalhub.cli.server_cmd.find_binary",
-    return_value="/usr/bin/eval-hub-server",
+    side_effect=lambda name, _env: f"/usr/bin/{name}",
 )
 def test_server_start_health_check_timeout(
     mock_find: MagicMock,
     mock_popen: MagicMock,
     mock_healthy: MagicMock,
+    mock_sidecar_healthy: MagicMock,
     runner: CliRunner,
     tmp_path: Path,
     config_file: Path,
@@ -319,30 +389,31 @@ def test_server_start_health_check_timeout(
     _seed_profile(config_file)
     _setup_server_config(tmp_path, config_file)
 
-    mock_proc = MagicMock()
-    mock_proc.pid = 22222
-    mock_proc.poll.return_value = None  # process still alive, just not healthy
-    mock_popen.return_value = mock_proc
+    mock_popen.side_effect = [_mock_proc(), _mock_proc(22222)]
 
     with patch("evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path), patch(
         "evalhub.cli.server_cmd.PID_FILE", tmp_path / "pid"
-    ), patch("evalhub.cli.server_cmd.LOG_FILE", tmp_path / "server.log"):
+    ), patch("evalhub.cli.server_cmd.LOG_FILE", tmp_path / "server.log"), patch(
+        "evalhub.cli._process.is_process_alive", return_value=False
+    ):
         result = runner.invoke(main, ["server", "start"])
 
     assert result.exit_code != 0
     assert "not become healthy" in result.output
 
 
+@patch("evalhub.cli.server_cmd._wait_for_sidecar_healthy", return_value=True)
 @patch("evalhub.cli.server_cmd._wait_for_healthy", return_value=True)
 @patch("evalhub.cli._process.subprocess.Popen")
 @patch(
     "evalhub.cli.server_cmd.find_binary",
-    return_value="/usr/bin/eval-hub-server",
+    side_effect=lambda name, _env: f"/usr/bin/{name}",
 )
 def test_server_start_tls_uses_https_scheme(
     mock_find: MagicMock,
     mock_popen: MagicMock,
     mock_healthy: MagicMock,
+    mock_sidecar_healthy: MagicMock,
     runner: CliRunner,
     tmp_path: Path,
     config_file: Path,
@@ -350,10 +421,7 @@ def test_server_start_tls_uses_https_scheme(
     _seed_profile(config_file)
     _setup_server_config(tmp_path, config_file, tls=True)
 
-    mock_proc = MagicMock()
-    mock_proc.pid = 12345
-    mock_proc.poll.return_value = None
-    mock_popen.return_value = mock_proc
+    mock_popen.side_effect = [_mock_proc(), _mock_proc(12345)]
 
     pid_file = tmp_path / "pid"
     with patch("evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path), patch(
@@ -367,26 +435,25 @@ def test_server_start_tls_uses_https_scheme(
     mock_healthy.assert_called_once_with(8080, 30.0, tls=True)
 
 
+@patch("evalhub.cli.server_cmd._wait_for_sidecar_healthy", return_value=True)
 @patch("evalhub.cli.server_cmd._wait_for_healthy", return_value=True)
 @patch("evalhub.cli._process.subprocess.Popen")
 @patch(
     "evalhub.cli.server_cmd.find_binary",
-    return_value="/usr/bin/eval-hub-server",
+    side_effect=lambda name, _env: f"/usr/bin/{name}",
 )
 def test_server_start_generates_default_config_when_missing(
     mock_find: MagicMock,
     mock_popen: MagicMock,
     mock_healthy: MagicMock,
+    mock_sidecar_healthy: MagicMock,
     runner: CliRunner,
     tmp_path: Path,
     config_file: Path,
 ) -> None:
     _seed_profile(config_file)
 
-    mock_proc = MagicMock()
-    mock_proc.pid = 12345
-    mock_proc.poll.return_value = None
-    mock_popen.return_value = mock_proc
+    mock_popen.side_effect = [_mock_proc(), _mock_proc(12345)]
 
     pid_file = tmp_path / "pid"
     with patch("evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path), patch(
@@ -400,9 +467,13 @@ def test_server_start_generates_default_config_when_missing(
 
     generated = tmp_path / "default" / "config.yaml"
     assert generated.exists()
-    loaded = yaml.safe_load(generated.read_text())
+    raw = generated.read_text()
+    assert "# Auto-generated by evalhub CLI" in raw
+    loaded = yaml.safe_load(raw)
     assert loaded["service"]["port"] == 8080
     assert loaded["database"]["driver"] == "sqlite"
+    assert loaded["sidecar"]["base_url"] == "http://localhost:8082"
+    assert loaded["sidecar"]["local_mode"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -876,34 +947,467 @@ def test_config_set_then_unfold_roundtrip(
 
 
 # ---------------------------------------------------------------------------
-# _ensure_config
+# _require_server_version
 # ---------------------------------------------------------------------------
 
 
-def test_ensure_config_writes_default(tmp_path: Path) -> None:
-    from evalhub.cli.server_cmd import _DEFAULT_SERVER_CONFIG, _ensure_config
-
-    config_dir = tmp_path / "profile"
-    _ensure_config(config_dir)
-
-    config_path = config_dir / "config.yaml"
-    assert config_path.exists()
-    assert config_path.read_text() == _DEFAULT_SERVER_CONFIG
-
-    loaded = yaml.safe_load(config_path.read_text())
-    assert loaded["service"]["port"] == 8080
-    assert loaded["database"]["driver"] == "sqlite"
-    assert loaded["database"]["url"] == "file::eval_hub:?mode=memory&cache=shared"
+def test_require_server_version_above_min() -> None:
+    with patch("importlib.metadata.version", return_value="2.0.0"):
+        _real_require_version()
 
 
-def test_ensure_config_overwrites_existing(tmp_path: Path) -> None:
-    from evalhub.cli.server_cmd import _DEFAULT_SERVER_CONFIG, _ensure_config
+def test_require_server_version_at_min() -> None:
+    with patch("importlib.metadata.version", return_value="1.0.1"):
+        _real_require_version()
 
-    config_dir = tmp_path / "profile"
-    config_dir.mkdir(parents=True)
-    config_path = config_dir / "config.yaml"
-    config_path.write_text(yaml.safe_dump({"service": {"port": 9999}}))
 
-    _ensure_config(config_dir)
+def test_require_server_version_below_min() -> None:
+    with patch("importlib.metadata.version", return_value="1.0.0"):
+        with pytest.raises(click.ClickException, match="1.0.1"):
+            _real_require_version()
 
-    assert config_path.read_text() == _DEFAULT_SERVER_CONFIG
+
+def test_require_server_version_not_installed() -> None:
+    from importlib.metadata import PackageNotFoundError
+
+    with patch(
+        "importlib.metadata.version",
+        side_effect=PackageNotFoundError("eval-hub-server"),
+    ):
+        with pytest.raises(click.ClickException, match="not installed"):
+            _real_require_version()
+
+
+# ---------------------------------------------------------------------------
+# _build_default_server_config
+# ---------------------------------------------------------------------------
+
+
+def test_build_default_server_config() -> None:
+    from evalhub.cli.server_cmd import _build_default_server_config
+
+    config = _build_default_server_config()
+    assert config["service"]["port"] == 8080
+    assert config["database"]["driver"] == "sqlite"
+    assert "sidecar" not in config
+
+
+# ---------------------------------------------------------------------------
+# _generate_sidecar_config
+# ---------------------------------------------------------------------------
+
+
+def test_generate_sidecar_config(tmp_path: Path) -> None:
+    from evalhub.cli.server_cmd import _generate_sidecar_config
+
+    config_dir = tmp_path / "sidecar" / "default"
+    result_path = _generate_sidecar_config(8080, "http://localhost:8082", config_dir)
+
+    assert result_path == config_dir / "sidecar-server-config.json"
+    assert result_path.exists()
+
+    loaded = json.loads(result_path.read_text())
+    assert loaded["base_url"] == "http://localhost:8082"
+    assert loaded["local_mode"] is True
+    assert "local" not in loaded
+    assert loaded["eval_hub"]["base_url"] == "http://localhost:8080"
+
+
+def test_generate_sidecar_config_custom_ports(tmp_path: Path) -> None:
+    from evalhub.cli.server_cmd import _generate_sidecar_config
+
+    config_dir = tmp_path / "sidecar" / "staging"
+    result_path = _generate_sidecar_config(9090, "http://localhost:9092", config_dir)
+
+    loaded = json.loads(result_path.read_text())
+    assert loaded["base_url"] == "http://localhost:9092"
+    assert loaded["eval_hub"]["base_url"] == "http://localhost:9090"
+
+
+def test_generate_sidecar_config_no_local_block(tmp_path: Path) -> None:
+    from evalhub.cli.server_cmd import _generate_sidecar_config
+
+    config_dir = tmp_path / "sidecar" / "default"
+    result_path = _generate_sidecar_config(8080, "http://localhost:8082", config_dir)
+
+    loaded = json.loads(result_path.read_text())
+    assert "local" not in loaded
+
+
+def test_generate_sidecar_config_server_tls(tmp_path: Path) -> None:
+    from evalhub.cli.server_cmd import _generate_sidecar_config
+
+    config_dir = tmp_path / "sidecar" / "default"
+    result_path = _generate_sidecar_config(
+        8080, "http://localhost:8082", config_dir, server_tls=True
+    )
+
+    loaded = json.loads(result_path.read_text())
+    assert loaded["eval_hub"]["base_url"] == "https://localhost:8080"
+    assert loaded["base_url"] == "http://localhost:8082"
+
+
+# ---------------------------------------------------------------------------
+# server start — sidecar lifecycle
+# ---------------------------------------------------------------------------
+
+
+@patch("evalhub.cli.server_cmd._wait_for_sidecar_healthy", return_value=True)
+@patch("evalhub.cli.server_cmd._wait_for_healthy", return_value=True)
+@patch("evalhub.cli._process.subprocess.Popen")
+@patch(
+    "evalhub.cli.server_cmd.find_binary",
+    side_effect=lambda name, _env: f"/usr/bin/{name}",
+)
+def test_server_start_with_sidecar(
+    mock_find: MagicMock,
+    mock_popen: MagicMock,
+    mock_healthy: MagicMock,
+    mock_sidecar_healthy: MagicMock,
+    runner: CliRunner,
+    tmp_path: Path,
+    config_file: Path,
+) -> None:
+    """Both server and sidecar started; sidecar output is hidden."""
+    _seed_profile(config_file)
+    _setup_server_config(tmp_path, config_file)
+
+    mock_popen.side_effect = [_mock_proc(), _mock_proc(12345)]
+
+    pid_file = tmp_path / "pid"
+    with patch("evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path), patch(
+        "evalhub.cli.server_cmd.PID_FILE", pid_file
+    ), patch("evalhub.cli.server_cmd.LOG_FILE", tmp_path / "server.log"):
+        result = runner.invoke(main, ["server", "start"])
+
+    assert result.exit_code == 0, result.output
+    assert "12345" in result.output
+    assert "Sidecar" not in result.output
+
+    assert mock_popen.call_count == 2
+    sidecar_cmd = mock_popen.call_args_list[0][0][0]
+    assert sidecar_cmd[0] == "/usr/bin/eval-runtime-sidecar"
+    assert "-sidecarconfig" in sidecar_cmd
+
+    sidecar_config_path = Path(sidecar_cmd[sidecar_cmd.index("-sidecarconfig") + 1])
+    assert sidecar_config_path.name == "sidecar-server-config.json"
+    loaded = json.loads(sidecar_config_path.read_text())
+    assert loaded["local_mode"] is True
+    assert loaded["eval_hub"]["base_url"] == "http://localhost:8080"
+
+
+@patch("evalhub.cli.server_cmd._wait_for_sidecar_healthy", return_value=False)
+@patch("evalhub.cli._process.subprocess.Popen")
+@patch(
+    "evalhub.cli.server_cmd.find_binary",
+    side_effect=lambda name, _env: f"/usr/bin/{name}",
+)
+def test_server_start_sidecar_fails_no_server(
+    mock_find: MagicMock,
+    mock_popen: MagicMock,
+    mock_sidecar_healthy: MagicMock,
+    runner: CliRunner,
+    tmp_path: Path,
+    config_file: Path,
+) -> None:
+    """Server NOT started when sidecar fails health check."""
+    _seed_profile(config_file)
+    _setup_server_config(tmp_path, config_file)
+
+    mock_popen.return_value = _mock_proc()
+
+    pid_file = tmp_path / "pid"
+    with patch("evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path), patch(
+        "evalhub.cli.server_cmd.PID_FILE", pid_file
+    ), patch("evalhub.cli.server_cmd.LOG_FILE", tmp_path / "server.log"):
+        result = runner.invoke(main, ["server", "start"])
+
+    assert result.exit_code != 0
+    assert "Sidecar failed to start after 3 attempts" in result.output
+
+
+@patch("evalhub.cli.server_cmd._wait_for_sidecar_healthy", return_value=True)
+@patch("evalhub.cli._process.subprocess.Popen")
+@patch(
+    "evalhub.cli.server_cmd.find_binary",
+    side_effect=lambda name, _env: f"/usr/bin/{name}",
+)
+def test_server_start_sidecar_exits_after_healthy(
+    mock_find: MagicMock,
+    mock_popen: MagicMock,
+    mock_sidecar_healthy: MagicMock,
+    runner: CliRunner,
+    tmp_path: Path,
+    config_file: Path,
+) -> None:
+    """Fail when sidecar becomes healthy but then exits immediately."""
+    _seed_profile(config_file)
+    _setup_server_config(tmp_path, config_file)
+
+    mock_popen.return_value = _mock_proc(exit_code=1)
+
+    pid_file = tmp_path / "pid"
+    with patch("evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path), patch(
+        "evalhub.cli.server_cmd.PID_FILE", pid_file
+    ), patch("evalhub.cli.server_cmd.LOG_FILE", tmp_path / "server.log"):
+        result = runner.invoke(main, ["server", "start"])
+
+    assert result.exit_code != 0
+    assert "Sidecar exited on startup" in result.output
+
+
+@patch("evalhub.cli.server_cmd._wait_for_sidecar_healthy", return_value=True)
+@patch("evalhub.cli.server_cmd._wait_for_healthy", return_value=False)
+@patch("evalhub.cli._process.subprocess.Popen")
+@patch(
+    "evalhub.cli.server_cmd.find_binary",
+    side_effect=lambda name, _env: f"/usr/bin/{name}",
+)
+def test_server_start_server_fails_sidecar_cleanup(
+    mock_find: MagicMock,
+    mock_popen: MagicMock,
+    mock_healthy: MagicMock,
+    mock_sidecar_healthy: MagicMock,
+    runner: CliRunner,
+    tmp_path: Path,
+    config_file: Path,
+) -> None:
+    """Sidecar cleaned up when server fails to start."""
+    _seed_profile(config_file)
+    _setup_server_config(tmp_path, config_file)
+
+    mock_popen.side_effect = [_mock_proc(), _mock_proc(12345, exit_code=1)]
+
+    sidecar_pid_file = tmp_path / "sidecar_state" / "pid"
+
+    pid_file = tmp_path / "pid"
+    with patch("evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path), patch(
+        "evalhub.cli.server_cmd.PID_FILE", pid_file
+    ), patch("evalhub.cli.server_cmd.LOG_FILE", tmp_path / "server.log"), patch(
+        "evalhub.cli._process.is_process_alive", return_value=False
+    ):
+        result = runner.invoke(main, ["server", "start"])
+
+    assert result.exit_code != 0
+    assert "crashed on startup" in result.output
+    assert not sidecar_pid_file.exists()
+
+
+@pytest.mark.parametrize("subcmd", ["start", "run"])
+def test_server_old_version_error(
+    subcmd: str,
+    runner: CliRunner,
+    tmp_path: Path,
+    config_file: Path,
+) -> None:
+    """Error raised when eval-hub-server version is too old."""
+    _seed_profile(config_file)
+    _setup_server_config(tmp_path, config_file)
+
+    pid_file = tmp_path / "pid"
+    with patch("evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path), patch(
+        "evalhub.cli.server_cmd.PID_FILE", pid_file
+    ), patch("evalhub.cli.server_cmd.LOG_FILE", tmp_path / "server.log"), patch(
+        "evalhub.cli.server_cmd._require_server_version",
+        side_effect=_real_require_version,
+    ), patch("importlib.metadata.version", return_value="1.0.0"):
+        result = runner.invoke(main, ["server", subcmd])
+
+    assert result.exit_code != 0
+    assert "1.0.1" in result.output
+    assert "Upgrade" in result.output
+
+
+# ---------------------------------------------------------------------------
+# server stop — sidecar lifecycle
+# ---------------------------------------------------------------------------
+
+
+@patch("evalhub.cli._process.os.kill")
+def test_server_stop_both_processes(
+    mock_kill: MagicMock,
+    runner: CliRunner,
+    tmp_path: Path,
+    config_file: Path,
+) -> None:
+    """Both server and sidecar are stopped."""
+    _seed_profile(config_file)
+    pid_file = tmp_path / "pid"
+    pid_file.write_text("12345")
+
+    sidecar_pid_file = tmp_path / "sidecar_state" / "pid"
+    sidecar_pid_file.parent.mkdir(parents=True, exist_ok=True)
+    sidecar_pid_file.write_text("54321")
+
+    alive_calls = iter([True, False, True, False])
+
+    with patch("evalhub.cli.server_cmd.PID_FILE", pid_file), patch(
+        "evalhub.cli._process.is_process_alive", side_effect=alive_calls
+    ), patch("evalhub.cli._process.time.sleep"):
+        result = runner.invoke(main, ["server", "stop"])
+
+    assert result.exit_code == 0, result.output
+    assert "Server stopped" in result.output
+    assert "Sidecar" not in result.output
+    assert not pid_file.exists()
+    assert not sidecar_pid_file.exists()
+
+
+# ---------------------------------------------------------------------------
+# server run — sidecar lifecycle
+# ---------------------------------------------------------------------------
+
+
+@patch("evalhub.cli.server_cmd._wait_for_sidecar_healthy", return_value=True)
+@patch("evalhub.cli._process.subprocess.run")
+@patch("evalhub.cli._process.subprocess.Popen")
+@patch(
+    "evalhub.cli.server_cmd.find_binary",
+    side_effect=lambda name, _env: f"/usr/bin/{name}",
+)
+def test_server_run_with_sidecar_cleanup(
+    mock_find: MagicMock,
+    mock_popen: MagicMock,
+    mock_run: MagicMock,
+    mock_sidecar_healthy: MagicMock,
+    runner: CliRunner,
+    tmp_path: Path,
+    config_file: Path,
+) -> None:
+    """Sidecar started in background and cleaned up when server exits."""
+    _seed_profile(config_file)
+    _setup_server_config(tmp_path, config_file)
+
+    mock_popen.return_value = _mock_proc()
+
+    mock_run.return_value = MagicMock(returncode=0)
+
+    with patch("evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path), patch(
+        "evalhub.cli._process.is_process_alive", return_value=False
+    ):
+        result = runner.invoke(main, ["server", "run"])
+
+    assert result.exit_code == 0, result.output
+    assert "Sidecar" not in result.output
+
+    sidecar_cmd = mock_popen.call_args[0][0]
+    assert sidecar_cmd[0] == "/usr/bin/eval-runtime-sidecar"
+    assert "-sidecarconfig" in sidecar_cmd
+
+
+# ---------------------------------------------------------------------------
+# server status
+# ---------------------------------------------------------------------------
+
+
+def test_server_status_no_sidecar_output(
+    runner: CliRunner,
+    tmp_path: Path,
+    config_file: Path,
+) -> None:
+    """Status does not report sidecar info."""
+    _seed_profile(config_file)
+    pid_file = tmp_path / "pid"
+    pid_file.write_text("12345")
+    _setup_server_config(tmp_path, config_file)
+
+    health_info = {"status": "healthy", "build": "2.0.0"}
+
+    with patch("evalhub.cli.server_cmd.PID_FILE", pid_file), patch(
+        "evalhub.cli.server_cmd.SERVER_STATE_DIR", tmp_path
+    ), patch("evalhub.cli.server_cmd.LOG_FILE", tmp_path / "server.log"), patch(
+        "evalhub.cli._process.is_process_alive", return_value=True
+    ), patch("evalhub.cli.server_cmd._fetch_health_info", return_value=health_info):
+        result = runner.invoke(main, ["server", "status"])
+
+    assert result.exit_code == 0, result.output
+    assert "Server is running (PID 12345)" in result.output
+    assert "Sidecar" not in result.output
+
+
+# ---------------------------------------------------------------------------
+# _find_free_port
+# ---------------------------------------------------------------------------
+
+
+def test_find_free_port_returns_available() -> None:
+    port = _real_find_free_port(1024)
+    assert 1024 <= port <= 65535
+
+
+def test_find_free_port_skips_taken(tmp_path: Path) -> None:
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("localhost", 0))
+        taken = s.getsockname()[1]
+        result = _real_find_free_port(taken)
+        assert result != taken
+        assert result > taken
+
+
+def test_find_free_port_no_port_found() -> None:
+    with pytest.raises(click.ClickException, match="No free TCP port found"):
+        _real_find_free_port(65536)
+
+
+# ---------------------------------------------------------------------------
+# _start_sidecar — retry logic
+# ---------------------------------------------------------------------------
+
+
+@patch("evalhub.cli.server_cmd._find_free_port", return_value=8083)
+@patch("evalhub.cli.server_cmd._wait_for_sidecar_healthy")
+@patch("evalhub.cli._process.subprocess.Popen")
+@patch(
+    "evalhub.cli.server_cmd.find_binary",
+    side_effect=lambda name, _env: f"/usr/bin/{name}",
+)
+def test_start_sidecar_retries_on_failure(
+    mock_find: MagicMock,
+    mock_popen: MagicMock,
+    mock_sidecar_healthy: MagicMock,
+    mock_free_port: MagicMock,
+    tmp_path: Path,
+    config_file: Path,
+) -> None:
+    """Sidecar retries with new port on health check failure."""
+    mock_sidecar_healthy.side_effect = [False, True]
+
+    mock_proc_fail = _mock_proc(11111)
+    mock_popen.side_effect = [mock_proc_fail, _mock_proc(22222)]
+
+    from evalhub.cli.server_cmd import _start_sidecar
+
+    with patch("evalhub.cli.server_cmd._sidecar_health_check", return_value=False):
+        pid, base_url = _start_sidecar(tmp_path / "sidecar_cfg", 8080)
+
+    assert pid == 22222
+    assert base_url == "http://localhost:8083"
+    mock_proc_fail.terminate.assert_called_once()
+
+
+@patch("evalhub.cli.server_cmd._find_free_port", return_value=8083)
+@patch("evalhub.cli.server_cmd._wait_for_sidecar_healthy", return_value=False)
+@patch("evalhub.cli._process.subprocess.Popen")
+@patch(
+    "evalhub.cli.server_cmd.find_binary",
+    side_effect=lambda name, _env: f"/usr/bin/{name}",
+)
+def test_start_sidecar_exhausts_retries(
+    mock_find: MagicMock,
+    mock_popen: MagicMock,
+    mock_sidecar_healthy: MagicMock,
+    mock_free_port: MagicMock,
+    tmp_path: Path,
+    config_file: Path,
+) -> None:
+    """Error raised after all retry attempts exhausted."""
+    mock_popen.return_value = _mock_proc(11111)
+
+    from evalhub.cli.server_cmd import _start_sidecar
+
+    with patch(
+        "evalhub.cli.server_cmd._sidecar_health_check", return_value=False
+    ), pytest.raises(click.ClickException, match="failed to start after 3 attempts"):
+        _start_sidecar(tmp_path / "sidecar_cfg", 8080)

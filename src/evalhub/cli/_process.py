@@ -67,18 +67,36 @@ def find_binary(name: str, env_var: str) -> str:
     )
 
 
-def graceful_stop(pid: int, pid_file: Path, timeout: float, label: str) -> None:
-    os.kill(pid, GRACEFUL_SIGNAL)
+def graceful_stop(
+    pid: int,
+    pid_file: Path,
+    timeout: float,
+    label: str,
+    *,
+    quiet: bool = False,
+) -> None:
+    try:
+        os.kill(pid, GRACEFUL_SIGNAL)
+    except ProcessLookupError:
+        pid_file.unlink(missing_ok=True)
+        if not quiet:
+            click.echo(f"{label} stopped.")
+        return
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if not is_process_alive(pid):
             pid_file.unlink(missing_ok=True)
-            click.echo(f"{label} stopped.")
+            if not quiet:
+                click.echo(f"{label} stopped.")
             return
         time.sleep(0.2)
-    os.kill(pid, FORCE_SIGNAL)
+    try:
+        os.kill(pid, FORCE_SIGNAL)
+    except ProcessLookupError:
+        pass
     pid_file.unlink(missing_ok=True)
-    click.echo(f"{label} force-killed.")
+    if not quiet:
+        click.echo(f"{label} force-killed.")
 
 
 def spawn_background(
@@ -127,10 +145,17 @@ def require_not_running(pid_file: Path, label: str, stop_hint: str) -> None:
         )
 
 
-def stop_daemon(pid_file: Path, timeout: float, label: str) -> None:
+def stop_daemon(
+    pid_file: Path,
+    timeout: float,
+    label: str,
+    *,
+    quiet: bool = False,
+) -> None:
     """Stop a daemon tracked by *pid_file*, or report that it is not running."""
     pid = live_pid(pid_file)
     if pid is None:
-        click.echo(f"{label} is not running.")
+        if not quiet:
+            click.echo(f"{label} is not running.")
         return
-    graceful_stop(pid, pid_file, timeout, label)
+    graceful_stop(pid, pid_file, timeout, label, quiet=quiet)
