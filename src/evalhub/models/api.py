@@ -126,12 +126,14 @@ class ModelConfig(BaseModel):
     """Configuration for the model being evaluated.
 
     This matches the eval-hub API's ModelRef schema:
-    - url: The model endpoint URL (e.g., vLLM, OpenAI-compatible endpoint)
+    - url: The model endpoint URL (e.g., vLLM, OpenAI-compatible endpoint).
+      Empty string is valid for pre-recorded evaluation jobs that do not
+      require a live model endpoint.
     - name: Model name/identifier
     - auth: Optional model authentication (secret_ref)
     """
 
-    url: str = Field(..., description="Model endpoint URL")
+    url: str = Field(default="", description="Model endpoint URL")
     name: str = Field(..., description="Model name or identifier")
     auth: ModelAuth | None = Field(
         default=None, description="Authentication configuration for the model endpoint"
@@ -142,13 +144,6 @@ class ModelConfig(BaseModel):
     def validate_name(cls, v: str) -> str:
         if not v.strip():
             raise ValueError("Model name cannot be empty")
-        return v
-
-    @field_validator("url")
-    @classmethod
-    def validate_url(cls, v: str) -> str:
-        if not v.strip():
-            raise ValueError("Model URL cannot be empty")
         return v
 
 
