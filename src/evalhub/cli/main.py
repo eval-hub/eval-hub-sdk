@@ -902,7 +902,7 @@ def eval_results(ctx: click.Context, job_id: str, output_format: str) -> None:
 )
 @click.option(
     "--poll-interval",
-    type=float,
+    type=click.FloatRange(min=0, min_open=True),
     default=2.0,
     help="Seconds between polls when using --follow (default: 2.0).",
 )
@@ -935,6 +935,9 @@ def eval_logs(
       evalhub eval logs eval-123 --follow --timeout 300
       evalhub eval logs eval-123 --benchmark-index 0
     """
+    if timeout is not None and not follow:
+        raise click.UsageError("--timeout requires --follow")
+
     client = get_client(ctx)
     options = JobLogOptions(
         tail_lines=tail,
