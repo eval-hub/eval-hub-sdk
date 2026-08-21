@@ -877,7 +877,7 @@ def eval_results(ctx: click.Context, job_id: str, output_format: str) -> None:
 )
 @click.option(
     "--tail",
-    type=int,
+    type=click.IntRange(min=1, max=10000),
     default=1000,
     help="Number of lines to show (1-10000, default: 1000).",
 )
@@ -890,13 +890,13 @@ def eval_results(ctx: click.Context, job_id: str, output_format: str) -> None:
 @click.option(
     "--since",
     "since_seconds",
-    type=int,
+    type=click.IntRange(min=1),
     default=None,
     help="Show logs from the last N seconds.",
 )
 @click.option(
     "--benchmark-index",
-    type=int,
+    type=click.IntRange(min=0),
     default=None,
     help="Show logs for a specific benchmark by index.",
 )
@@ -908,7 +908,7 @@ def eval_results(ctx: click.Context, job_id: str, output_format: str) -> None:
 )
 @click.option(
     "--timeout",
-    type=float,
+    type=click.FloatRange(min=0, min_open=True),
     default=None,
     help="Stop streaming after N seconds (only with --follow).",
 )
