@@ -866,6 +866,125 @@ def eval_results(ctx: click.Context, job_id: str, output_format: str) -> None:
         click.echo(f"\nMLflow experiment: {job.results.mlflow_experiment_url}")
 
 
+@eval.command("logs")
+@click.argument("job_id")
+@click.option(
+    "--follow",
+    "-f",
+    is_flag=True,
+    default=False,
+    help="Stream logs until the job completes.",
+)
+@click.option(
+    "--tail",
+    type=int,
+    default=1000,
+    help="Number of lines to show (1-10000, default: 1000).",
+)
+@click.option(
+    "--timestamps",
+    is_flag=True,
+    default=False,
+    help="Include timestamps in log output.",
+)
+@click.option(
+    "--since",
+    "since_seconds",
+    type=int,
+    default=None,
+    help="Show logs from the last N seconds.",
+)
+@click.option(
+    "--benchmark-index",
+    type=int,
+    default=None,
+    help="Show logs for a specific benchmark by index.",
+)
+@click.option(
+    "--poll-interval",
+    type=float,
+    default=2.0,
+    help="Seconds between polls when using --follow (default: 2.0).",
+)
+@click.option(
+    "--timeout",
+    type=float,
+    default=None,
+    help="Stop streaming after N seconds (only with --follow).",
+)
+@click.pass_context
+@handle_api_errors
+def eval_logs(
+    ctx: click.Context,
+    job_id: str,
+    follow: bool,
+    tail: int,
+    timestamps: bool,
+    since_seconds: int | None,
+    benchmark_index: int | None,
+    poll_interval: float,
+    timeout: float | None,
+) -> None:
+    """View logs for an evaluation job.
+
+    \b
+    Examples:
+      evalhub eval logs eval-123
+      evalhub eval logs eval-123 --tail 100 --timestamps
+      evalhub eval logs eval-123 --follow
+      evalhub eval logs eval-123 --follow --timeout 300
+      evalhub eval logs eval-123 --benchmark-index 0
+    """
+    client = get_client(ctx)
+    options = JobLogOptions(
+        tail_lines=tail,
+        timestamps=timestamps,
+        since_seconds=since_seconds,
+    )
+
+    if follow:
+        final_state: JobStatus | None = None
+        click.echo(f"Streaming logs for job {job_id}...", err=True)
+        try:
+            for update in client.jobs.watch_logs(
+                job_id,
+                benchmark_index=benchmark_index,
+                options=options,
+                poll_interval=poll_interval,
+                timeout=timeout,
+            ):
+                if update.logs:
+                    click.echo(update.logs, nl=False)
+                final_state = update.job.effective_state
+        except TimeoutError:
+            click.echo(
+                f"\nTimed out after {timeout}s before job {job_id} "
+                "reached a terminal state.",
+                err=True,
+            )
+            ctx.exit(2)
+
+        click.echo(err=True)
+        if final_state not in TERMINAL_JOB_STATES:
+            click.echo(
+                f"Stream ended before completion " f"(last state: {final_state}).",
+                err=True,
+            )
+            ctx.exit(2)
+        click.echo(
+            f"Job {job_id} finished with state: {final_state.value}",
+            err=True,
+        )
+    else:
+        logs = client.jobs.get_logs(
+            job_id,
+            benchmark_index=benchmark_index,
+            options=options,
+        )
+        if logs:
+            click.echo(logs, nl=False)
+
+
 @eval.command("cancel")
 @click.argument("job_id")
 @click.option(
