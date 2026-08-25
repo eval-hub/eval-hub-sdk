@@ -71,6 +71,48 @@ class AsyncCollectionsResource:
         )
         return Collection(**response.json())
 
+    async def update(
+        self, collection_id: str, data: dict, *, tenant: str | None = None
+    ) -> Collection:
+        """Replace a benchmark collection (full update).
+
+        Args:
+            collection_id: The collection identifier
+            data: Full collection specification as a dict
+            tenant: Tenant override for this request (default: client-level tenant)
+
+        Returns:
+            Collection: The updated collection
+
+        Raises:
+            httpx.HTTPError: If the request fails
+        """
+        response = await self._client._request_put(
+            f"/evaluations/collections/{collection_id}", json=data, tenant=tenant
+        )
+        return Collection(**response.json())
+
+    async def patch(
+        self, collection_id: str, data: dict, *, tenant: str | None = None
+    ) -> Collection:
+        """Partially update a benchmark collection.
+
+        Args:
+            collection_id: The collection identifier
+            data: Partial collection data to merge
+            tenant: Tenant override for this request (default: client-level tenant)
+
+        Returns:
+            Collection: The updated collection
+
+        Raises:
+            httpx.HTTPError: If the request fails
+        """
+        response = await self._client._request_patch(
+            f"/evaluations/collections/{collection_id}", json=data, tenant=tenant
+        )
+        return Collection(**response.json())
+
     async def delete(self, collection_id: str, *, tenant: str | None = None) -> None:
         """Delete a benchmark collection.
 
@@ -142,6 +184,48 @@ class SyncCollectionsResource:
         """
         response = self._client._request_post(
             "/evaluations/collections", json=data, tenant=tenant
+        )
+        return Collection(**response.json())
+
+    def update(
+        self, collection_id: str, data: dict, *, tenant: str | None = None
+    ) -> Collection:
+        """Replace a benchmark collection (full update).
+
+        Args:
+            collection_id: The collection identifier
+            data: Full collection specification as a dict
+            tenant: Tenant override for this request (default: client-level tenant)
+
+        Returns:
+            Collection: The updated collection
+
+        Raises:
+            httpx.HTTPError: If the request fails
+        """
+        response = self._client._request_put(
+            f"/evaluations/collections/{collection_id}", json=data, tenant=tenant
+        )
+        return Collection(**response.json())
+
+    def patch(
+        self, collection_id: str, data: dict, *, tenant: str | None = None
+    ) -> Collection:
+        """Partially update a benchmark collection.
+
+        Args:
+            collection_id: The collection identifier
+            data: Partial collection data to merge
+            tenant: Tenant override for this request (default: client-level tenant)
+
+        Returns:
+            Collection: The updated collection
+
+        Raises:
+            httpx.HTTPError: If the request fails
+        """
+        response = self._client._request_patch(
+            f"/evaluations/collections/{collection_id}", json=data, tenant=tenant
         )
         return Collection(**response.json())
 

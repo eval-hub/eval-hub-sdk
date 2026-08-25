@@ -1165,6 +1165,75 @@ def collections_create(ctx: click.Context, spec_file: str, output_format: str) -
         output([collection.model_dump(mode="json")], output_format=output_format)
 
 
+@collections.command("update")
+@click.argument("collection_id")
+@click.option(
+    "--file",
+    "spec_file",
+    type=click.Path(exists=True),
+    required=True,
+    help="YAML or JSON file with the full collection specification.",
+)
+@format_option()
+@click.pass_context
+@handle_api_errors
+def collections_update(
+    ctx: click.Context, collection_id: str, spec_file: str, output_format: str
+) -> None:
+    """Replace a benchmark collection with a full spec file (PUT).
+
+    \b
+    Examples:
+      evalhub collections update rag-safety --file updated-collection.yaml
+      evalhub collections update rag-safety --file collection.json --format json
+    """
+    data = _load_config_file(spec_file)
+    request = CollectionCreateRequest(**data)
+    client = get_client(ctx)
+    collection = client.collections.update(
+        collection_id, request.model_dump(mode="json")
+    )
+    structured = output_format in ("json", "yaml")
+    click.echo(f"Collection updated: {collection.resource.id}", err=structured)
+    if structured:
+        output([collection.model_dump(mode="json")], output_format=output_format)
+
+
+@collections.command("patch")
+@click.argument("collection_id")
+@click.option(
+    "--file",
+    "spec_file",
+    type=click.Path(exists=True),
+    required=True,
+    help="YAML or JSON file with partial collection fields to update.",
+)
+@format_option()
+@click.pass_context
+@handle_api_errors
+def collections_patch(
+    ctx: click.Context, collection_id: str, spec_file: str, output_format: str
+) -> None:
+    """Partially update a benchmark collection (PATCH).
+
+    \b
+    Only the fields present in the spec file are updated; other fields
+    are left unchanged.
+
+    \b
+    Examples:
+      evalhub collections patch rag-safety --file patch.yaml
+      evalhub collections patch rag-safety --file patch.json --format json
+    """
+    data = _load_config_file(spec_file)
+    client = get_client(ctx)
+    collection = client.collections.patch(collection_id, data)
+    structured = output_format in ("json", "yaml")
+    click.echo(f"Collection patched: {collection.resource.id}", err=structured)
+    if structured:
+        output([collection.model_dump(mode="json")], output_format=output_format)
+
+
 @collections.command("delete")
 @click.argument("collection_id")
 @click.confirmation_option(prompt="Are you sure you want to delete this collection?")
@@ -1437,6 +1506,73 @@ def providers_create(ctx: click.Context, spec_file: str, output_format: str) -> 
     provider = client.providers.create(request.model_dump(mode="json"))
     structured = output_format in ("json", "yaml")
     click.echo(f"Provider created: {provider.resource.id}", err=structured)
+    if structured:
+        output([provider.model_dump(mode="json")], output_format=output_format)
+
+
+@providers.command("update")
+@click.argument("provider_id")
+@click.option(
+    "--file",
+    "spec_file",
+    type=click.Path(exists=True),
+    required=True,
+    help="YAML or JSON file with the full provider specification.",
+)
+@format_option()
+@click.pass_context
+@handle_api_errors
+def providers_update(
+    ctx: click.Context, provider_id: str, spec_file: str, output_format: str
+) -> None:
+    """Replace an evaluation provider with a full spec file (PUT).
+
+    \b
+    Examples:
+      evalhub providers update my-provider --file updated-provider.yaml
+      evalhub providers update my-provider --file provider.json --format json
+    """
+    data = _load_config_file(spec_file)
+    request = ProviderCreateRequest(**data)
+    client = get_client(ctx)
+    provider = client.providers.update(provider_id, request.model_dump(mode="json"))
+    structured = output_format in ("json", "yaml")
+    click.echo(f"Provider updated: {provider.resource.id}", err=structured)
+    if structured:
+        output([provider.model_dump(mode="json")], output_format=output_format)
+
+
+@providers.command("patch")
+@click.argument("provider_id")
+@click.option(
+    "--file",
+    "spec_file",
+    type=click.Path(exists=True),
+    required=True,
+    help="YAML or JSON file with partial provider fields to update.",
+)
+@format_option()
+@click.pass_context
+@handle_api_errors
+def providers_patch(
+    ctx: click.Context, provider_id: str, spec_file: str, output_format: str
+) -> None:
+    """Partially update an evaluation provider (PATCH).
+
+    \b
+    Only the fields present in the spec file are updated; other fields
+    are left unchanged.
+
+    \b
+    Examples:
+      evalhub providers patch my-provider --file patch.yaml
+      evalhub providers patch my-provider --file patch.json --format json
+    """
+    data = _load_config_file(spec_file)
+    client = get_client(ctx)
+    provider = client.providers.patch(provider_id, data)
+    structured = output_format in ("json", "yaml")
+    click.echo(f"Provider patched: {provider.resource.id}", err=structured)
     if structured:
         output([provider.model_dump(mode="json")], output_format=output_format)
 
