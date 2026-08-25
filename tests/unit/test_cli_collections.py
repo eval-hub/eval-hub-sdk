@@ -596,16 +596,11 @@ class TestCollectionsRun:
         assert submitted.model.auth is not None
         assert submitted.model.auth.secret_ref == "my-model-credentials"
 
-    def test_run_empty_collection_submits_ref(
+    def test_run_empty_collection_errors(
         self, runner: CliRunner, config_file: Path, mock_client: MagicMock
     ) -> None:
         collection = _make_collection(id="empty", benchmarks=[])
         mock_client.collections.get.return_value = collection
-
-        job = MagicMock()
-        job.id = "job-empty"
-        job.state.value = "running"
-        mock_client.jobs.submit.return_value = job
 
         with patch("evalhub.cli.main.get_client", return_value=mock_client):
             result = runner.invoke(
@@ -620,10 +615,8 @@ class TestCollectionsRun:
                     "llama3",
                 ],
             )
-        assert result.exit_code == 0
-        submitted = mock_client.jobs.submit.call_args[0][0]
-        assert submitted.collection == CollectionRef(id="empty")
-        assert submitted.benchmarks is None
+        assert result.exit_code != 0
+        mock_client.jobs.submit.assert_not_called()
 
     def test_run_missing_model_url(
         self, runner: CliRunner, config_file: Path, mock_client: MagicMock

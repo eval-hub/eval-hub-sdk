@@ -1259,6 +1259,11 @@ def collections_run(
     client = get_client(ctx)
     collection = client.collections.get(collection_id)
 
+    if not collection.benchmarks:
+        raise click.ClickException(
+            f"Collection '{collection_id}' has no benchmarks to run."
+        )
+
     job_name = name or f"{collection.name} ({collection_id})"
 
     queue_config: QueueConfig | None = QueueConfig(name=queue) if queue else None
