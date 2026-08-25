@@ -84,6 +84,48 @@ class AsyncProvidersResource:
         )
         return Provider(**response.json())
 
+    async def update(
+        self, provider_id: str, data: dict, *, tenant: str | None = None
+    ) -> Provider:
+        """Replace an evaluation provider (full update).
+
+        Args:
+            provider_id: The provider identifier
+            data: Full provider specification as a dict
+            tenant: Tenant override for this request (default: client-level tenant)
+
+        Returns:
+            Provider: The updated provider
+
+        Raises:
+            httpx.HTTPError: If the request fails
+        """
+        response = await self._client._request_put(
+            f"/evaluations/providers/{provider_id}", json=data, tenant=tenant
+        )
+        return Provider(**response.json())
+
+    async def patch(
+        self, provider_id: str, data: dict, *, tenant: str | None = None
+    ) -> Provider:
+        """Partially update an evaluation provider.
+
+        Args:
+            provider_id: The provider identifier
+            data: Partial provider data to merge
+            tenant: Tenant override for this request (default: client-level tenant)
+
+        Returns:
+            Provider: The updated provider
+
+        Raises:
+            httpx.HTTPError: If the request fails
+        """
+        response = await self._client._request_patch(
+            f"/evaluations/providers/{provider_id}", json=data, tenant=tenant
+        )
+        return Provider(**response.json())
+
     async def delete(self, provider_id: str, *, tenant: str | None = None) -> None:
         """Delete an evaluation provider.
 
@@ -168,6 +210,48 @@ class SyncProvidersResource:
         """
         response = self._client._request_post(
             "/evaluations/providers", json=data, tenant=tenant
+        )
+        return Provider(**response.json())
+
+    def update(
+        self, provider_id: str, data: dict, *, tenant: str | None = None
+    ) -> Provider:
+        """Replace an evaluation provider (full update).
+
+        Args:
+            provider_id: The provider identifier
+            data: Full provider specification as a dict
+            tenant: Tenant override for this request (default: client-level tenant)
+
+        Returns:
+            Provider: The updated provider
+
+        Raises:
+            httpx.HTTPError: If the request fails
+        """
+        response = self._client._request_put(
+            f"/evaluations/providers/{provider_id}", json=data, tenant=tenant
+        )
+        return Provider(**response.json())
+
+    def patch(
+        self, provider_id: str, data: dict, *, tenant: str | None = None
+    ) -> Provider:
+        """Partially update an evaluation provider.
+
+        Args:
+            provider_id: The provider identifier
+            data: Partial provider data to merge
+            tenant: Tenant override for this request (default: client-level tenant)
+
+        Returns:
+            Provider: The updated provider
+
+        Raises:
+            httpx.HTTPError: If the request fails
+        """
+        response = self._client._request_patch(
+            f"/evaluations/providers/{provider_id}", json=data, tenant=tenant
         )
         return Provider(**response.json())
 
