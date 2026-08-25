@@ -16,6 +16,7 @@ from evalhub.client.job_logs import JobLogUpdate
 from evalhub.models.api import (
     BenchmarkReference,
     Collection,
+    CollectionRef,
     JobStatus,
     PassCriteria,
     Resource,
@@ -761,6 +762,9 @@ class TestCollectionsRun:
         assert result.exit_code == 0
         assert "job-abc" in result.output
         mock_client.jobs.submit.assert_called_once()
+        submitted = mock_client.jobs.submit.call_args[0][0]
+        assert submitted.collection == CollectionRef(id="rag-safety")
+        assert submitted.benchmarks is None
 
     def test_run_custom_job_name(
         self, runner: CliRunner, config_file: Path, mock_client: MagicMock
