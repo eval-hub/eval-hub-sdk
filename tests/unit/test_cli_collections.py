@@ -16,6 +16,7 @@ from evalhub.client.job_logs import JobLogUpdate
 from evalhub.models.api import (
     BenchmarkReference,
     Collection,
+    CollectionRef,
     JobStatus,
     PassCriteria,
     Resource,
@@ -524,6 +525,9 @@ class TestCollectionsRun:
         assert result.exit_code == 0
         assert "job-abc" in result.output
         mock_client.jobs.submit.assert_called_once()
+        submitted = mock_client.jobs.submit.call_args[0][0]
+        assert submitted.collection == CollectionRef(id="rag-safety")
+        assert submitted.benchmarks is None
 
     def test_run_custom_job_name(
         self, runner: CliRunner, config_file: Path, mock_client: MagicMock
@@ -592,11 +596,16 @@ class TestCollectionsRun:
         assert submitted.model.auth is not None
         assert submitted.model.auth.secret_ref == "my-model-credentials"
 
-    def test_run_empty_collection_errors(
+    def test_run_empty_collection_submits_ref(
         self, runner: CliRunner, config_file: Path, mock_client: MagicMock
     ) -> None:
         collection = _make_collection(id="empty", benchmarks=[])
         mock_client.collections.get.return_value = collection
+
+        job = MagicMock()
+        job.id = "job-empty"
+        job.state.value = "running"
+        mock_client.jobs.submit.return_value = job
 
         with patch("evalhub.cli.main.get_client", return_value=mock_client):
             result = runner.invoke(
@@ -611,8 +620,10 @@ class TestCollectionsRun:
                     "llama3",
                 ],
             )
-        assert result.exit_code != 0
-        mock_client.jobs.submit.assert_not_called()
+        assert result.exit_code == 0
+        submitted = mock_client.jobs.submit.call_args[0][0]
+        assert submitted.collection == CollectionRef(id="empty")
+        assert submitted.benchmarks is None
 
     def test_run_missing_model_url(
         self, runner: CliRunner, config_file: Path, mock_client: MagicMock

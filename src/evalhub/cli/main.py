@@ -21,6 +21,7 @@ from evalhub.client.job_logs import TERMINAL_JOB_STATES, JobLogOptions
 from evalhub.models import (
     BenchmarkConfig,
     CollectionCreateRequest,
+    CollectionRef,
     EvaluationExports,
     EvaluationExportsOCI,
     ExperimentConfig,
@@ -1259,24 +1260,12 @@ def collections_run(
     collection = client.collections.get(collection_id)
 
     job_name = name or f"{collection.name} ({collection_id})"
-    benchmarks = [
-        BenchmarkConfig(
-            id=b.id,
-            provider_id=b.provider_id,
-            parameters=b.parameters,
-        )
-        for b in collection.benchmarks
-    ]
-    if not benchmarks:
-        raise click.ClickException(
-            f"Collection '{collection_id}' has no benchmarks to run."
-        )
 
     queue_config: QueueConfig | None = QueueConfig(name=queue) if queue else None
     request = JobSubmissionRequest(
         name=job_name,
         model=_build_model_config(model_url, model_name, model_auth_secret),
-        benchmarks=benchmarks,
+        collection=CollectionRef(id=collection_id),
         queue=queue_config,
     )
     job = client.jobs.submit(request)
