@@ -1240,8 +1240,8 @@ def collections_run(
 ) -> None:
     """Run an evaluation collection against a model.
 
-    Fetches the collection, expands its benchmarks into a job submission,
-    and submits it to eval-hub.
+    Submits a collection reference so the server applies collection-level
+    scoring (weights, primary scores, pass criteria).
 
     \b
     Examples:
