@@ -123,17 +123,18 @@ def test_artifact_server_path_odh_workspace() -> None:
     path = MlflowClient._artifact_server_path(uri, "results/out.json")
     assert (
         path
-        == "/api/2.0/mlflow-artifacts/artifacts/1/run-abc/artifacts/results/out.json"
+        == "/api/2.0/mlflow-artifacts/artifacts/workspaces/ws/1/run-abc/artifacts/results/out.json"
     )
 
 
-def test_artifact_server_path_upstream_run_ids() -> None:
+def test_artifact_server_path_upstream_run_ids(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MLFLOW_WORKSPACE", "default")
     uri = "/private/tmp/mlflow/artifacts/6/run-abc/artifacts"
     path = MlflowClient._artifact_server_path(
         uri, "results/out.json", experiment_id="6", run_id="run-abc"
     )
     assert path == (
-        "/api/2.0/mlflow-artifacts/artifacts/6/run-abc/artifacts/results/out.json"
+        "/api/2.0/mlflow-artifacts/artifacts/workspaces/default/6/run-abc/artifacts/results/out.json"
     )
 
 
