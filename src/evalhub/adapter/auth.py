@@ -44,7 +44,7 @@ def _resolve_auth_dir() -> Path:
     settings = AdapterSettings.from_env()
     if settings.mode == EvalHubMode.LOCAL and job_spec.model.auth is not None:
         ref = _parse_file_url(job_spec.model.auth.secret_ref)
-        if ref.is_symlink():
+        if ref.is_symlink() and not _is_projected_data_dir(ref):
             raise ValueError(f"secret_ref must not be a symlink: {ref}")
         if not ref.is_dir():
             raise ValueError(
@@ -54,15 +54,57 @@ def _resolve_auth_dir() -> Path:
     return _MODEL_AUTH_DIR
 
 
-def _is_regular_file(path: Path) -> bool:
-    return path.is_file() and not path.is_symlink()
+def _is_projected_data_dir(path: Path) -> bool:
+    """Return whether *path* is Kubernetes' hidden ``..data`` directory link."""
+    if path.name != "..data" or not path.is_symlink():
+        return False
+    try:
+        resolved = path.resolve(strict=True)
+        parent = path.parent.resolve(strict=True)
+    except OSError:
+        return False
+    return resolved.is_dir() and resolved.parent == parent
+
+
+def _is_projected_file(path: Path, auth_dir: Path) -> bool:
+    """Return whether *path* is a safe Kubernetes projected-volume file link.
+
+    Kubernetes' atomic writer exposes each projected key as ``key ->
+    ..data/key``.  Validate both the link shape and its resolved location so
+    that arbitrary symlinks cannot make local-mode auth read outside the
+    configured directory.
+    """
+    if not path.is_symlink():
+        return False
+    try:
+        link_target = path.readlink()
+        auth_root = auth_dir.resolve(strict=True)
+        data_dir = (auth_dir / "..data").resolve(strict=True)
+        resolved = path.resolve(strict=True)
+    except OSError:
+        return False
+
+    return (
+        link_target.parent == Path("..data")
+        and link_target.name == path.name
+        and data_dir.is_dir()
+        and data_dir.parent == auth_root
+        and resolved.is_file()
+        and auth_root in resolved.parents
+    )
+
+
+def _is_regular_file(path: Path, auth_dir: Path) -> bool:
+    if not path.is_file():
+        return False
+    return not path.is_symlink() or _is_projected_file(path, auth_dir)
 
 
 def _read_key_from_dir(auth_dir: Path, key_name: str) -> str | None:
     if not key_name or "/" in key_name or "\\" in key_name or key_name in (".", ".."):
         return None
     path = auth_dir / key_name
-    if not _is_regular_file(path):
+    if not _is_regular_file(path, auth_dir):
         return None
     try:
         value = path.read_text(encoding="utf-8").strip()
@@ -114,5 +156,5 @@ def resolve_model_credentials() -> ModelCredentials:
     return ModelCredentials(
         api_key=_read_key_from_dir(auth_dir, "api-key"),
         hf_token=_read_key_from_dir(auth_dir, "hf-token"),
-        ca_cert_path=ca_cert if _is_regular_file(ca_cert) else None,
+        ca_cert_path=ca_cert if _is_regular_file(ca_cert, auth_dir) else None,
     )

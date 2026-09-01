@@ -155,6 +155,29 @@ class TestResolveAuthDir:
         with pytest.raises(ValueError, match="must not be a symlink"):
             _resolve_auth_dir()
 
+    def test_local_mode_accepts_projected_data_dir_symlink(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("EVALHUB_MODE", "local")
+        auth_dir = tmp_path / "model-auth"
+        auth_dir.mkdir()
+        version_dir = auth_dir / "..2026_08_31_00_00_00"
+        version_dir.mkdir()
+        (auth_dir / "..data").symlink_to(version_dir.name)
+        for key_name, value in {
+            "api-key": "api-key-value",
+            "hf-token": "hf-token-value",
+            "ca_cert": "certificate",
+        }.items():
+            (version_dir / key_name).write_text(value)
+            (auth_dir / key_name).symlink_to(Path("..data") / key_name)
+
+        spec = _make_job_spec(_file_url(auth_dir))
+        job_json = _write_job_json(tmp_path, spec)
+        monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(job_json))
+
+        assert _resolve_auth_dir() == auth_dir
+
 
 # ---------------------------------------------------------------------------
 # read_model_auth_key
@@ -259,6 +282,30 @@ class TestReadModelAuthKey:
 
         assert read_model_auth_key("api-key") is None
 
+    def test_reads_keys_from_projected_volume_symlinks(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("EVALHUB_MODE", "local")
+        auth_dir = tmp_path / "model-auth"
+        auth_dir.mkdir()
+        version_dir = auth_dir / "..2026_08_31_00_00_00"
+        version_dir.mkdir()
+        (auth_dir / "..data").symlink_to(version_dir.name)
+        for key_name, value in {
+            "api-key": "api-key-value",
+            "hf-token": "hf-token-value",
+            "ca_cert": "certificate",
+        }.items():
+            (version_dir / key_name).write_text(value)
+            (auth_dir / key_name).symlink_to(Path("..data") / key_name)
+
+        spec = _make_job_spec(_file_url(auth_dir))
+        job_json = _write_job_json(tmp_path, spec)
+        monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(job_json))
+
+        assert read_model_auth_key("api-key") == "api-key-value"
+        assert read_model_auth_key("hf-token") == "hf-token-value"
+
     def test_backward_compat_no_env_var(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
@@ -338,6 +385,33 @@ class TestResolveModelCredentials:
 
         creds = resolve_model_credentials()
         assert creds.ca_cert_path is None
+
+    def test_resolves_projected_volume_symlinks(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("EVALHUB_MODE", "local")
+        auth_dir = tmp_path / "model-auth"
+        auth_dir.mkdir()
+        version_dir = auth_dir / "..2026_08_31_00_00_00"
+        version_dir.mkdir()
+        (auth_dir / "..data").symlink_to(version_dir.name)
+        for key_name, value in {
+            "api-key": "api-key-value",
+            "hf-token": "hf-token-value",
+            "ca_cert": "certificate",
+        }.items():
+            (version_dir / key_name).write_text(value)
+            (auth_dir / key_name).symlink_to(Path("..data") / key_name)
+
+        spec = _make_job_spec(_file_url(auth_dir))
+        job_json = _write_job_json(tmp_path, spec)
+        monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(job_json))
+
+        creds = resolve_model_credentials()
+
+        assert creds.api_key == "api-key-value"
+        assert creds.hf_token == "hf-token-value"
+        assert creds.ca_cert_path == auth_dir / "ca_cert"
 
     def test_backward_compat_no_job_spec(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
