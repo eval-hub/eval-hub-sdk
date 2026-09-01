@@ -85,7 +85,8 @@ def _is_projected_file(path: Path, auth_dir: Path) -> bool:
         return False
 
     return (
-        link_target.parent == Path("..data")
+        not link_target.is_absolute()
+        and link_target.parent == Path("..data")
         and link_target.name == path.name
         and data_dir.is_dir()
         and data_dir.parent == auth_root
@@ -95,9 +96,14 @@ def _is_projected_file(path: Path, auth_dir: Path) -> bool:
 
 
 def _is_regular_file(path: Path, auth_dir: Path) -> bool:
-    if not path.is_file():
+    if path.is_symlink():
+        if _is_projected_file(path, auth_dir):
+            return True
+        logger.warning(
+            "Ignoring non-projected symlink for model auth file %s", path.name
+        )
         return False
-    return not path.is_symlink() or _is_projected_file(path, auth_dir)
+    return path.is_file()
 
 
 def _read_key_from_dir(auth_dir: Path, key_name: str) -> str | None:

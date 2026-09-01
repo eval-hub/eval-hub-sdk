@@ -155,7 +155,7 @@ class TestResolveAuthDir:
         with pytest.raises(ValueError, match="must not be a symlink"):
             _resolve_auth_dir()
 
-    def test_local_mode_accepts_projected_data_dir_symlink(
+    def test_local_mode_accepts_projected_volume_layout(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         monkeypatch.setenv("EVALHUB_MODE", "local")
@@ -268,7 +268,10 @@ class TestReadModelAuthKey:
         assert read_model_auth_key(key_name) is None
 
     def test_rejects_symlinked_key_file(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         monkeypatch.setenv("EVALHUB_MODE", "local")
         auth_dir = tmp_path / "model-auth"
@@ -281,6 +284,9 @@ class TestReadModelAuthKey:
         monkeypatch.setenv("EVALHUB_JOB_SPEC_PATH", str(job_json))
 
         assert read_model_auth_key("api-key") is None
+        assert (
+            "Ignoring non-projected symlink for model auth file api-key" in caplog.text
+        )
 
     def test_reads_keys_from_projected_volume_symlinks(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
