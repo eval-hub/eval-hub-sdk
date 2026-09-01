@@ -43,8 +43,6 @@ def output(
         _print_table(data, columns, file)
         return
 
-    out = file or click.get_text_stream("stdout")
-
     if output_format == "json":
         text = json.dumps(list(data), indent=2, default=str)
     elif output_format == "yaml":
@@ -54,7 +52,7 @@ def output(
     else:
         text = ""
 
-    click.echo(text.rstrip(), file=out)
+    click.echo(text.rstrip(), file=file)
 
 
 def _print_table(
