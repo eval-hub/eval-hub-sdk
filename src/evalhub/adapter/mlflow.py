@@ -17,6 +17,7 @@ import re
 import time
 import uuid
 from collections.abc import Iterable, Iterator
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -28,6 +29,8 @@ logger = logging.getLogger(__name__)
 
 # MLflow REST API base path
 _API = "/api/2.0/mlflow"
+# MLflow 3.x REST API base path (used for trace endpoints that include spans)
+_API_V3 = "/api/3.0/mlflow"
 # MLflow Artifacts server base path (separate from tracking API)
 _ARTIFACTS_API = "/api/2.0/mlflow-artifacts/artifacts"
 
@@ -324,6 +327,26 @@ class MlflowClient:
         resp = self._client.get(url, params=params)
         return self._handle(resp)
 
+    def _get_v3(self, path: str, params: dict[str, str]) -> dict[str, Any]:
+        url = f"{self._tracking_uri}{_API_V3}{path}"
+        resp = self._client.get(url, params=params)
+        return self._handle(resp)
+
+    def _post_v3(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
+        url = f"{self._tracking_uri}{_API_V3}{path}"
+        resp = self._client.post(url, json=body)
+        return self._handle(resp)
+
+    def _put_json(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
+        url = f"{self._tracking_uri}{_API}{path}"
+        resp = self._client.put(url, json=body)
+        return self._handle(resp)
+
+    def _patch(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
+        url = f"{self._tracking_uri}{_API}{path}"
+        resp = self._client.patch(url, json=body)
+        return self._handle(resp)
+
     @staticmethod
     def _handle(resp: httpx.Response) -> dict[str, Any]:
         if not (200 <= resp.status_code < 300):
@@ -540,6 +563,11 @@ class MlflowClient:
 
             mlflow-artifacts:/workspaces/{workspace}/{experiment_id}/{run_id}/artifacts
 
+        When bypassing the sidecar (talking directly to the MLflow service), the
+        full workspace-scoped path MUST be preserved.  The sidecar normally injects
+        the workspace prefix on the caller's behalf, but without it the path must
+        include ``workspaces/{name}/`` or the PUT silently succeeds without storing.
+
         Upstream MLflow 3.x may instead return a local filesystem path or an HTTP
         proxied artifact root. When the URI is not ``mlflow-artifacts:``, fall back
         to ``{experiment_id}/{run_id}/artifacts/{path}`` from the run record.
@@ -549,11 +577,7 @@ class MlflowClient:
 
         if artifact_uri.startswith("mlflow-artifacts:/"):
             path = artifact_uri.removeprefix("mlflow-artifacts:/")
-            parts = path.split("/", 2)
-            if len(parts) == 3 and parts[0] == "workspaces":
-                run_root = parts[2]
-            else:
-                run_root = path.lstrip("/")
+            run_root = path.lstrip("/")
             return f"{_ARTIFACTS_API}/{run_root}/{artifact_path}"
 
         if anchor in artifact_uri:
@@ -561,9 +585,8 @@ class MlflowClient:
             return f"{_ARTIFACTS_API}/{run_root}/{artifact_path}"
 
         if experiment_id and run_id:
-            return (
-                f"{_ARTIFACTS_API}/{experiment_id}/{run_id}/artifacts/{artifact_path}"
-            )
+            workspace = os.environ.get("MLFLOW_WORKSPACE", "default")
+            return f"{_ARTIFACTS_API}/workspaces/{workspace}/{experiment_id}/{run_id}/artifacts/{artifact_path}"
 
         raise ValueError(
             f"Cannot resolve artifact upload path from artifact_uri={artifact_uri!r}; "
@@ -576,7 +599,13 @@ class MlflowClient:
         """Raw PUT to the MLflow Artifacts server."""
         url = f"{self._tracking_uri}{path}"
         headers = {"Content-Type": content_type}
+        logger.debug("PUT artifact url=%s content_type=%s", url, content_type)
         resp = self._client.put(url, content=content, headers=headers)
+        logger.debug(
+            "PUT artifact response: %s %s",
+            resp.status_code,
+            resp.text[:200] if resp.text else "",
+        )
         self._handle(resp)
 
     def upload_artifact(
@@ -656,6 +685,91 @@ class MlflowClient:
 # ---------------------------------------------------------------------------
 
 
+def _to_ms(val: Any) -> int:
+    """Coerce a timing value to integer milliseconds.
+
+    MLflow v2 returns integer ms; MLflow v3 returns ``request_time`` as an
+    ISO-8601 string (e.g. ``"2026-07-22T17:17:14.010Z"``) and
+    ``execution_duration`` as a duration string (e.g. ``"0.001s"``).
+    """
+    if not val:
+        return 0
+    if isinstance(val, int | float):
+        return int(val)
+    s = str(val).strip()
+    if s.endswith("s"):
+        try:
+            return int(float(s[:-1]) * 1000)
+        except ValueError:
+            return 0
+    if "T" in s:
+        try:
+            from datetime import datetime as _dt
+
+            dt = _dt.fromisoformat(s.replace("Z", "+00:00"))
+            return int(dt.timestamp() * 1000)
+        except (ValueError, OSError):
+            return 0
+    try:
+        return int(s)
+    except (ValueError, TypeError):
+        return 0
+
+
+def _unwrap_proto_value(val: Any) -> Any:
+    """Recursively unwrap a protobuf-style attribute value to plain Python."""
+    if not isinstance(val, dict):
+        return val
+    for scalar in (
+        "string_value",
+        "bytes_value",
+        "int_value",
+        "double_value",
+        "bool_value",
+    ):
+        if scalar in val:
+            return val[scalar]
+    if "kvlist_value" in val:
+        entries = val["kvlist_value"].get("values", [])
+        return {e["key"]: _unwrap_proto_value(e.get("value", {})) for e in entries}
+    if "array_value" in val:
+        return [_unwrap_proto_value(v) for v in val["array_value"].get("values", [])]
+    return val
+
+
+def _normalize_spans(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Convert protobuf-style span attributes to top-level fields.
+
+    MLflow v3 returns span attributes as a list of ``{key, value}`` pairs
+    using protobuf wrapper types.  Downstream consumers (e.g. CLEAR) expect
+    flat dicts with top-level ``inputs``, ``outputs``, and ``span_type``.
+    """
+    normalized: list[dict[str, Any]] = []
+    for span in spans:
+        raw_attrs = span.get("attributes") or []
+        if isinstance(raw_attrs, list):
+            attrs: dict[str, Any] = {}
+            for item in raw_attrs:
+                if isinstance(item, dict) and "key" in item:
+                    attrs[str(item["key"])] = _unwrap_proto_value(item.get("value", {}))
+        elif isinstance(raw_attrs, dict):
+            attrs = dict(raw_attrs)
+        else:
+            attrs = {}
+
+        span_type = attrs.pop("mlflow.spanType", span.get("span_type", "UNKNOWN"))
+        inputs = attrs.pop("mlflow.spanInputs", span.get("inputs", {}))
+        outputs = attrs.pop("mlflow.spanOutputs", span.get("outputs", {}))
+
+        out = dict(span)
+        out["attributes"] = attrs
+        out["span_type"] = span_type
+        out["inputs"] = inputs
+        out["outputs"] = outputs
+        normalized.append(out)
+    return normalized
+
+
 def _kv_list_to_dict(items: Any) -> dict[str, str]:
     """Convert MLflow tag/metadata lists or dicts to a string map."""
     if isinstance(items, dict):
@@ -708,14 +822,21 @@ def _parse_trace(raw: dict[str, Any]) -> Trace:
     info = TraceInfo(
         request_id=request_id,
         experiment_id=experiment_id,
-        timestamp_ms=int(info_raw.get("timestamp_ms") or 0),
-        execution_time_ms=int(info_raw.get("execution_time_ms") or 0),
+        timestamp_ms=_to_ms(
+            info_raw.get("timestamp_ms") or info_raw.get("request_time")
+        ),
+        execution_time_ms=_to_ms(
+            info_raw.get("execution_time_ms") or info_raw.get("execution_duration")
+        ),
         status=status,
         tags=_kv_list_to_dict(info_raw.get("tags")),
         request_metadata=_kv_list_to_dict(
             info_raw.get("request_metadata") or info_raw.get("trace_metadata")
         ),
     )
+    if "spans" in data and isinstance(data["spans"], list):
+        data = {**data, "spans": _normalize_spans(data["spans"])}
+
     return Trace(info=info, data=data)
 
 
@@ -742,6 +863,8 @@ class TracesNamespace:
         traces, token = client.traces.search(experiment_ids=["1"])
         trace = client.traces.get("tr-abc", experiment_id="1")
         out = client.traces.materialize(params, "/tmp/out")
+        request_id = client.traces.create(exp_id, spans=[...])
+        request_id = client.traces.upload_trace_file(exp_id, "trace.json")
     """
 
     def __init__(self, client: MlflowClient) -> None:
@@ -780,12 +903,273 @@ class TracesNamespace:
         return traces, next_token
 
     def get(self, request_id: str, experiment_id: str) -> Trace:
-        """Fetch a single trace by request_id via ``GET /api/2.0/mlflow/traces/{id}/info``."""
-        data = self._client._get(
-            f"/traces/{request_id}/info",
-            {"experiment_id": experiment_id},
+        """Fetch a single trace with spans via ``GET /api/3.0/mlflow/traces/get``."""
+        data = self._client._get_v3(
+            "/traces/get",
+            {"trace_id": request_id},
         )
         return _parse_trace(data)
+
+    def create(
+        self,
+        experiment_id: str,
+        spans: list[dict[str, Any]],
+        *,
+        timestamp_ms: int | None = None,
+        execution_time_ms: int | None = None,
+        tags: dict[str, str] | None = None,
+    ) -> str:
+        """Create a trace with spans via the MLflow OTLP + v3 API.
+
+        Uses a two-step approach (mirroring the official MLflow SDK):
+          1. POST /v1/traces  – uploads span data via OTLP JSON
+          2. POST /api/3.0/mlflow/traces – registers trace metadata
+
+        Each span dict should contain:
+          - name: str
+          - span_id: str (hex, 16 chars)
+          - parent_span_id: str | None (None for root span)
+          - start_time_unix_nano: int
+          - end_time_unix_nano: int
+          - attributes: dict[str, Any] (should include mlflow.spanType,
+            mlflow.spanInputs, mlflow.spanOutputs, and gen_ai.* for LLM spans)
+          - status: str ("OK" or "ERROR", default "OK")
+
+        Returns the trace request_id assigned by the server.
+        """
+        ts = timestamp_ms or _now_ms()
+        exec_ms = execution_time_ms or 0
+
+        trace_id = uuid.uuid4().hex
+
+        # Step 1: Upload spans via OTLP protobuf (POST /v1/traces)
+        from opentelemetry.proto.collector.trace.v1 import (  # type: ignore[import-not-found]
+            trace_service_pb2,
+        )
+        from opentelemetry.proto.common.v1 import (  # type: ignore[import-not-found]
+            common_pb2,
+        )
+        from opentelemetry.proto.resource.v1 import (  # type: ignore[import-not-found]
+            resource_pb2,
+        )
+        from opentelemetry.proto.trace.v1 import (  # type: ignore[import-not-found]
+            trace_pb2,
+        )
+
+        def _kv(key: str, val: Any) -> common_pb2.KeyValue:
+            if isinstance(val, str):
+                return common_pb2.KeyValue(
+                    key=key, value=common_pb2.AnyValue(string_value=val)
+                )
+            elif isinstance(val, bool):
+                return common_pb2.KeyValue(
+                    key=key, value=common_pb2.AnyValue(bool_value=val)
+                )
+            elif isinstance(val, int):
+                return common_pb2.KeyValue(
+                    key=key, value=common_pb2.AnyValue(int_value=val)
+                )
+            elif isinstance(val, float):
+                return common_pb2.KeyValue(
+                    key=key, value=common_pb2.AnyValue(double_value=val)
+                )
+            else:
+                return common_pb2.KeyValue(
+                    key=key,
+                    value=common_pb2.AnyValue(
+                        string_value=json.dumps(val, default=str)
+                    ),
+                )
+
+        proto_spans: list[Any] = []
+        for span in spans:
+            attrs = span.get("attributes", {})
+            kv_attrs = [_kv(k, v) for k, v in attrs.items()]
+
+            parent = span.get("parent_span_id")
+            if not parent:
+                kv_attrs.append(_kv("mlflow.experimentId", experiment_id))
+            kv_attrs.append(_kv("mlflow.traceRequestId", f"tr-{trace_id}"))
+
+            span_id_hex = span.get("span_id", uuid.uuid4().hex[:16])
+            status_str = span.get("status", "OK")
+            if status_str == "ERROR":
+                status_code = trace_pb2.Status.STATUS_CODE_ERROR
+            else:
+                status_code = trace_pb2.Status.STATUS_CODE_OK
+
+            proto_span = trace_pb2.Span(
+                trace_id=bytes.fromhex(trace_id),
+                span_id=bytes.fromhex(span_id_hex),
+                parent_span_id=bytes.fromhex(parent) if parent else b"",
+                name=span.get("name", "span"),
+                start_time_unix_nano=span.get("start_time_unix_nano", 0),
+                end_time_unix_nano=span.get("end_time_unix_nano", 0),
+                attributes=kv_attrs,
+                status=trace_pb2.Status(code=status_code),
+            )
+            proto_spans.append(proto_span)
+
+        resource = resource_pb2.Resource(
+            attributes=[
+                _kv("telemetry.sdk.language", "python"),
+                _kv("telemetry.sdk.name", "mlflow"),
+                _kv("telemetry.sdk.version", "3.14.0"),
+            ]
+        )
+
+        export_request = trace_service_pb2.ExportTraceServiceRequest(
+            resource_spans=[
+                trace_pb2.ResourceSpans(
+                    resource=resource,
+                    scope_spans=[trace_pb2.ScopeSpans(spans=proto_spans)],
+                )
+            ]
+        )
+
+        url = f"{self._client._tracking_uri}/v1/traces"
+        headers = {
+            "x-mlflow-experiment-id": experiment_id,
+            "Content-Type": "application/x-protobuf",
+        }
+        resp = self._client._client.post(
+            url, content=export_request.SerializeToString(), headers=headers
+        )
+        if resp.status_code >= 400:
+            raise MLflowAPIError(resp.status_code, "OTLP_ERROR", resp.text)
+
+        request_id = f"tr-{trace_id}"
+
+        # Step 2: Register trace metadata via POST /api/3.0/mlflow/traces
+        root_inputs: str = "{}"
+        root_outputs: str = "{}"
+        for span in spans:
+            if not span.get("parent_span_id"):
+                attrs = span.get("attributes", {})
+                ri = attrs.get("mlflow.spanInputs", "{}")
+                ro = attrs.get("mlflow.spanOutputs", "{}")
+                root_inputs = ri if isinstance(ri, str) else json.dumps(ri, default=str)
+                root_outputs = (
+                    ro if isinstance(ro, str) else json.dumps(ro, default=str)
+                )
+                break
+
+        trace_metadata = [
+            {"key": "mlflow.traceInputs", "value": root_inputs},
+            {"key": "mlflow.traceOutputs", "value": root_outputs},
+            {"key": "mlflow.source.type", "value": "LOCAL"},
+            {"key": "mlflow.trace_schema.version", "value": "3"},
+        ]
+        trace_tags = [{"key": k, "value": v} for k, v in (tags or {}).items()]
+
+        now_iso = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(ts / 1000))
+        trace_info_body = {
+            "trace": {
+                "trace_info": {
+                    "trace_id": request_id,
+                    "trace_location": {
+                        "type": "MLFLOW_EXPERIMENT",
+                        "mlflow_experiment": {"experiment_id": experiment_id},
+                    },
+                    "request_time": now_iso,
+                    "execution_duration": f"{exec_ms / 1000}s",
+                    "state": "OK",
+                    "trace_metadata": trace_metadata,
+                    "tags": trace_tags,
+                    "request_preview": root_inputs[:100],
+                    "response_preview": root_outputs[:100],
+                }
+            }
+        }
+
+        self._client._post_v3("/traces", trace_info_body)
+        return request_id
+
+    def upload_trace_file(
+        self,
+        experiment_id: str,
+        trace_path: str | Path,
+    ) -> str:
+        """Upload a trace JSON file to MLflow.
+
+        Accepts files in the standard format with ``info`` and ``data.spans``
+        sections (as produced by ``materialize`` or the MLflow UI export).
+        Handles both hex and base64-encoded span IDs.
+
+        Returns the request_id of the created trace.
+        """
+        import base64
+
+        path = Path(trace_path)
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        spans_raw = raw.get("data", {}).get("spans", [])
+        if not spans_raw:
+            raise ValueError(f"No spans found in {path}")
+
+        info = raw.get("info", {})
+        tags = info.get("tags", {})
+        if isinstance(tags, list):
+            tags = {t["key"]: t["value"] for t in tags if "key" in t}
+
+        def _decode_span_id(val: str | None) -> str | None:
+            """Convert base64 or hex span ID to 16-char hex."""
+            if not val:
+                return None
+            val_lower = val.lower()
+            if len(val_lower) == 16 and all(c in "0123456789abcdef" for c in val_lower):
+                return val_lower
+            try:
+                decoded = base64.b64decode(val, validate=True)
+                if len(decoded) == 8:
+                    return decoded.hex()
+            except Exception:
+                pass
+            return uuid.uuid4().hex[:16]
+
+        exec_ms = info.get("execution_time_ms") or info.get("execution_duration_ms")
+        ts_ms = info.get("timestamp_ms")
+        if not ts_ms:
+            req_time = info.get("request_time")
+            if isinstance(req_time, str):
+                import datetime
+
+                try:
+                    dt = datetime.datetime.fromisoformat(
+                        req_time.replace("Z", "+00:00")
+                    )
+                    ts_ms = int(dt.timestamp() * 1000)
+                except (ValueError, TypeError):
+                    ts_ms = None
+
+        span_dicts: list[dict[str, Any]] = []
+        for s in spans_raw:
+            attrs = dict(s.get("attributes", {}))
+            status_raw = s.get("status", "OK")
+            if isinstance(status_raw, dict):
+                status_raw = (
+                    "OK" if status_raw.get("code", "").endswith("OK") else "ERROR"
+                )
+
+            span_dicts.append(
+                {
+                    "name": s.get("name", "span"),
+                    "span_id": _decode_span_id(s.get("span_id"))
+                    or uuid.uuid4().hex[:16],
+                    "parent_span_id": _decode_span_id(s.get("parent_span_id")),
+                    "start_time_unix_nano": s.get("start_time_unix_nano", 0),
+                    "end_time_unix_nano": s.get("end_time_unix_nano", 0),
+                    "attributes": attrs,
+                    "status": status_raw,
+                }
+            )
+
+        return self.create(
+            experiment_id=experiment_id,
+            spans=span_dicts,
+            timestamp_ms=ts_ms,
+            execution_time_ms=exec_ms or 0,
+            tags=tags if isinstance(tags, dict) else None,
+        )
 
     @staticmethod
     def is_source_configured(parameters: dict[str, Any] | None) -> bool:
@@ -851,31 +1235,50 @@ class TracesNamespace:
             )
             if not traces:
                 break
-            for trace in traces:
-                tid = re.sub(r"[^a-zA-Z0-9_\-]", "_", trace.info.request_id)
-                if not tid:
-                    tid = uuid.uuid4().hex
-                prefix = "" if tid.startswith("tr-") else "tr-"
-                file_path = out / f"{prefix}{tid}.json"
-                trace_dict = {
-                    "info": {
-                        "request_id": trace.info.request_id,
-                        "experiment_id": trace.info.experiment_id,
-                        "timestamp_ms": trace.info.timestamp_ms,
-                        "execution_time_ms": trace.info.execution_time_ms,
-                        "status": trace.info.status,
-                        "tags": trace.info.tags,
-                        "request_metadata": trace.info.request_metadata,
-                    },
-                    "data": trace.data,
+            # Fetch full span data for each trace in parallel to avoid N+1 I/O
+            workers = min(len(traces), 10)
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                future_to_id = {
+                    pool.submit(
+                        self.get,
+                        trace.info.request_id,
+                        experiment_id,
+                    ): trace.info.request_id
+                    for trace in traces
                 }
-                file_path.write_text(
-                    json.dumps(trace_dict, indent=2, default=str),
-                    encoding="utf-8",
-                )
-                collected += 1
-                if collected >= max_results:
-                    break
+                for future in as_completed(future_to_id):
+                    try:
+                        full_trace = future.result()
+                    except Exception:
+                        rid = future_to_id[future]
+                        logger.warning(
+                            "Failed to fetch trace %s, skipping", rid, exc_info=True
+                        )
+                        continue
+                    tid = re.sub(r"[^a-zA-Z0-9_\-]", "_", full_trace.info.request_id)
+                    if not tid:
+                        tid = uuid.uuid4().hex
+                    prefix = "" if tid.startswith("tr-") else "tr-"
+                    file_path = out / f"{prefix}{tid}.json"
+                    trace_dict = {
+                        "info": {
+                            "request_id": full_trace.info.request_id,
+                            "experiment_id": full_trace.info.experiment_id,
+                            "timestamp_ms": full_trace.info.timestamp_ms,
+                            "execution_time_ms": full_trace.info.execution_time_ms,
+                            "status": full_trace.info.status,
+                            "tags": full_trace.info.tags,
+                            "request_metadata": full_trace.info.request_metadata,
+                        },
+                        "data": full_trace.data,
+                    }
+                    file_path.write_text(
+                        json.dumps(trace_dict, indent=2, default=str),
+                        encoding="utf-8",
+                    )
+                    collected += 1
+                    if collected >= max_results:
+                        break
             if not page_token:
                 break
 

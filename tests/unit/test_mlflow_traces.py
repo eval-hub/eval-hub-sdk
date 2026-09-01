@@ -66,7 +66,13 @@ def test_parse_trace_basic() -> None:
     assert trace.info.status == "OK"
     assert trace.info.tags == {"framework": "langgraph"}
     assert trace.info.request_metadata == {"source": "test"}
-    assert trace.data == {"spans": [{"name": "root"}]}
+    spans = trace.data["spans"]
+    assert len(spans) == 1
+    assert spans[0]["name"] == "root"
+    assert spans[0]["span_type"] == "UNKNOWN"
+    assert spans[0]["inputs"] == {}
+    assert spans[0]["outputs"] == {}
+    assert spans[0]["attributes"] == {}
 
 
 def test_parse_trace_missing_fields() -> None:
@@ -117,17 +123,18 @@ def test_artifact_server_path_odh_workspace() -> None:
     path = MlflowClient._artifact_server_path(uri, "results/out.json")
     assert (
         path
-        == "/api/2.0/mlflow-artifacts/artifacts/1/run-abc/artifacts/results/out.json"
+        == "/api/2.0/mlflow-artifacts/artifacts/workspaces/ws/1/run-abc/artifacts/results/out.json"
     )
 
 
-def test_artifact_server_path_upstream_run_ids() -> None:
+def test_artifact_server_path_upstream_run_ids(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MLFLOW_WORKSPACE", "default")
     uri = "/private/tmp/mlflow/artifacts/6/run-abc/artifacts"
     path = MlflowClient._artifact_server_path(
         uri, "results/out.json", experiment_id="6", run_id="run-abc"
     )
     assert path == (
-        "/api/2.0/mlflow-artifacts/artifacts/6/run-abc/artifacts/results/out.json"
+        "/api/2.0/mlflow-artifacts/artifacts/workspaces/default/6/run-abc/artifacts/results/out.json"
     )
 
 
@@ -256,6 +263,74 @@ def test_materialize_writes_files(tmp_path: Path) -> None:
         }
     )
 
+    _get_v3_responses = {
+        "abc": {
+            "info": {
+                "request_id": "abc",
+                "experiment_id": "10",
+                "timestamp_ms": 1700000000000,
+                "execution_time_ms": 300,
+                "status": "OK",
+                "tags": [],
+                "request_metadata": [],
+            },
+            "data": {
+                "spans": [
+                    {
+                        "name": "root",
+                        "attributes": [
+                            {
+                                "key": "mlflow.spanType",
+                                "value": {"string_value": "AGENT"},
+                            },
+                            {
+                                "key": "mlflow.spanInputs",
+                                "value": {
+                                    "kvlist_value": {
+                                        "values": [
+                                            {
+                                                "key": "q",
+                                                "value": {"string_value": "hello"},
+                                            }
+                                        ]
+                                    }
+                                },
+                            },
+                            {
+                                "key": "mlflow.spanOutputs",
+                                "value": {
+                                    "kvlist_value": {
+                                        "values": [
+                                            {
+                                                "key": "a",
+                                                "value": {"string_value": "world"},
+                                            }
+                                        ]
+                                    }
+                                },
+                            },
+                        ],
+                    }
+                ]
+            },
+        },
+        "tr-def": {
+            "info": {
+                "request_id": "tr-def",
+                "experiment_id": "10",
+                "timestamp_ms": 0,
+                "execution_time_ms": 0,
+                "status": "ERROR",
+                "tags": [],
+                "request_metadata": [],
+            },
+            "data": {},
+        },
+    }
+    mock_client._get_v3 = MagicMock(
+        side_effect=lambda path, params: _get_v3_responses[params["trace_id"]]
+    )
+
     out = ns.materialize(
         parameters={
             "mlflow_traces_experiment_name": "test-exp",
@@ -272,7 +347,13 @@ def test_materialize_writes_files(tmp_path: Path) -> None:
 
     content = json.loads((out / "tr-abc.json").read_text())
     assert content["info"]["request_id"] == "abc"
-    assert content["data"]["spans"] == [{"name": "root"}]
+    spans = content["data"]["spans"]
+    assert len(spans) == 1
+    assert spans[0]["name"] == "root"
+    assert spans[0]["span_type"] == "AGENT"
+    assert spans[0]["inputs"] == {"q": "hello"}
+    assert spans[0]["outputs"] == {"a": "world"}
+    assert "mlflow.spanType" not in spans[0]["attributes"]
 
 
 def test_materialize_resolves_experiment_name(tmp_path: Path) -> None:
@@ -296,6 +377,20 @@ def test_materialize_resolves_experiment_name(tmp_path: Path) -> None:
                 },
             ],
             "next_page_token": None,
+        }
+    )
+    mock_client._get_v3 = MagicMock(
+        return_value={
+            "info": {
+                "request_id": "x",
+                "experiment_id": "42",
+                "timestamp_ms": 0,
+                "execution_time_ms": 0,
+                "status": "OK",
+                "tags": [],
+                "request_metadata": [],
+            },
+            "data": {},
         }
     )
 
