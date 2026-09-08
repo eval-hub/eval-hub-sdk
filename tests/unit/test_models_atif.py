@@ -571,6 +571,52 @@ class TestTrajectory:
                 agent=_AGENT, steps=[_USER_STEP], subagent_trajectories=[sub1, sub2]
             )
 
+    def test_pathless_ref_with_no_embedded_trajectories_rejected(self) -> None:
+        ref = SubagentTrajectoryRef(trajectory_id="traj-missing")
+        step = Step(
+            step_id=1,
+            source="agent",
+            message="delegating",
+            observation=Observation(
+                results=[ObservationResult(subagent_trajectory_ref=[ref])]
+            ),
+        )
+        with pytest.raises(
+            ValidationError, match="not present in subagent_trajectories"
+        ):
+            Trajectory(agent=_AGENT, steps=[step])
+
+    def test_pathless_ref_matched_against_embedded_trajectory(self) -> None:
+        sub = Trajectory(
+            trajectory_id="traj-sub-001",
+            agent=Agent(name="sub", version="1"),
+            steps=[_USER_STEP],
+        )
+        ref = SubagentTrajectoryRef(trajectory_id="traj-sub-001")
+        step = Step(
+            step_id=1,
+            source="agent",
+            message="delegating",
+            observation=Observation(
+                results=[ObservationResult(subagent_trajectory_ref=[ref])]
+            ),
+        )
+        t = Trajectory(agent=_AGENT, steps=[step], subagent_trajectories=[sub])
+        assert len(t.subagent_trajectories) == 1  # type: ignore[arg-type]
+
+    def test_ref_with_trajectory_path_skips_embedded_check(self) -> None:
+        ref = SubagentTrajectoryRef(trajectory_path="s3://bucket/sub.json")
+        step = Step(
+            step_id=1,
+            source="agent",
+            message="delegating",
+            observation=Observation(
+                results=[ObservationResult(subagent_trajectory_ref=[ref])]
+            ),
+        )
+        t = Trajectory(agent=_AGENT, steps=[step])
+        assert len(t.steps) == 1
+
     def test_has_multimodal_content_false_for_text_only(self) -> None:
         t = _minimal()
         assert t.has_multimodal_content() is False

@@ -159,11 +159,14 @@ class Trajectory(BaseModel):
         no such constraint is placed on `session_id` — siblings MAY share
         a `session_id` (or omit it entirely to inherit the parent's) when
         they represent the same logical agent run.
+
+        Path-less SubagentTrajectoryRefs (no `trajectory_path`) found in any
+        step's observation results are also checked: their `trajectory_id`
+        must match an entry in `subagent_trajectories`.
         """
-        if not self.subagent_trajectories:
-            return self
+        # Build the set of embedded trajectory IDs, validating each entry.
         seen: set[str] = set()
-        for i, sub in enumerate(self.subagent_trajectories):
+        for i, sub in enumerate(self.subagent_trajectories or []):
             if sub.trajectory_id is None:
                 raise ValueError(
                     f"subagent_trajectories[{i}].trajectory_id is required "
@@ -178,6 +181,25 @@ class Trajectory(BaseModel):
                     f"subagent_trajectories"
                 )
             seen.add(sub.trajectory_id)
+
+        # Validate path-less SubagentTrajectoryRefs in observation results.
+        # A ref without trajectory_path can only be resolved via the embedded
+        # list; reject it if its trajectory_id is absent from that list.
+        for step in self.steps:
+            if step.observation is None:
+                continue
+            for result in step.observation.results:
+                for ref in result.subagent_trajectory_ref or []:
+                    if ref.trajectory_path:
+                        continue
+                    if ref.trajectory_id not in seen:
+                        raise ValueError(
+                            f"SubagentTrajectoryRef.trajectory_id "
+                            f"{ref.trajectory_id!r} in step {step.step_id} "
+                            f"observation is not present in "
+                            f"subagent_trajectories"
+                        )
+
         return self
 
     @model_validator(mode="after")
