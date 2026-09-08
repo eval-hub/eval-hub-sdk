@@ -93,7 +93,10 @@ class SubagentTrajectoryRef(BaseModel):
         cannot unambiguously identify which subagent trajectory a ref
         points at.
         """
-        if self.trajectory_id is None and self.trajectory_path is None:
+        if (
+            not (self.trajectory_id or "").strip()
+            and not (self.trajectory_path or "").strip()
+        ):
             raise ValueError(
                 "SubagentTrajectoryRef must be resolvable: set either "
                 "`trajectory_id` (for embedded references) or "

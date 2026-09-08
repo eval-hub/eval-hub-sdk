@@ -182,6 +182,18 @@ class TestSubagentTrajectoryRef:
         with pytest.raises(ValidationError, match="must be resolvable"):
             SubagentTrajectoryRef(session_id="sess-001")
 
+    def test_empty_trajectory_id_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="must be resolvable"):
+            SubagentTrajectoryRef(trajectory_id="")
+
+    def test_whitespace_trajectory_id_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="must be resolvable"):
+            SubagentTrajectoryRef(trajectory_id="   ")
+
+    def test_empty_trajectory_path_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="must be resolvable"):
+            SubagentTrajectoryRef(trajectory_path="")
+
     def test_extra_fields_forbidden(self) -> None:
         with pytest.raises(ValidationError):
             SubagentTrajectoryRef(trajectory_id="x", bogus=True)  # type: ignore[call-arg]
