@@ -19,12 +19,6 @@ from evalhub.models.atif import (
 )
 from pydantic import ValidationError
 
-from tests.fixtures.atif import (  # noqa: F401
-    agent_trajectory,
-    minimal_trajectory,
-    subagent_trajectory,
-)
-
 pytestmark = pytest.mark.unit
 
 # ---------------------------------------------------------------------------

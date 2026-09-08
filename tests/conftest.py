@@ -2,6 +2,8 @@
 
 from typing import Any
 
+pytest_plugins = ["tests.fixtures.atif"]
+
 
 def pytest_addoption(parser: Any) -> None:
     """Add custom command line options."""
