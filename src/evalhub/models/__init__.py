@@ -57,7 +57,36 @@ from .api import (
     TestDataRef,
 )
 
+# ATIF trajectory models — always available (pure pydantic + stdlib)
+from .atif import (
+    Agent,
+    AudioSource,
+    ContentPart,
+    FinalMetrics,
+    ImageSource,
+    Metrics,
+    Observation,
+    ObservationResult,
+    Step,
+    SubagentTrajectoryRef,
+    ToolCall,
+    Trajectory,
+)
+
 __all__ = [
+    # ATIF trajectory models
+    "Agent",
+    "AudioSource",
+    "ContentPart",
+    "FinalMetrics",
+    "ImageSource",
+    "Metrics",
+    "Observation",
+    "ObservationResult",
+    "Step",
+    "SubagentTrajectoryRef",
+    "ToolCall",
+    "Trajectory",
     # Job & Evaluation models
     "JobPhase",
     "JobStatus",

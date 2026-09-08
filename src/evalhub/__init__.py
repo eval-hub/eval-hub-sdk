@@ -48,6 +48,22 @@ from .models import (
     OCICoordinates,
 )
 
+# ATIF trajectory models — always available (pure pydantic + stdlib)
+from .models.atif import (
+    Agent,
+    AudioSource,
+    ContentPart,
+    FinalMetrics,
+    ImageSource,
+    Metrics,
+    Observation,
+    ObservationResult,
+    Step,
+    SubagentTrajectoryRef,
+    ToolCall,
+    Trajectory,
+)
+
 try:
     __version__ = version("eval-hub-sdk")
 except PackageNotFoundError:
@@ -56,6 +72,19 @@ except PackageNotFoundError:
 # Base exports - always available
 __all__ = [
     "__version__",
+    # ATIF trajectory models
+    "Agent",
+    "AudioSource",
+    "ContentPart",
+    "FinalMetrics",
+    "ImageSource",
+    "Metrics",
+    "Observation",
+    "ObservationResult",
+    "Step",
+    "SubagentTrajectoryRef",
+    "ToolCall",
+    "Trajectory",
     # Core data models
     "BenchmarkConfig",
     "BenchmarkInfo",
