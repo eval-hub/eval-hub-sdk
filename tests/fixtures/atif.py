@@ -7,7 +7,6 @@ Three realistic traces that mirror actual agent runs:
 """
 
 import pytest
-
 from evalhub.models.atif import (
     Agent,
     FinalMetrics,
@@ -153,7 +152,9 @@ def subagent_trajectory() -> Trajectory:
     subagent = Trajectory(
         schema_version="ATIF-v1.8",
         trajectory_id="traj-linter-sub-001",
-        agent=Agent(name="linter-agent", version="0.3.0", model_name="claude-haiku-4-5-20251001"),
+        agent=Agent(
+            name="linter-agent", version="0.3.0", model_name="claude-haiku-4-5-20251001"
+        ),
         steps=[
             Step(
                 step_id=1,
@@ -179,7 +180,9 @@ def subagent_trajectory() -> Trajectory:
                         )
                     ]
                 ),
-                metrics=Metrics(prompt_tokens=400, completion_tokens=30, cost_usd=0.0003),
+                metrics=Metrics(
+                    prompt_tokens=400, completion_tokens=30, cost_usd=0.0003
+                ),
             ),
         ],
     )
@@ -219,7 +222,9 @@ def subagent_trajectory() -> Trajectory:
                         )
                     ]
                 ),
-                metrics=Metrics(prompt_tokens=600, completion_tokens=50, cost_usd=0.0007),
+                metrics=Metrics(
+                    prompt_tokens=600, completion_tokens=50, cost_usd=0.0007
+                ),
             ),
         ],
         subagent_trajectories=[subagent],

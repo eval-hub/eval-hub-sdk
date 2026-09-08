@@ -1,10 +1,8 @@
 """Tests for ATIF trajectory pydantic models (evalhub.models.atif)."""
 
-import pytest
-from pydantic import ValidationError
-
 import evalhub
 import evalhub.atif as atif_shim
+import pytest
 from evalhub.models.atif import (
     Agent,
     AudioSource,
@@ -19,7 +17,13 @@ from evalhub.models.atif import (
     ToolCall,
     Trajectory,
 )
-from tests.fixtures.atif import agent_trajectory, minimal_trajectory, subagent_trajectory  # noqa: F401
+from pydantic import ValidationError
+
+from tests.fixtures.atif import (  # noqa: F401
+    agent_trajectory,
+    minimal_trajectory,
+    subagent_trajectory,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -66,11 +70,11 @@ class TestAgent:
 
     def test_name_required(self) -> None:
         with pytest.raises(ValidationError):
-            Agent(version="y")  # type: ignore[call-arg]
+            Agent(version="y")
 
     def test_version_required(self) -> None:
         with pytest.raises(ValidationError):
-            Agent(name="x")  # type: ignore[call-arg]
+            Agent(name="x")
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +133,9 @@ class TestFinalMetrics:
 
 class TestToolCall:
     def test_required_fields(self) -> None:
-        tc = ToolCall(tool_call_id="tc-1", function_name="Read", arguments={"path": "/x"})
+        tc = ToolCall(
+            tool_call_id="tc-1", function_name="Read", arguments={"path": "/x"}
+        )
         assert tc.tool_call_id == "tc-1"
         assert tc.function_name == "Read"
 
@@ -143,7 +149,7 @@ class TestToolCall:
 
     def test_missing_tool_call_id(self) -> None:
         with pytest.raises(ValidationError):
-            ToolCall(function_name="Read", arguments={})  # type: ignore[call-arg]
+            ToolCall(function_name="Read", arguments={})
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +204,7 @@ class TestImageSource:
 
     def test_invalid_mime_rejected(self) -> None:
         with pytest.raises(ValidationError):
-            ImageSource(media_type="image/bmp", path="/x")
+            ImageSource(media_type="image/bmp", path="/x")  # type: ignore[arg-type]
 
     def test_extra_fields_forbidden(self) -> None:
         with pytest.raises(ValidationError):
@@ -212,21 +218,29 @@ class TestImageSource:
 
 class TestAudioSource:
     def test_canonical_types(self) -> None:
-        for mime in ("audio/wav", "audio/mpeg", "audio/mp4", "audio/aac",
-                     "audio/ogg", "audio/flac", "audio/webm", "audio/aiff"):
+        for mime in (
+            "audio/wav",
+            "audio/mpeg",
+            "audio/mp4",
+            "audio/aac",
+            "audio/ogg",
+            "audio/flac",
+            "audio/webm",
+            "audio/aiff",
+        ):
             src = AudioSource(media_type=mime, path="/audio/clip.wav")
             assert src.media_type == mime
 
     def test_mp3_alias_normalised(self) -> None:
-        src = AudioSource(media_type="audio/mp3", path="/clip.mp3")
+        src = AudioSource(media_type="audio/mp3", path="/clip.mp3")  # type: ignore[arg-type]
         assert src.media_type == "audio/mpeg"
 
     def test_x_wav_alias_normalised(self) -> None:
-        src = AudioSource(media_type="audio/x-wav", path="/clip.wav")
+        src = AudioSource(media_type="audio/x-wav", path="/clip.wav")  # type: ignore[arg-type]
         assert src.media_type == "audio/wav"
 
     def test_m4a_alias_normalised(self) -> None:
-        src = AudioSource(media_type="audio/m4a", path="/clip.m4a")
+        src = AudioSource(media_type="audio/m4a", path="/clip.m4a")  # type: ignore[arg-type]
         assert src.media_type == "audio/mp4"
 
     def test_duration_sec_non_negative(self) -> None:
@@ -239,7 +253,7 @@ class TestAudioSource:
 
     def test_invalid_mime_rejected(self) -> None:
         with pytest.raises(ValidationError):
-            AudioSource(media_type="audio/unknown", path="/x")
+            AudioSource(media_type="audio/unknown", path="/x")  # type: ignore[arg-type]
 
     def test_extra_fields_forbidden(self) -> None:
         with pytest.raises(ValidationError):
@@ -399,7 +413,9 @@ class TestStep:
             Step(step_id=0, source="user", message="x")
 
     def test_valid_iso8601_timestamp(self) -> None:
-        s = Step(step_id=1, source="user", message="x", timestamp="2026-09-08T10:00:00Z")
+        s = Step(
+            step_id=1, source="user", message="x", timestamp="2026-09-08T10:00:00Z"
+        )
         assert s.timestamp == "2026-09-08T10:00:00Z"
 
     def test_invalid_timestamp_rejected(self) -> None:
@@ -408,15 +424,21 @@ class TestStep:
 
     def test_tool_calls_only_for_agent(self) -> None:
         tc = ToolCall(tool_call_id="tc-1", function_name="Read", arguments={})
-        with pytest.raises(ValidationError, match="only applicable when source is 'agent'"):
+        with pytest.raises(
+            ValidationError, match="only applicable when source is 'agent'"
+        ):
             Step(step_id=1, source="user", message="x", tool_calls=[tc])
 
     def test_metrics_only_for_agent(self) -> None:
-        with pytest.raises(ValidationError, match="only applicable when source is 'agent'"):
+        with pytest.raises(
+            ValidationError, match="only applicable when source is 'agent'"
+        ):
             Step(step_id=1, source="system", message="x", metrics=Metrics())
 
     def test_llm_call_count_zero_forbids_metrics(self) -> None:
-        with pytest.raises(ValidationError, match="must be absent when llm_call_count is 0"):
+        with pytest.raises(
+            ValidationError, match="must be absent when llm_call_count is 0"
+        ):
             Step(
                 step_id=1,
                 source="agent",
@@ -426,7 +448,9 @@ class TestStep:
             )
 
     def test_llm_call_count_zero_forbids_reasoning_content(self) -> None:
-        with pytest.raises(ValidationError, match="must be absent when llm_call_count is 0"):
+        with pytest.raises(
+            ValidationError, match="must be absent when llm_call_count is 0"
+        ):
             Step(
                 step_id=1,
                 source="agent",
@@ -436,7 +460,12 @@ class TestStep:
             )
 
     def test_llm_call_count_zero_no_llm_fields_valid(self) -> None:
-        s = Step(step_id=1, source="agent", message="deterministic dispatch", llm_call_count=0)
+        s = Step(
+            step_id=1,
+            source="agent",
+            message="deterministic dispatch",
+            llm_call_count=0,
+        )
         assert s.llm_call_count == 0
 
     def test_message_as_content_part_list(self) -> None:
@@ -482,7 +511,9 @@ class TestTrajectory:
             step_id=1,
             source="agent",
             message="reading",
-            tool_calls=[ToolCall(tool_call_id="tc-1", function_name="Read", arguments={})],
+            tool_calls=[
+                ToolCall(tool_call_id="tc-1", function_name="Read", arguments={})
+            ],
             observation=Observation(
                 results=[ObservationResult(source_call_id="tc-MISSING", content="x")]
             ),
@@ -495,9 +526,13 @@ class TestTrajectory:
             step_id=1,
             source="agent",
             message="reading",
-            tool_calls=[ToolCall(tool_call_id="tc-1", function_name="Read", arguments={})],
+            tool_calls=[
+                ToolCall(tool_call_id="tc-1", function_name="Read", arguments={})
+            ],
             observation=Observation(
-                results=[ObservationResult(source_call_id="tc-1", content="file contents")]
+                results=[
+                    ObservationResult(source_call_id="tc-1", content="file contents")
+                ]
             ),
         )
         t = Trajectory(agent=_AGENT, steps=[step])
@@ -532,20 +567,24 @@ class TestTrajectory:
         img_step = Step(
             step_id=1,
             source="user",
-            message=[ContentPart(
-                type="image",
-                source=ImageSource(media_type="image/png", path="/shot.png"),
-            )],
+            message=[
+                ContentPart(
+                    type="image",
+                    source=ImageSource(media_type="image/png", path="/shot.png"),
+                )
+            ],
         )
         t = Trajectory(agent=_AGENT, steps=[img_step])
         assert t.has_multimodal_content() is True
 
     def test_has_multimodal_content_true_for_audio_in_observation(self) -> None:
         audio_result = ObservationResult(
-            content=[ContentPart(
-                type="audio",
-                source=AudioSource(media_type="audio/wav", path="/rec.wav"),
-            )]
+            content=[
+                ContentPart(
+                    type="audio",
+                    source=AudioSource(media_type="audio/wav", path="/rec.wav"),
+                )
+            ]
         )
         step = Step(
             step_id=1,
@@ -580,7 +619,7 @@ class TestTrajectory:
 
 
 class TestTrajectoryRoundtrip:
-    def test_agent_trajectory_roundtrip(self, agent_trajectory: Trajectory) -> None:
+    def test_agent_trajectory_roundtrip(self, agent_trajectory: Trajectory) -> None:  # noqa: F811
         data = agent_trajectory.model_dump(mode="json")
         restored = Trajectory.model_validate(data)
         assert restored.trajectory_id == agent_trajectory.trajectory_id
@@ -588,14 +627,16 @@ class TestTrajectoryRoundtrip:
         assert restored.final_metrics is not None
         assert restored.final_metrics.total_steps == 4
 
-    def test_subagent_trajectory_roundtrip(self, subagent_trajectory: Trajectory) -> None:
+    def test_subagent_trajectory_roundtrip(
+        self, subagent_trajectory: Trajectory  # noqa: F811
+    ) -> None:
         data = subagent_trajectory.model_dump(mode="json")
         restored = Trajectory.model_validate(data)
         assert restored.subagent_trajectories is not None
         assert len(restored.subagent_trajectories) == 1
         assert restored.subagent_trajectories[0].trajectory_id == "traj-linter-sub-001"
 
-    def test_to_json_dict_no_none_values(self, agent_trajectory: Trajectory) -> None:
+    def test_to_json_dict_no_none_values(self, agent_trajectory: Trajectory) -> None:  # noqa: F811
         d = agent_trajectory.to_json_dict(exclude_none=True)
 
         def _check_no_none(obj: object) -> None:
@@ -609,12 +650,14 @@ class TestTrajectoryRoundtrip:
 
         _check_no_none(d)
 
-    def test_minimal_trajectory_roundtrip(self, minimal_trajectory: Trajectory) -> None:
+    def test_minimal_trajectory_roundtrip(self, minimal_trajectory: Trajectory) -> None:  # noqa: F811
         data = minimal_trajectory.model_dump(mode="json")
         restored = Trajectory.model_validate(data)
         assert restored.steps[0].message == "Hello, fix auth.py"
 
-    def test_tool_call_obs_integrity_preserved(self, agent_trajectory: Trajectory) -> None:
+    def test_tool_call_obs_integrity_preserved(
+        self, agent_trajectory: Trajectory  # noqa: F811
+    ) -> None:
         # Step 3 has tc-read-001, step 4 has tc-edit-001
         data = agent_trajectory.model_dump(mode="json")
         restored = Trajectory.model_validate(data)
@@ -630,13 +673,23 @@ class TestTrajectoryRoundtrip:
 
 class TestATIFNamespaceImports:
     _NAMES = [
-        "Agent", "AudioSource", "ContentPart", "FinalMetrics", "ImageSource",
-        "Metrics", "Observation", "ObservationResult", "Step",
-        "SubagentTrajectoryRef", "ToolCall", "Trajectory",
+        "Agent",
+        "AudioSource",
+        "ContentPart",
+        "FinalMetrics",
+        "ImageSource",
+        "Metrics",
+        "Observation",
+        "ObservationResult",
+        "Step",
+        "SubagentTrajectoryRef",
+        "ToolCall",
+        "Trajectory",
     ]
 
     def test_importable_from_evalhub_models_atif(self) -> None:
         from evalhub.models import atif as atif_mod
+
         for name in self._NAMES:
             assert hasattr(atif_mod, name), f"Missing {name} in evalhub.models.atif"
 
@@ -649,7 +702,8 @@ class TestATIFNamespaceImports:
             assert hasattr(evalhub, name), f"Missing {name} in evalhub"
 
     def test_trajectory_is_same_class_across_namespaces(self) -> None:
-        from evalhub.models.atif import Trajectory as T1
-        from evalhub.atif import Trajectory as T2
-        assert T1 is T2
-        assert evalhub.Trajectory is T1
+        from evalhub.atif import Trajectory as TrajectoryAtif
+        from evalhub.models.atif import Trajectory as TrajectoryModel
+
+        assert TrajectoryModel is TrajectoryAtif
+        assert evalhub.Trajectory is TrajectoryModel
