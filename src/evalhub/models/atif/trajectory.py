@@ -206,13 +206,22 @@ class Trajectory(BaseModel):
     def validate_tool_call_references(self) -> "Trajectory":
         """Validate that observation source_call_ids reference valid tool_call_ids."""
         for step in self.steps:
+            # Detect duplicate tool_call_ids before building the reference set.
+            if step.tool_calls:
+                seen_ids: set[str] = set()
+                for tc in step.tool_calls:
+                    if tc.tool_call_id in seen_ids:
+                        raise ValueError(
+                            f"step {step.step_id} has duplicate tool_call_id "
+                            f"'{tc.tool_call_id}'"
+                        )
+                    seen_ids.add(tc.tool_call_id)
+                tool_call_ids = seen_ids
+            else:
+                tool_call_ids = set()
+
             if step.observation is None:
                 continue
-
-            # Collect all tool_call_ids from this step
-            tool_call_ids = set()
-            if step.tool_calls:
-                tool_call_ids = {tc.tool_call_id for tc in step.tool_calls}
 
             # Check that source_call_ids reference valid tool_call_ids
             for result in step.observation.results:

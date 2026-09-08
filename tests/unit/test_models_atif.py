@@ -550,6 +550,19 @@ class TestTrajectory:
         t = Trajectory(agent=_AGENT, steps=[step])
         assert len(t.steps) == 1
 
+    def test_duplicate_tool_call_id_rejected(self) -> None:
+        step = Step(
+            step_id=1,
+            source="agent",
+            message="reading",
+            tool_calls=[
+                ToolCall(tool_call_id="tc-dup", function_name="Read", arguments={}),
+                ToolCall(tool_call_id="tc-dup", function_name="Write", arguments={}),
+            ],
+        )
+        with pytest.raises(ValidationError, match="duplicate tool_call_id.*tc-dup"):
+            Trajectory(agent=_AGENT, steps=[step])
+
     def test_subagent_without_trajectory_id_rejected(self) -> None:
         sub = Trajectory(agent=Agent(name="sub", version="1"), steps=[_USER_STEP])
         with pytest.raises(ValidationError, match="trajectory_id is required"):
