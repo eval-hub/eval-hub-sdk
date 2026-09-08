@@ -62,6 +62,27 @@ _AUDIO_MEDIA_TYPE_ALIASES = {
     "audio/x-aiff": "audio/aiff",
 }
 
+# Public input type: canonical values plus all accepted aliases. Widening the
+# declared field type to include aliases lets callers pass them without a type
+# error; the normalize_media_type validator maps everything to AudioMediaType
+# before Pydantic's own Literal check runs.
+AudioMediaTypeInput = (
+    AudioMediaType
+    | Literal[
+        "audio/mp3",
+        "audio/mpga",
+        "audio/x-mpeg",
+        "audio/x-wav",
+        "audio/wave",
+        "audio/vnd.wave",
+        "audio/x-m4a",
+        "audio/m4a",
+        "audio/x-aac",
+        "audio/x-flac",
+        "audio/x-aiff",
+    ]
+)
+
 
 class ImageSource(BaseModel):
     """Image source specification for images stored as files or at remote URLs."""
@@ -90,7 +111,7 @@ class AudioSource(BaseModel):
     recovered without decoding the file.
     """
 
-    media_type: AudioMediaType = Field(
+    media_type: AudioMediaTypeInput = Field(
         default=...,
         description="MIME type of the audio",
     )

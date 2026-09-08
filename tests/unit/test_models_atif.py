@@ -232,15 +232,15 @@ class TestAudioSource:
             assert src.media_type == mime
 
     def test_mp3_alias_normalised(self) -> None:
-        src = AudioSource(media_type="audio/mp3", path="/clip.mp3")  # type: ignore[arg-type]
+        src = AudioSource(media_type="audio/mp3", path="/clip.mp3")
         assert src.media_type == "audio/mpeg"
 
     def test_x_wav_alias_normalised(self) -> None:
-        src = AudioSource(media_type="audio/x-wav", path="/clip.wav")  # type: ignore[arg-type]
+        src = AudioSource(media_type="audio/x-wav", path="/clip.wav")
         assert src.media_type == "audio/wav"
 
     def test_m4a_alias_normalised(self) -> None:
-        src = AudioSource(media_type="audio/m4a", path="/clip.m4a")  # type: ignore[arg-type]
+        src = AudioSource(media_type="audio/m4a", path="/clip.m4a")
         assert src.media_type == "audio/mp4"
 
     def test_duration_sec_non_negative(self) -> None:
