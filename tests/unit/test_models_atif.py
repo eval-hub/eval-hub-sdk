@@ -628,7 +628,8 @@ class TestTrajectoryRoundtrip:
         assert restored.final_metrics.total_steps == 4
 
     def test_subagent_trajectory_roundtrip(
-        self, subagent_trajectory: Trajectory  # noqa: F811
+        self,
+        subagent_trajectory: Trajectory,  # noqa: F811
     ) -> None:
         data = subagent_trajectory.model_dump(mode="json")
         restored = Trajectory.model_validate(data)
@@ -656,7 +657,8 @@ class TestTrajectoryRoundtrip:
         assert restored.steps[0].message == "Hello, fix auth.py"
 
     def test_tool_call_obs_integrity_preserved(
-        self, agent_trajectory: Trajectory  # noqa: F811
+        self,
+        agent_trajectory: Trajectory,  # noqa: F811
     ) -> None:
         # Step 3 has tc-read-001, step 4 has tc-edit-001
         data = agent_trajectory.model_dump(mode="json")
