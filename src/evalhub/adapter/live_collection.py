@@ -357,16 +357,24 @@ def _question_from_mapping(
 def _build_headers(config: LiveCollectionConfig) -> dict[str, str]:
     """Build request headers, including optional bearer-token auth.
 
-    When ``api_key_env`` is configured, the endpoint URL **must** use HTTPS
-    to prevent leaking the bearer token over cleartext HTTP (CWE-319).
+    When credentials are present -- either via ``api_key_env`` or an
+    ``Authorization`` header in ``request_headers`` -- the endpoint URL
+    **must** use HTTPS to prevent leaking tokens over cleartext HTTP
+    (CWE-319).
     """
     headers = dict(config.request_headers)
+    has_explicit_auth = any(
+        k.lower() == "authorization" for k in config.request_headers
+    )
+    requires_https = config.api_key_env or has_explicit_auth
+
+    if requires_https and not config.endpoint_url.lower().startswith("https://"):
+        raise ValueError(
+            "endpoint_url must use https:// when credentials are configured "
+            "to avoid sending them over cleartext HTTP"
+        )
+
     if config.api_key_env:
-        if not config.endpoint_url.lower().startswith("https://"):
-            raise ValueError(
-                "endpoint_url must use https:// when api_key_env is set "
-                "to avoid sending credentials over cleartext HTTP"
-            )
         api_key = os.getenv(config.api_key_env)
         if not api_key:
             raise ValueError(f"Environment variable {config.api_key_env} is not set")

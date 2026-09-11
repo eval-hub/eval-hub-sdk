@@ -343,6 +343,24 @@ def test_collect_openai_chat_completions_rejects_cleartext_with_api_key(
         collect_openai_chat_completions(config, client=StubClient([]))
 
 
+def test_collect_openai_chat_completions_rejects_cleartext_with_auth_header(
+    tmp_path: Path,
+) -> None:
+    """Reject cleartext HTTP when request_headers contains an Authorization header."""
+    questions_path = tmp_path / "questions.csv"
+    questions_path.write_text("question\nHello?\n", encoding="utf-8")
+    config = LiveCollectionConfig(
+        questions_path=questions_path,
+        output_dir=tmp_path / "out",
+        endpoint_url="http://example.test/v1/chat/completions",
+        model="test-model",
+        request_headers={"Authorization": "Bearer pre-shared-token"},
+    )
+
+    with pytest.raises(ValueError, match="https://"):
+        collect_openai_chat_completions(config, client=StubClient([]))
+
+
 def test_collect_live_responses_from_parameters(tmp_path: Path) -> None:
     """Build config from adapter parameters and collect one response."""
     questions_path = tmp_path / "questions.csv"
