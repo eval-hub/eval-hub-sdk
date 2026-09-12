@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
-from evalhub.adapter.callbacks import DefaultCallbacks
+from evalhub.adapter.callbacks import DefaultCallbacks, _MlflowOps
 from evalhub.adapter.models.job import (
     JobResults,
     JobSpec,
@@ -88,6 +88,27 @@ def test_report_results_omits_mlflow_run_id_when_not_set() -> None:
 
     body = mock_http.post.call_args.kwargs["json"]
     assert "mlflow_run_id" not in body["benchmark_status_event"]
+
+
+def test_report_results_does_not_send_detailed_training_results() -> None:
+    callbacks, mock_http = _make_callbacks()
+    results = _results(mlflow_run_id="mlflow-run-abc")
+    results.evaluation_metadata = {
+        "atif_training_threshold": 0.8,
+        "atif_training_manifest": ["s3://bucket/eligible.json"],
+        "atif_trajectories": [{"steps": [{"score": 1.0}]}],
+    }
+    results.trajectory_results = [
+        {"trajectory_id": "t1", "training_eligible": True}
+    ]
+
+    callbacks.report_results(results)
+
+    event = mock_http.post.call_args.kwargs["json"]["benchmark_status_event"]
+    assert event["mlflow_run_id"] == "mlflow-run-abc"
+    assert "atif_trajectories" not in event
+    assert "atif_training_manifest" not in event
+    assert "trajectory_results" not in event
 
 
 def test_mlflow_save_returns_run_id_from_odh_path() -> None:
@@ -182,6 +203,23 @@ def test_mlflow_save_posts_failed_event_on_mlflow_error() -> None:
     assert body["error_message"]["message_origin"] == "sdk"
     assert "mlflow offline" not in body["error_message"]["message"]
     assert "warning_message" not in body
+
+
+def test_mlflow_params_include_atif_training_summary() -> None:
+    results = _results()
+    results.evaluation_metadata = {
+        "atif_training_threshold": 0.8,
+        "atif_training_manifest": ["/test_data/t1.json"],
+    }
+    results.trajectory_results = [
+        {"trajectory_id": "t1", "training_eligible": True}
+    ]
+
+    params, _ = _MlflowOps._build_params_metrics(results, _job_spec())
+    values = {param.key: param.value for param in params}
+    assert values["atif.training_threshold"] == "0.8"
+    assert values["atif.training_eligible_count"] == "1"
+    assert values["atif.training_trajectory_count"] == "1"
 
 
 def test_build_run_name_format() -> None:

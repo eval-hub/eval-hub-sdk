@@ -284,6 +284,29 @@ class OCIArtifactResult(BaseModel):
     reference: str = Field(..., description="Full OCI reference with digest")
 
 
+class TrajectoryScore(BaseModel):
+    """Typed summary for a scored trajectory.
+
+    Detailed framework-specific trajectory data remains in
+    :attr:`JobResults.evaluation_metadata`; this model provides a stable,
+    compact contract for consumers that only need eligibility and scores.
+    """
+
+    trajectory_id: str | None = Field(default=None, description="Trajectory ID")
+    source_path: str | None = Field(
+        default=None, description="Source path for the trajectory"
+    )
+    score: float | None = Field(default=None, description="Trajectory score")
+    aggregate_score: float | None = Field(
+        default=None, description="Aggregate score including nested trajectories"
+    )
+    status: str = Field(default="scored", description="Trajectory scoring status")
+    training_eligible: bool | None = Field(
+        default=None,
+        description="Whether the trajectory meets the configured training threshold",
+    )
+
+
 class JobResults(BaseModel):
     """Results returned by run_benchmark_job.
 
@@ -316,6 +339,13 @@ class JobResults(BaseModel):
     )
     evaluation_metadata: dict[str, Any] = Field(
         default_factory=dict, description="Framework-specific metadata"
+    )
+    trajectory_results: list[TrajectoryScore] | None = Field(
+        default=None,
+        description=(
+            "Optional typed per-trajectory summaries. Detailed framework-specific "
+            "data remains in evaluation_metadata."
+        ),
     )
 
     # Artifact information (if persisted)

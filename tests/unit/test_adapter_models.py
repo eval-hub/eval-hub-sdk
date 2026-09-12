@@ -24,6 +24,7 @@ from evalhub.adapter import (
     OCIArtifactResult,
     OCIArtifactSpec,
     SafetyEvalEntry,
+    TrajectoryScore,
 )
 from evalhub.models import MetricSchema, PrimaryScore, ResultType
 from pydantic import ValidationError
@@ -596,6 +597,32 @@ class TestJobResults:
 
         assert results.evaluation_metadata["framework"] == "lm-eval"
         assert results.evaluation_metadata["num_few_shot"] == 5
+
+    def test_job_results_with_typed_trajectory_scores(self) -> None:
+        results = JobResults(
+            id="test-job-001",
+            benchmark_id="atif_trajectory_default",
+            benchmark_index=0,
+            model_name="model",
+            results=[],
+            num_examples_evaluated=1,
+            duration_seconds=1.0,
+            trajectory_results=[
+                TrajectoryScore(
+                    trajectory_id="t1",
+                    source_path="/test_data/t1.json",
+                    score=0.8,
+                    aggregate_score=0.8,
+                    training_eligible=True,
+                )
+            ],
+        )
+
+        assert results.trajectory_results is not None
+        assert results.trajectory_results[0].training_eligible is True
+        assert results.model_dump(mode="json")["trajectory_results"][0][
+            "training_eligible"
+        ] is True
 
     def test_job_results_with_oci_artifact_information(self) -> None:
         """Test job results with OCI artifact information."""

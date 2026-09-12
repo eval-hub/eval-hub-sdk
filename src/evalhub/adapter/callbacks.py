@@ -137,6 +137,25 @@ class _MlflowOps:
         if results.overall_score is not None:
             metrics.append(Metric("overall_score", results.overall_score))
 
+        # Preserve ATIF training-selection summaries as searchable MLflow
+        # parameters while the complete result tree is uploaded as an artifact.
+        evaluation_metadata = results.evaluation_metadata or {}
+        training_threshold = evaluation_metadata.get("atif_training_threshold")
+        if training_threshold is not None:
+            params.append(Param("atif.training_threshold", str(training_threshold)))
+            params.append(
+                Param(
+                    "atif.training_eligible_count",
+                    str(len(evaluation_metadata.get("atif_training_manifest", []))),
+                )
+            )
+            params.append(
+                Param(
+                    "atif.training_trajectory_count",
+                    str(len(results.trajectory_results or [])),
+                )
+            )
+
         # EvalCard → MLflow params
         if results.eval_card:
             ec = results.eval_card

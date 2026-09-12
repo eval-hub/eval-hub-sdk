@@ -96,6 +96,7 @@ from .models import (
     OCIArtifactResult,
     OCIArtifactSpec,
     SafetyEvalEntry,
+    TrajectoryScore,
 )
 from .oci import OCIArtifactPersister
 from .settings import AdapterSettings
@@ -124,6 +125,7 @@ __all__ = [
     # OCI models
     "OCIArtifactSpec",
     "OCIArtifactResult",
+    "TrajectoryScore",
     "OCIArtifactPersister",
     # Callback implementation
     "DefaultCallbacks",
