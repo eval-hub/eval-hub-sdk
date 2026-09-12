@@ -32,6 +32,7 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
 from opentelemetry import context as otel_context
+from opentelemetry import metrics
 from opentelemetry import trace
 from opentelemetry.propagate import extract
 
@@ -238,10 +239,23 @@ class EvalTracer:
 
     def __init__(self) -> None:
         self._tracer = trace.get_tracer(_TRACER_NAME, schema_url=None)
+        self._meter = metrics.get_meter(_TRACER_NAME, schema_url=None)
         self._job_id: str | None = None
         self._provider: str | None = None
         self._collection: str | None = None
         self._model_id: str | None = None
+
+    def create_counter(self, name: str, *, unit: str = "") -> metrics.Counter:
+        """Create a counter from the EvalHub meter provider.
+
+        Adapters use this small facade so metric creation follows the SDK's
+        shared OpenTelemetry instrumentation setup.
+        """
+        return self._meter.create_counter(name, unit=unit)
+
+    def create_histogram(self, name: str, *, unit: str = "") -> metrics.Histogram:
+        """Create a histogram from the EvalHub meter provider."""
+        return self._meter.create_histogram(name, unit=unit)
 
     @classmethod
     def from_job_spec(cls, job_spec: JobSpec) -> EvalTracer:
