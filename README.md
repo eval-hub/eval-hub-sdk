@@ -659,6 +659,72 @@ class LMEvalAdapter(FrameworkAdapter):
         return JobResults(...)
 ```
 
+## Live Endpoint Response Collection (Experimental)
+
+The SDK includes a collector utility that adapters can call during `LOADING_DATA`
+to query a chatbot endpoint with test questions and collect responses for evaluation.
+
+### OpenAI-Compatible Endpoint
+
+```python
+from evalhub.adapter import (
+    CollectorConfig, collect_responses, is_collection_configured,
+    resolve_model_credentials,
+)
+
+# In your adapter's run_benchmark_job():
+if is_collection_configured(config.parameters):
+    creds = resolve_model_credentials()
+    collector_config = CollectorConfig.from_parameters(config.parameters)
+    manifest = collect_responses(collector_config, credentials=creds)
+    # manifest.output_path -> responses.jsonl for your evaluation framework
+```
+
+Job parameters:
+```json
+{
+  "live_collection": {
+    "questions_path": "/test_data/questions.csv",
+    "output_dir": "/tmp/collected",
+    "endpoint_url": "https://my-chatbot.example/v1",
+    "model": "my-chatbot-v2",
+    "protocol": "openai_chat_completions"
+  }
+}
+```
+
+### Generic HTTP Endpoint (MCP, Langflow, custom APIs)
+
+```json
+{
+  "live_collection": {
+    "questions_path": "/test_data/questions.csv",
+    "output_dir": "/tmp/collected",
+    "endpoint_url": "https://mcp-chatbot.example/mcp",
+    "protocol": "generic_http",
+    "request_template": {
+      "jsonrpc": "2.0",
+      "method": "tools/call",
+      "params": {"name": "chat", "arguments": {"message": "{question}"}},
+      "id": "{question_id}"
+    },
+    "response_path": "result.content.0.text",
+    "extra_response_paths": {
+      "retrieved_contexts": "result.sources"
+    }
+  }
+}
+```
+
+The collector uses SDK TLS auto-detection by default. In Kubernetes, the model
+secret contains a sidecar reference token and cannot authenticate a direct request
+to the live endpoint. Configure `api_key_env` or `request_headers` with the live
+endpoint's actual credential instead; the collector will not send the sidecar
+reference token directly to the endpoint.
+
+See [`src/evalhub/adapter/collector.py`](src/evalhub/adapter/collector.py) for the
+complete collector configuration reference.
+
 ## Deployment
 
 ### Container Structure
