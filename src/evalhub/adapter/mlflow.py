@@ -9,6 +9,8 @@ Modelled after github.com/opendatahub-io/mlflow-go.
 
 from __future__ import annotations
 
+import base64
+import datetime
 import json
 import logging
 import mimetypes
@@ -337,16 +339,6 @@ class MlflowClient:
         resp = self._client.post(url, json=body)
         return self._handle(resp)
 
-    def _put_json(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
-        url = f"{self._tracking_uri}{_API}{path}"
-        resp = self._client.put(url, json=body)
-        return self._handle(resp)
-
-    def _patch(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
-        url = f"{self._tracking_uri}{_API}{path}"
-        resp = self._client.patch(url, json=body)
-        return self._handle(resp)
-
     @staticmethod
     def _handle(resp: httpx.Response) -> dict[str, Any]:
         if not (200 <= resp.status_code < 300):
@@ -570,7 +562,8 @@ class MlflowClient:
 
         Upstream MLflow 3.x may instead return a local filesystem path or an HTTP
         proxied artifact root. When the URI is not ``mlflow-artifacts:``, fall back
-        to ``{experiment_id}/{run_id}/artifacts/{path}`` from the run record.
+        to ``{experiment_id}/{run_id}/artifacts/{path}``, adding the
+        ``workspaces/{name}/`` prefix only when ``MLFLOW_WORKSPACE`` is set.
         """
         artifact_path = artifact_path.lstrip("/")
         anchor = f"{_ARTIFACTS_API}/"
@@ -585,8 +578,12 @@ class MlflowClient:
             return f"{_ARTIFACTS_API}/{run_root}/{artifact_path}"
 
         if experiment_id and run_id:
-            workspace = os.environ.get("MLFLOW_WORKSPACE", "default")
-            return f"{_ARTIFACTS_API}/workspaces/{workspace}/{experiment_id}/{run_id}/artifacts/{artifact_path}"
+            workspace = os.environ.get("MLFLOW_WORKSPACE")
+            if workspace:
+                return f"{_ARTIFACTS_API}/workspaces/{workspace}/{experiment_id}/{run_id}/artifacts/{artifact_path}"
+            return (
+                f"{_ARTIFACTS_API}/{experiment_id}/{run_id}/artifacts/{artifact_path}"
+            )
 
         raise ValueError(
             f"Cannot resolve artifact upload path from artifact_uri={artifact_uri!r}; "
@@ -704,9 +701,7 @@ def _to_ms(val: Any) -> int:
             return 0
     if "T" in s:
         try:
-            from datetime import datetime as _dt
-
-            dt = _dt.fromisoformat(s.replace("Z", "+00:00"))
+            dt = datetime.datetime.fromisoformat(s.replace("Z", "+00:00"))
             return int(dt.timestamp() * 1000)
         except (ValueError, OSError):
             return 0
@@ -902,8 +897,15 @@ class TracesNamespace:
         next_token = data.get("next_page_token") or None
         return traces, next_token
 
-    def get(self, request_id: str, experiment_id: str) -> Trace:
-        """Fetch a single trace with spans via ``GET /api/3.0/mlflow/traces/get``."""
+    def get(self, request_id: str, experiment_id: str = "") -> Trace:
+        """Fetch a single trace with spans via ``GET /api/3.0/mlflow/traces/get``.
+
+        .. deprecated::
+            ``experiment_id`` is unused by the v3 API (which resolves traces
+            by ``trace_id`` alone). It is kept only for backwards
+            compatibility with existing callers and will be removed in a
+            future release.
+        """
         data = self._client._get_v3(
             "/traces/get",
             {"trace_id": request_id},
@@ -943,18 +945,10 @@ class TracesNamespace:
         trace_id = uuid.uuid4().hex
 
         # Step 1: Upload spans via OTLP protobuf (POST /v1/traces)
-        from opentelemetry.proto.collector.trace.v1 import (  # type: ignore[import-not-found]
-            trace_service_pb2,
-        )
-        from opentelemetry.proto.common.v1 import (  # type: ignore[import-not-found]
-            common_pb2,
-        )
-        from opentelemetry.proto.resource.v1 import (  # type: ignore[import-not-found]
-            resource_pb2,
-        )
-        from opentelemetry.proto.trace.v1 import (  # type: ignore[import-not-found]
-            trace_pb2,
-        )
+        from opentelemetry.proto.collector.trace.v1 import trace_service_pb2
+        from opentelemetry.proto.common.v1 import common_pb2
+        from opentelemetry.proto.resource.v1 import resource_pb2
+        from opentelemetry.proto.trace.v1 import trace_pb2
 
         def _kv(key: str, val: Any) -> common_pb2.KeyValue:
             if isinstance(val, str):
@@ -1098,8 +1092,6 @@ class TracesNamespace:
 
         Returns the request_id of the created trace.
         """
-        import base64
-
         path = Path(trace_path)
         raw = json.loads(path.read_text(encoding="utf-8"))
         spans_raw = raw.get("data", {}).get("spans", [])
@@ -1126,20 +1118,12 @@ class TracesNamespace:
                 pass
             return uuid.uuid4().hex[:16]
 
-        exec_ms = info.get("execution_time_ms") or info.get("execution_duration_ms")
-        ts_ms = info.get("timestamp_ms")
-        if not ts_ms:
-            req_time = info.get("request_time")
-            if isinstance(req_time, str):
-                import datetime
-
-                try:
-                    dt = datetime.datetime.fromisoformat(
-                        req_time.replace("Z", "+00:00")
-                    )
-                    ts_ms = int(dt.timestamp() * 1000)
-                except (ValueError, TypeError):
-                    ts_ms = None
+        exec_ms = _to_ms(
+            info.get("execution_time_ms")
+            or info.get("execution_duration_ms")
+            or info.get("execution_duration")
+        )
+        ts_ms = _to_ms(info.get("timestamp_ms") or info.get("request_time")) or None
 
         span_dicts: list[dict[str, Any]] = []
         for s in spans_raw:
@@ -1278,6 +1262,9 @@ class TracesNamespace:
                     )
                     collected += 1
                     if collected >= max_results:
+                        # Cancel remaining in-flight fetches
+                        for f in future_to_id:
+                            f.cancel()
                         break
             if not page_token:
                 break

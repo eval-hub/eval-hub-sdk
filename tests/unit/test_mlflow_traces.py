@@ -127,7 +127,9 @@ def test_artifact_server_path_odh_workspace() -> None:
     )
 
 
-def test_artifact_server_path_upstream_run_ids(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_artifact_server_path_upstream_run_ids_with_workspace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("MLFLOW_WORKSPACE", "default")
     uri = "/private/tmp/mlflow/artifacts/6/run-abc/artifacts"
     path = MlflowClient._artifact_server_path(
@@ -135,6 +137,19 @@ def test_artifact_server_path_upstream_run_ids(monkeypatch: pytest.MonkeyPatch) 
     )
     assert path == (
         "/api/2.0/mlflow-artifacts/artifacts/workspaces/default/6/run-abc/artifacts/results/out.json"
+    )
+
+
+def test_artifact_server_path_upstream_run_ids_no_workspace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("MLFLOW_WORKSPACE", raising=False)
+    uri = "/private/tmp/mlflow/artifacts/6/run-abc/artifacts"
+    path = MlflowClient._artifact_server_path(
+        uri, "results/out.json", experiment_id="6", run_id="run-abc"
+    )
+    assert path == (
+        "/api/2.0/mlflow-artifacts/artifacts/6/run-abc/artifacts/results/out.json"
     )
 
 
@@ -344,6 +359,10 @@ def test_materialize_writes_files(tmp_path: Path) -> None:
     names = [f.name for f in files]
     assert "tr-abc.json" in names
     assert "tr-def.json" in names
+
+    # Verify v3 endpoint path was used
+    for call_args in mock_client._get_v3.call_args_list:
+        assert call_args[0][0] == "/traces/get"
 
     content = json.loads((out / "tr-abc.json").read_text())
     assert content["info"]["request_id"] == "abc"
