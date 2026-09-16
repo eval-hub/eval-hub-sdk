@@ -31,6 +31,7 @@ from .api import (
     FrameworkInfo,
     GitTestDataRef,
     HealthResponse,
+    HFTestDataRef,
     # Status and metadata
     JobPhase,
     JobsList,
@@ -121,6 +122,7 @@ __all__ = [
     "BenchmarkConfig",
     "BenchmarkInfo",
     "GitTestDataRef",
+    "HFTestDataRef",
     "PVCTestDataRef",
     "S3TestDataRef",
     "TestDataRef",

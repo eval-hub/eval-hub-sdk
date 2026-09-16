@@ -26,6 +26,7 @@ from evalhub.models import (
     EvaluationExportsOCI,
     ExperimentConfig,
     GitTestDataRef,
+    HFTestDataRef,
     JobStatus,
     JobSubmissionRequest,
     ModelAuth,
@@ -355,6 +356,26 @@ def _build_request_from_flags(
     help="Kubernetes Secret name with username/password keys for private git repos (inline flags only).",
 )
 @click.option(
+    "--test-data-hf-repo-id",
+    default=None,
+    help="Hugging Face Hub repository ID for custom test data (inline flags only).",
+)
+@click.option(
+    "--test-data-hf-revision",
+    default=None,
+    help="HF branch, tag, or commit SHA to download (inline flags only).",
+)
+@click.option(
+    "--test-data-hf-sub-path",
+    default=None,
+    help="Path within the HF repository to mount at /test_data (inline flags only).",
+)
+@click.option(
+    "--test-data-hf-secret",
+    default=None,
+    help="Kubernetes Secret name with a token key for gated HF repositories (inline flags only).",
+)
+@click.option(
     "--wait", "wait_for", is_flag=True, default=False, help="Block until job completes."
 )
 @click.option(
@@ -407,6 +428,10 @@ def eval_run(
     test_data_git_ref: str | None,
     test_data_git_sub_path: str | None,
     test_data_git_secret: str | None,
+    test_data_hf_repo_id: str | None,
+    test_data_hf_revision: str | None,
+    test_data_hf_sub_path: str | None,
+    test_data_hf_secret: str | None,
     wait_for: bool,
     watch_for: bool,
     timeout: float | None,
@@ -455,6 +480,13 @@ def eval_run(
           --model-name llama3 --provider lm_evaluation_harness -b your_benchmark_id \\
           --test-data-git-url https://github.com/org/benchmarks.git --test-data-git-ref v1.0 \\
           --test-data-git-sub-path arc_easy --test-data-git-secret my-git-credentials
+      evalhub eval run --name my-eval --model-url http://vllm:8000/v1 \\
+          --model-name llama3 --provider lm_evaluation_harness -b your_benchmark_id \\
+          --test-data-hf-repo-id eval-hub-test/evalhub-offline-testdata --test-data-hf-revision main
+      evalhub eval run --name my-eval --model-url http://vllm:8000/v1 \\
+          --model-name llama3 --provider lm_evaluation_harness -b your_benchmark_id \\
+          --test-data-hf-repo-id cais/mmlu --test-data-hf-sub-path data/train \\
+          --test-data-hf-secret my-hf-credentials
     """
     if wait_for and watch_for:
         raise click.UsageError("--wait and --watch are mutually exclusive.")
@@ -528,16 +560,24 @@ def eval_run(
             raise click.ClickException(
                 "--test-data-git-sub-path and --test-data-git-secret require --test-data-git-url."
             )
+        if (
+            test_data_hf_revision or test_data_hf_sub_path or test_data_hf_secret
+        ) and not test_data_hf_repo_id:
+            raise click.ClickException(
+                "--test-data-hf-revision, --test-data-hf-sub-path, and "
+                "--test-data-hf-secret require --test-data-hf-repo-id."
+            )
         active_sources = sum(
             [
                 bool(all(s3_flags)),
                 bool(test_data_pvc_claim_name),
                 bool(test_data_git_url),
+                bool(test_data_hf_repo_id),
             ]
         )
         if active_sources > 1:
             raise click.ClickException(
-                "Cannot specify more than one test data source (s3, pvc, git). Use only one."
+                "Cannot specify more than one test data source (s3, pvc, git, hf). Use only one."
             )
         test_data_ref: TestDataRef | None = None
         if all(s3_flags):
@@ -562,6 +602,15 @@ def eval_run(
                     ref=cast(str, test_data_git_ref),
                     sub_path=test_data_git_sub_path,
                     secret_ref=test_data_git_secret,
+                )
+            )
+        elif test_data_hf_repo_id:
+            test_data_ref = TestDataRef(
+                hf=HFTestDataRef(
+                    repo_id=test_data_hf_repo_id,
+                    revision=test_data_hf_revision,
+                    sub_path=test_data_hf_sub_path,
+                    secret_ref=test_data_hf_secret,
                 )
             )
         request = _build_request_from_flags(
