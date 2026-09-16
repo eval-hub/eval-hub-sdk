@@ -37,6 +37,7 @@ from evalhub.models.api import (
     EvaluationExportsOCI,
     EvaluationJob,
     GitTestDataRef,
+    HFTestDataRef,
     JobStatus,
     JobSubmissionRequest,
     ModelConfig,
@@ -742,3 +743,82 @@ class TestJobSubmitGitDataSource:
         assert git.get("url") == "https://github.com/example/dataset.git"
         assert git.get("ref") == "main"
         assert git.get("sub_path") == "data/"
+
+
+def _make_hf_submission_request() -> JobSubmissionRequest:
+    """Build a JobSubmissionRequest with an HF test data source and resolved_sha."""
+    return JobSubmissionRequest(
+        name="hf-data-eval",
+        model=ModelConfig(url="http://localhost:8000/v1", name="test-model"),
+        benchmarks=[
+            BenchmarkConfig(
+                id="arc_easy",
+                provider_id="lm_eval",
+                parameters={},
+                test_data_ref=TestDataRef(
+                    hf=HFTestDataRef(
+                        repo_id="eval-hub-test/evalhub-offline-testdata",
+                        revision="main",
+                        sub_path="staging_sub_path",
+                        secret_ref="my-hf-credentials",
+                    ),
+                    resolved_sha="abc123def456",
+                ),
+            )
+        ],
+    )
+
+
+class TestJobSubmitHFDataSource:
+    """Tests that submit calls strip resolved_sha but preserve hf fields."""
+
+    @pytest.mark.skipif(
+        EVALHUB_TEST_BASE_URL is not None,
+        reason="Skipping in real server mode - would create actual jobs",
+    )
+    def test_sync_submit_omits_resolved_sha_preserves_hf_fields(self) -> None:
+        with SyncEvalHubClient() as client:
+            captured: dict[str, Any] = {}
+
+            def fake_post(path: str, *, json: Any = None, **kwargs: Any) -> Mock:
+                captured["body"] = json
+                return _make_mock_job_response()
+
+            with patch.object(client, "_request_post", side_effect=fake_post):
+                client.jobs.submit(_make_hf_submission_request())
+
+        body = captured["body"]
+        test_data_ref = body["benchmarks"][0].get("test_data_ref", {})
+        hf = test_data_ref.get("hf", {})
+
+        assert "resolved_sha" not in test_data_ref
+        assert hf.get("repo_id") == "eval-hub-test/evalhub-offline-testdata"
+        assert hf.get("revision") == "main"
+        assert hf.get("sub_path") == "staging_sub_path"
+        assert hf.get("secret_ref") == "my-hf-credentials"
+
+    @pytest.mark.skipif(
+        EVALHUB_TEST_BASE_URL is not None,
+        reason="Skipping in real server mode - would create actual jobs",
+    )
+    @pytest.mark.asyncio
+    async def test_async_submit_omits_resolved_sha_preserves_hf_fields(self) -> None:
+        async with AsyncEvalHubClient() as client:
+            captured: dict[str, Any] = {}
+
+            def fake_post(path: str, *, json: Any = None, **kwargs: Any) -> Mock:
+                captured["body"] = json
+                return _make_mock_job_response()
+
+            with patch.object(client, "_request_post", side_effect=fake_post):
+                await client.jobs.submit(_make_hf_submission_request())
+
+        body = captured["body"]
+        test_data_ref = body["benchmarks"][0].get("test_data_ref", {})
+        hf = test_data_ref.get("hf", {})
+
+        assert "resolved_sha" not in test_data_ref
+        assert hf.get("repo_id") == "eval-hub-test/evalhub-offline-testdata"
+        assert hf.get("revision") == "main"
+        assert hf.get("sub_path") == "staging_sub_path"
+        assert hf.get("secret_ref") == "my-hf-credentials"

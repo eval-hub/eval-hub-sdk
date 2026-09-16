@@ -23,6 +23,7 @@ from evalhub.models.api import (
     FrameworkInfo,
     GitTestDataRef,
     HealthResponse,
+    HFTestDataRef,
     JobsList,
     JobStatus,
     JobSubmissionRequest,
@@ -1531,6 +1532,89 @@ class TestGitTestDataRef:
         from evalhub.models import GitTestDataRef as Imported
 
         assert Imported is GitTestDataRef
+
+
+class TestHFTestDataRef:
+    """Tests for HFTestDataRef and TestDataRef HF support."""
+
+    def test_hf_ref_basic(self) -> None:
+        ref = HFTestDataRef(repo_id="eval-hub-test/evalhub-offline-testdata")
+        assert ref.repo_id == "eval-hub-test/evalhub-offline-testdata"
+        assert ref.revision is None
+        assert ref.sub_path is None
+        assert ref.secret_ref is None
+
+    def test_hf_ref_with_all_fields(self) -> None:
+        ref = HFTestDataRef(
+            repo_id="cais/mmlu",
+            revision="main",
+            sub_path="data/train",
+            secret_ref="my-hf-credentials",
+        )
+        assert ref.revision == "main"
+        assert ref.sub_path == "data/train"
+        assert ref.secret_ref == "my-hf-credentials"
+
+    def test_hf_ref_rejects_blank_repo_id(self) -> None:
+        with pytest.raises(ValidationError, match="repo_id must not be blank"):
+            HFTestDataRef(repo_id="   ")
+
+    def test_test_data_ref_with_hf(self) -> None:
+        ref = TestDataRef(
+            hf=HFTestDataRef(repo_id="eval-hub-test/evalhub-offline-testdata")
+        )
+        assert ref.hf is not None
+        assert ref.s3 is None
+        assert ref.pvc is None
+        assert ref.git is None
+
+    def test_test_data_ref_rejects_hf_and_git(self) -> None:
+        with pytest.raises(ValidationError, match="Cannot specify more than one"):
+            TestDataRef(
+                hf=HFTestDataRef(repo_id="org/dataset"),
+                git=GitTestDataRef(url="https://github.com/org/repo.git", ref="main"),
+            )
+
+    def test_resolved_sha_visible_in_response(self) -> None:
+        ref = TestDataRef(
+            hf=HFTestDataRef(repo_id="org/dataset"),
+            resolved_sha="abc123def456",
+        )
+        data = ref.model_dump(exclude_none=True)
+        assert data["resolved_sha"] == "abc123def456"
+
+    def test_resolved_sha_stripped_from_submission_payload(self) -> None:
+        ref = TestDataRef(
+            hf=HFTestDataRef(repo_id="org/dataset", revision="main"),
+            resolved_sha="abc123def456",
+        )
+        data = ref.model_dump(exclude_none=True, context={"for_submission": True})
+        assert "resolved_sha" not in data
+        assert data["hf"]["repo_id"] == "org/dataset"
+        assert data["hf"]["revision"] == "main"
+
+    def test_hf_importable_from_models_package(self) -> None:
+        from evalhub.models import HFTestDataRef as Imported
+
+        assert Imported is HFTestDataRef
+
+    def test_benchmark_config_with_hf(self) -> None:
+        cfg = BenchmarkConfig(
+            id="arc_easy",
+            provider_id="lm_evaluation_harness",
+            test_data_ref=TestDataRef(
+                hf=HFTestDataRef(
+                    repo_id="eval-hub-test/evalhub-offline-testdata",
+                    revision="main",
+                    sub_path="staging_sub_path",
+                )
+            ),
+        )
+        data = cfg.model_dump(exclude_none=True)
+        assert data["test_data_ref"]["hf"]["repo_id"] == (
+            "eval-hub-test/evalhub-offline-testdata"
+        )
+        assert data["test_data_ref"]["hf"]["sub_path"] == "staging_sub_path"
 
 
 class TestResultTypeEnum:

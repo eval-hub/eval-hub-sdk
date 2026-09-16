@@ -899,6 +899,142 @@ class TestEvalRun:
         assert "--test-data-pvc-claim-name" in result.output
         assert "--test-data-pvc-sub-path" in result.output
 
+    def test_run_with_hf_repo_id(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        mock_client.jobs.submit.return_value = _make_job()
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(
+                main,
+                [
+                    "eval",
+                    "run",
+                    "--name",
+                    "hf-eval",
+                    "--model-url",
+                    "http://vllm:8000/v1",
+                    "--model-name",
+                    "llama3",
+                    "--provider",
+                    "lm_eval",
+                    "-b",
+                    "mmlu",
+                    "--test-data-hf-repo-id",
+                    "eval-hub-test/evalhub-offline-testdata",
+                ],
+            )
+        assert result.exit_code == 0
+        req = mock_client.jobs.submit.call_args[0][0]
+        assert req.benchmarks[0].test_data_ref is not None
+        hf = req.benchmarks[0].test_data_ref.hf
+        assert hf is not None
+        assert hf.repo_id == "eval-hub-test/evalhub-offline-testdata"
+        assert hf.revision is None
+        assert hf.sub_path is None
+        assert hf.secret_ref is None
+
+    def test_run_with_hf_all_fields(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        mock_client.jobs.submit.return_value = _make_job()
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(
+                main,
+                [
+                    "eval",
+                    "run",
+                    "--name",
+                    "hf-eval",
+                    "--model-url",
+                    "http://vllm:8000/v1",
+                    "--model-name",
+                    "llama3",
+                    "--provider",
+                    "lm_eval",
+                    "-b",
+                    "mmlu",
+                    "--test-data-hf-repo-id",
+                    "cais/mmlu",
+                    "--test-data-hf-revision",
+                    "main",
+                    "--test-data-hf-sub-path",
+                    "data/train",
+                    "--test-data-hf-secret",
+                    "my-hf-credentials",
+                ],
+            )
+        assert result.exit_code == 0
+        hf = mock_client.jobs.submit.call_args[0][0].benchmarks[0].test_data_ref.hf
+        assert hf.repo_id == "cais/mmlu"
+        assert hf.revision == "main"
+        assert hf.sub_path == "data/train"
+        assert hf.secret_ref == "my-hf-credentials"
+
+    def test_run_hf_and_pvc_mutually_exclusive(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(
+                main,
+                [
+                    "eval",
+                    "run",
+                    "--name",
+                    "hf-eval",
+                    "--model-url",
+                    "http://vllm:8000/v1",
+                    "--model-name",
+                    "llama3",
+                    "--provider",
+                    "lm_eval",
+                    "-b",
+                    "mmlu",
+                    "--test-data-hf-repo-id",
+                    "org/dataset",
+                    "--test-data-pvc-claim-name",
+                    "my-datasets-pvc",
+                ],
+            )
+        assert result.exit_code != 0
+        assert "Cannot specify more than one test data source" in result.output
+        mock_client.jobs.submit.assert_not_called()
+
+    def test_run_hf_sub_path_requires_repo_id(
+        self, runner: CliRunner, config_file: Path, mock_client: MagicMock
+    ) -> None:
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(
+                main,
+                [
+                    "eval",
+                    "run",
+                    "--name",
+                    "hf-eval",
+                    "--model-url",
+                    "http://vllm:8000/v1",
+                    "--model-name",
+                    "llama3",
+                    "--provider",
+                    "lm_eval",
+                    "-b",
+                    "mmlu",
+                    "--test-data-hf-sub-path",
+                    "data/train",
+                ],
+            )
+        assert result.exit_code != 0
+        assert "--test-data-hf-sub-path" in result.output
+        assert "--test-data-hf-repo-id" in result.output
+        mock_client.jobs.submit.assert_not_called()
+
+    def test_eval_run_help_hf_flags(self, runner: CliRunner) -> None:
+        result = runner.invoke(main, ["eval", "run", "--help"])
+        assert result.exit_code == 0
+        assert "--test-data-hf-repo-id" in result.output
+        assert "--test-data-hf-revision" in result.output
+        assert "--test-data-hf-sub-path" in result.output
+        assert "--test-data-hf-secret" in result.output
+
 
 # --- eval status ---
 

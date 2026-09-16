@@ -382,8 +382,40 @@ class GitTestDataRef(BaseModel):
         return self
 
 
+class HFTestDataRef(BaseModel):
+    """Hugging Face Hub repository source for custom test data.
+
+    The repository is downloaded at ``revision`` (or the default branch when omitted)
+    into ``/test_data`` before the adapter runs. When ``sub_path`` is set, only that
+    path within the repository is exposed.
+    """
+
+    repo_id: str = Field(
+        ...,
+        description="Hugging Face Hub repository ID (for example cais/mmlu or org/dataset)",
+    )
+    revision: str | None = Field(
+        default=None,
+        description="Branch, tag, or commit SHA to download (default branch when omitted)",
+    )
+    sub_path: str | None = Field(
+        default=None,
+        description="Optional path within the repository to mount at /test_data",
+    )
+    secret_ref: str | None = Field(
+        default=None,
+        description="Kubernetes Secret name containing a token key for gated repositories",
+    )
+
+    @model_validator(mode="after")
+    def check_repo_id(self) -> HFTestDataRef:
+        if not self.repo_id.strip():
+            raise ValueError("repo_id must not be blank")
+        return self
+
+
 class TestDataRef(BaseModel):
-    """Reference to an external test data source. Exactly one of s3, pvc, or git must be set."""
+    """Reference to an external test data source. Exactly one of s3, pvc, git, or hf must be set."""
 
     s3: S3TestDataRef | None = Field(default=None, description="S3 data source")
     pvc: PVCTestDataRef | None = Field(
@@ -392,6 +424,9 @@ class TestDataRef(BaseModel):
     git: GitTestDataRef | None = Field(
         default=None, description="Git repository data source"
     )
+    hf: HFTestDataRef | None = Field(
+        default=None, description="Hugging Face Hub repository data source"
+    )
     resolved_sha: str | None = Field(
         default=None,
         description="Resolved content identity (e.g. git commit SHA). Server-populated; stripped from submission payloads.",
@@ -399,14 +434,14 @@ class TestDataRef(BaseModel):
 
     @model_validator(mode="after")
     def check_exactly_one_source(self) -> TestDataRef:
-        sources = [s for s in (self.s3, self.pvc, self.git) if s is not None]
+        sources = [s for s in (self.s3, self.pvc, self.git, self.hf) if s is not None]
         if len(sources) > 1:
             raise ValueError(
-                "Cannot specify more than one test data source (s3, pvc, git)"
+                "Cannot specify more than one test data source (s3, pvc, git, hf)"
             )
         if len(sources) == 0:
             raise ValueError(
-                "Must specify exactly one test data source (s3, pvc, or git)"
+                "Must specify exactly one test data source (s3, pvc, git, or hf)"
             )
         return self
 
