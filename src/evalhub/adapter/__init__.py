@@ -79,6 +79,22 @@ from ..models.api import (
 )
 from .auth import ModelCredentials, read_model_auth_key, resolve_model_credentials
 from .callbacks import DefaultCallbacks
+from .collector import (
+    CollectedRecord,
+    CollectionManifest,
+    CollectorConfig,
+    CollectorError,
+    CollectorProtocol,
+    LiveQuestion,
+    collect_responses,
+    collect_responses_from_parameters,
+    extract_by_path,
+    load_questions,
+    substitute_template,
+)
+from .collector import (
+    is_configured as is_collection_configured,
+)
 from .config import MlflowBackend, get_job_spec_path
 from .models import (
     CapabilityEvalEntry,
@@ -149,4 +165,17 @@ __all__ = [
     "ModelConfig",
     "EvaluationResult",
     "OCICoordinates",
+    # Live endpoint collection (experimental)
+    "CollectorConfig",
+    "CollectorProtocol",
+    "CollectorError",
+    "CollectedRecord",
+    "CollectionManifest",
+    "LiveQuestion",
+    "collect_responses",
+    "collect_responses_from_parameters",
+    "is_collection_configured",
+    "load_questions",
+    "extract_by_path",
+    "substitute_template",
 ]
