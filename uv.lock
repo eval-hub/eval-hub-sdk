@@ -682,6 +682,7 @@ dependencies = [
 
 [package.optional-dependencies]
 adapter = [
+    { name = "anyio" },
     { name = "httpx" },
     { name = "olot" },
     { name = "opentelemetry-api" },
@@ -690,6 +691,7 @@ adapter = [
     { name = "oras" },
 ]
 all = [
+    { name = "anyio" },
     { name = "click" },
     { name = "eval-hub-mcp" },
     { name = "httpx" },
@@ -709,6 +711,7 @@ all = [
     { name = "ruff" },
 ]
 cli = [
+    { name = "anyio" },
     { name = "click" },
     { name = "httpx" },
     { name = "packaging" },
@@ -716,12 +719,15 @@ cli = [
     { name = "rich" },
 ]
 client = [
+    { name = "anyio" },
     { name = "httpx" },
 ]
 core = [
+    { name = "anyio" },
     { name = "httpx" },
 ]
 dev = [
+    { name = "anyio" },
     { name = "click" },
     { name = "httpx" },
     { name = "mypy" },
@@ -737,10 +743,14 @@ dev = [
     { name = "ruff" },
 ]
 examples = [
+    { name = "aiohttp" },
     { name = "lm-eval" },
+    { name = "nltk" },
+    { name = "pillow" },
     { name = "ragas" },
 ]
 mcp = [
+    { name = "anyio" },
     { name = "click" },
     { name = "eval-hub-mcp" },
     { name = "httpx" },
@@ -749,6 +759,7 @@ mcp = [
     { name = "rich" },
 ]
 server = [
+    { name = "anyio" },
     { name = "click" },
     { name = "eval-hub-server" },
     { name = "httpx" },
@@ -777,6 +788,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiohttp", marker = "extra == 'examples'", specifier = ">=3.14.3" },
+    { name = "anyio", marker = "extra == 'core'", specifier = ">=4.14.2" },
     { name = "click", marker = "extra == 'cli'", specifier = ">=8.1.0" },
     { name = "eval-hub-mcp", marker = "extra == 'mcp'", specifier = ">=1.0.0" },
     { name = "eval-hub-sdk", extras = ["adapter", "cli", "client", "core", "dev", "mcp"], marker = "extra == 'all'" },
@@ -791,6 +804,7 @@ requires-dist = [
     { name = "importlib-metadata", specifier = ">=6.0.0" },
     { name = "lm-eval", marker = "extra == 'examples'", specifier = ">=0.4.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = "==1.19.1" },
+    { name = "nltk", marker = "extra == 'examples'", specifier = ">=3.10.3" },
     { name = "olot", marker = "extra == 'adapter'", specifier = ">=0.1.15" },
     { name = "opentelemetry-api", marker = "extra == 'adapter'", specifier = ">=1.44.0" },
     { name = "opentelemetry-exporter-otlp-proto-grpc", marker = "extra == 'adapter'", specifier = ">=1.44.0" },
@@ -799,6 +813,7 @@ requires-dist = [
     { name = "opentelemetry-sdk", marker = "extra == 'dev'", specifier = ">=1.44.0" },
     { name = "oras", marker = "extra == 'adapter'", specifier = ">=0.2.39" },
     { name = "packaging", marker = "extra == 'cli'", specifier = ">=21.0" },
+    { name = "pillow", marker = "extra == 'examples'", specifier = ">=12.3.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.4.0" },
     { name = "pydantic", specifier = ">=2.7.0" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },
