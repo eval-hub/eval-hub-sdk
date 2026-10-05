@@ -238,6 +238,74 @@ results = adapter.run_benchmark_job(adapter.job_spec, callbacks)
 - **Status updates**: Sent to sidecar if `sidecar_url` is provided, otherwise logged locally. Both `report_status` and `report_results` events always include `benchmark_index` (and `provider_id` when set) so the service can associate events with the correct benchmark in multi-benchmark jobs.
 - **OCI artifacts**: Created via SDK callbacks and pushed to the OCI registry through the sidecar-authenticated flow when mode is Kubernetes.
 
+#### Saving MLflow artifacts
+
+`DefaultCallbacks.mlflow.save()` saves metrics, params, and artifacts in the same
+run when `job_spec.experiment_name` is configured. Mix small in-memory artifacts
+with file references to stream large result files:
+
+```python
+from pathlib import Path
+
+from evalhub.adapter.mlflow import MlflowArtifact, MlflowFileArtifact
+
+output_dir = Path("/tmp/lighteval-results")
+artifacts: list[MlflowArtifact | MlflowFileArtifact] = [
+    MlflowFileArtifact(
+        path=f"results/{file.relative_to(output_dir).as_posix()}",
+        local_path=file,
+    )
+    for file in output_dir.rglob("*")
+    if file.is_file()
+]
+artifacts.append(
+    MlflowArtifact("summary.json", b'{"status": "complete"}', "application/json")
+)
+run_id = callbacks.mlflow.save(results, job_spec, artifacts=artifacts)
+if run_id:
+    results.mlflow_run_id = run_id
+# Return results through the normal adapter lifecycle.
+```
+
+`path` is the full destination relative to the run artifact root, including the
+filename; it can differ from `local_path`. Source files must be complete,
+unchanged, and available until synchronous `save()` returns. The SDK opens and
+closes files but does not own or delete them. The same directory can also be used
+for OCI export.
+
+The default ODH backend streams files in 64 KiB chunks and infers Content-Type
+from the source extension, falling back to `application/octet-stream`. Pass
+`content_type` on `MlflowFileArtifact` to override it. File uploads include
+`Content-Length` from the opened file's size while preserving bounded reads. With
+`EVALHUB_MLFLOW_BACKEND=upstream`, install `mlflow` or `mlflow-skinny`; the official
+API does not accept a MIME override. Upstream uploads matching filenames
+directly; differing destination filenames use a temporary hard link or a bounded
+disk copy, cleaned up even if uploading fails. Existing `MlflowArtifact` bytes
+constructors and lists remain supported. No experiment means `save()` returns
+`None` without opening artifact files.
+
+Adapters in separate repositories can replace artifact `file.read_bytes()`
+calls with `MlflowFileArtifact` references after a release containing this API.
+
+The E2E suite includes uploads and downloads against a local MLflow server:
+
+```bash
+make test-e2e
+```
+
+MLflow 3.10.* is pinned in the dev dependency group in `pyproject.toml` to keep
+the E2E test exercising its Content-Length requirement.
+The target uses `uv run pytest`, which synchronizes the dev dependencies before
+running the test, matching the other Make targets.
+The E2E fixture starts MLflow's default server on an unused localhost port with a
+temporary SQLite database and artifact directory, then stops it after testing.
+It uploads nonempty and empty files and downloads them to verify byte-for-byte
+equality. The MLflow test requires no preexisting server; other E2E tests need
+the EvalHub server binary and an OCI registry. The existing CI E2E job runs the
+whole suite, including the MLflow test. This
+checks the local MLflow artifact API; deployment-specific sidecar behavior still
+requires a check against the deployed ODH proxy.
+
 ### 4. Containerise Your Adapter
 
 Create a Dockerfile for your adapter:

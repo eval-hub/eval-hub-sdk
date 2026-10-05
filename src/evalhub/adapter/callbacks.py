@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +11,7 @@ from evalhub.adapter.models.adapter import FrameworkAdapter
 
 from ..models.api import EvaluationResult, JobStatus, MessageOrigin, PrimaryScore
 from .config import EvalHubMode, MlflowBackend
-from .mlflow import MlflowArtifact
+from .mlflow import Metric, MlflowArtifact, MlflowFileArtifact, Param
 from .models import (
     EnvironmentCardMetadata,
     ErrorInfo,
@@ -41,14 +41,14 @@ class _MlflowOps:
 
     Usage from an adapter::
 
-        from evalhub.adapter.mlflow import MlflowArtifact
+        from evalhub.adapter.mlflow import MlflowArtifact, MlflowFileArtifact
 
         rid = callbacks.mlflow.save(
             results,
             job_spec,
             artifacts=[
                 MlflowArtifact("results.json", json_bytes, "application/json"),
-                MlflowArtifact("report.html", html_bytes, "text/html"),
+                MlflowFileArtifact("reports/report.html", report_path),
             ],
         )
         if rid:
@@ -56,6 +56,9 @@ class _MlflowOps:
 
     Metrics, params, and all artifacts are saved in a single MLflow run.
     Does nothing if ``job_spec.experiment_name`` is not set (returns ``None``).
+    Artifact paths include the destination filename relative to the run root.
+    Source files must be complete, unchanged, and available until synchronous
+    ``save()`` returns. The SDK does not own or delete them.
 
     Returns the MLflow run id when a run is created. Assign it to
     ``results.mlflow_run_id`` before ``callbacks.report_results(results)`` so
@@ -85,7 +88,7 @@ class _MlflowOps:
         self,
         results: JobResults,
         job_spec: JobSpec,
-        artifacts: list[MlflowArtifact] | None = None,
+        artifacts: Sequence[MlflowArtifact | MlflowFileArtifact] | None = None,
     ) -> str | None:
         if not job_spec.experiment_name:
             logger.debug("No MLflow experiment configured, skipping")
@@ -118,8 +121,8 @@ class _MlflowOps:
     def _build_params_metrics(
         results: JobResults,
         job_spec: JobSpec,
-    ) -> tuple[list, list]:
-        from .mlflow import Metric, Param, sanitize_metric_key_for_api
+    ) -> tuple[list[Param], list[Metric]]:
+        from .mlflow import sanitize_metric_key_for_api
 
         params = [
             Param("benchmark_id", results.benchmark_id),
@@ -190,7 +193,7 @@ class _MlflowOps:
         self,
         results: JobResults,
         job_spec: JobSpec,
-        artifacts: list[MlflowArtifact] | None,
+        artifacts: Sequence[MlflowArtifact | MlflowFileArtifact] | None = None,
     ) -> str:
         from .mlflow import MlflowClient
 
@@ -212,12 +215,20 @@ class _MlflowOps:
                 run_id = rid
                 client.log_batch(run_id, metrics=metrics, params=params)
                 for artifact in artifacts or []:
-                    client.upload_artifact(
-                        run_id,
-                        artifact.path,
-                        artifact.content,
-                        artifact.content_type,
-                    )
+                    if isinstance(artifact, MlflowFileArtifact):
+                        client.upload_artifact_file(
+                            run_id,
+                            artifact.path,
+                            artifact.local_path,
+                            artifact.content_type,
+                        )
+                    else:
+                        client.upload_artifact(
+                            run_id,
+                            artifact.path,
+                            artifact.content,
+                            artifact.content_type,
+                        )
 
         logger.info(
             "Saved to MLflow (odh) experiment '%s' (run_id: %s) — "
@@ -233,13 +244,15 @@ class _MlflowOps:
         self,
         results: JobResults,
         job_spec: JobSpec,
-        artifacts: list[MlflowArtifact] | None,
+        artifacts: Sequence[MlflowArtifact | MlflowFileArtifact] | None = None,
     ) -> str:
+        import importlib
+        import os
+        import shutil
         import tempfile
-        from pathlib import Path as _Path
 
         try:
-            import mlflow  # type: ignore[import-not-found]
+            mlflow = importlib.import_module("mlflow")
         except ImportError as exc:
             raise RuntimeError(
                 "EVALHUB_MLFLOW_BACKEND=upstream requires the 'mlflow' package. "
@@ -261,15 +274,27 @@ class _MlflowOps:
             mlflow.log_metrics({m.key: m.value for m in metrics})
 
             for artifact in artifacts or []:
-                artifact_file = _Path(artifact.path)
+                artifact_file = Path(artifact.path)
                 artifact_dir = (
                     str(artifact_file.parent)
                     if str(artifact_file.parent) != "."
                     else None
                 )
+                if isinstance(artifact, MlflowFileArtifact):
+                    source = Path(artifact.local_path)
+                    if source.name == artifact_file.name:
+                        mlflow.log_artifact(str(source), artifact_path=artifact_dir)
+                        continue
                 with tempfile.TemporaryDirectory() as tmpdir:
-                    tmp_file = _Path(tmpdir) / artifact_file.name
-                    tmp_file.write_bytes(artifact.content)
+                    tmp_file = Path(tmpdir) / artifact_file.name
+                    if isinstance(artifact, MlflowFileArtifact):
+                        try:
+                            os.link(source.resolve(), tmp_file)
+                        except OSError:
+                            with source.open("rb") as src, tmp_file.open("wb") as dst:
+                                shutil.copyfileobj(src, dst, length=65536)
+                    else:
+                        tmp_file.write_bytes(artifact.content)
                     mlflow.log_artifact(str(tmp_file), artifact_path=artifact_dir)
 
         logger.info(

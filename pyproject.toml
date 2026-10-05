@@ -216,6 +216,7 @@ dev = [
     "eval-hub-server",
     "fastapi>=0.124.4",
     "httpx>=0.28.1",
+    "mlflow==3.10.*",
     "mypy>=1.19.1",
     "olot>=0.1.15",
     "oras>=0.2.39",

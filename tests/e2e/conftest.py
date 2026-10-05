@@ -1,9 +1,14 @@
 """Shared fixtures and utilities for E2E tests."""
 
+import importlib.util
 import logging
+import os
 import platform
 import shutil
+import signal
+import socket
 import subprocess
+import sys
 import tempfile
 import time
 from collections.abc import Generator
@@ -14,6 +19,88 @@ import httpx
 import pytest
 
 logger = logging.getLogger(__name__)
+
+
+@pytest.fixture(scope="module")
+def mlflow_server(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Generator[str, None, None]:
+    """Start an isolated MLflow artifact server using the test interpreter."""
+    if importlib.util.find_spec("mlflow") is None:
+        pytest.skip("MLflow is not installed; run uv sync to install dev dependencies")
+
+    server_dir = tmp_path_factory.mktemp("mlflow-server")
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        port = listener.getsockname()[1]
+    base_url = f"http://127.0.0.1:{port}"
+    # Do not inherit deployment credentials, workspace, or server configuration.
+    server_env = {
+        key: value for key, value in os.environ.items() if not key.startswith("MLFLOW_")
+    }
+    command = [
+        sys.executable,
+        "-m",
+        "mlflow",
+        "server",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        str(port),
+        "--workers",
+        "1",
+        "--backend-store-uri",
+        f"sqlite:///{server_dir / 'mlflow.db'}",
+        "--serve-artifacts",
+        "--default-artifact-root",
+        "mlflow-artifacts:/",
+        "--artifacts-destination",
+        str(server_dir / "artifacts"),
+    ]
+    log_file = server_dir / "server.log"
+    with log_file.open("w") as log:
+        process = subprocess.Popen(
+            command,
+            cwd=server_dir,
+            env=server_env,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            start_new_session=os.name != "nt",
+        )
+        try:
+            deadline = time.monotonic() + 60
+            with httpx.Client(timeout=1.0, trust_env=False) as health_client:
+                while time.monotonic() < deadline:
+                    if process.poll() is not None:
+                        pytest.fail(
+                            f"MLflow exited during startup:\n{log_file.read_text()}"
+                        )
+                    try:
+                        if health_client.get(f"{base_url}/health").status_code == 200:
+                            break
+                    except httpx.TransportError:
+                        pass
+                    time.sleep(0.2)
+                else:
+                    pytest.fail(f"MLflow startup timed out:\n{log_file.read_text()}")
+            yield base_url
+        finally:
+            # The MLflow CLI launches a child server; stop the entire process group.
+            if os.name == "nt":
+                process.terminate()
+            else:
+                try:
+                    os.killpg(process.pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                if os.name == "nt":
+                    process.kill()
+                else:
+                    os.killpg(process.pid, signal.SIGKILL)
+                process.wait(timeout=10)
 
 
 def pytest_configure(config: Any) -> None:
@@ -76,7 +163,10 @@ def evalhub_server_with_real_config() -> Generator[str, None, None]:
         pytest.skip: If server binary or config directory is not available
     """
     # Ensure binary is available
-    binary_path = shutil.which("eval-hub-server")
+    binary_path = shutil.which(
+        "eval-hub-server",
+        path=f"{Path(sys.executable).parent}{os.pathsep}{os.environ.get('PATH', '')}",
+    )
     if not binary_path:
         pytest.skip(
             "eval-hub-server binary not available. "
