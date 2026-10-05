@@ -85,9 +85,13 @@ def mlflow_server(
                     pytest.fail(f"MLflow startup timed out:\n{log_file.read_text()}")
             yield base_url
         finally:
-            # The MLflow CLI launches a child server; stop the entire process group.
+            # The MLflow CLI launches a child server; stop the entire process tree.
             if os.name == "nt":
-                process.terminate()
+                subprocess.run(
+                    ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                    check=False,
+                    timeout=10,
+                )
             else:
                 try:
                     os.killpg(process.pid, signal.SIGTERM)
