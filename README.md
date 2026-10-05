@@ -252,10 +252,10 @@ from evalhub.adapter.mlflow import MlflowArtifact, MlflowFileArtifact
 output_dir = Path("/tmp/lighteval-results")
 artifacts: list[MlflowArtifact | MlflowFileArtifact] = [
     MlflowFileArtifact(
-        path=f"results/{file.relative_to(output_dir).as_posix()}",
+        path=file.name,
         local_path=file,
     )
-    for file in output_dir.rglob("*")
+    for file in output_dir.glob("*")
     if file.is_file()
 ]
 artifacts.append(
@@ -266,6 +266,10 @@ if run_id:
     results.mlflow_run_id = run_id
 # Return results through the normal adapter lifecycle.
 ```
+
+This example uploads files directly from `output_dir` to the MLflow run artifact
+root using their existing filenames. To place a file in a subdirectory, use a
+`path` such as `"reports/results.json"`.
 
 `path` is the full destination relative to the run artifact root, including the
 filename; it can differ from `local_path`. Source files must be complete,
