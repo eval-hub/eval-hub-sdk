@@ -107,6 +107,21 @@ class MlflowArtifact:
 
 
 @dataclass
+class MlflowFileArtifact:
+    """A local file saved at ``path`` relative to the run artifact root.
+
+    The source must be complete, unchanged, and available until synchronous
+    ``save()`` returns. The SDK does not own or delete the source file.
+    ``content_type`` is inferred from the source extension when omitted (ODH
+    only; the upstream API does not accept a MIME override).
+    """
+
+    path: str
+    local_path: str | Path
+    content_type: str | None = None
+
+
+@dataclass
 class SpanInfo:
     """A single span within an MLflow trace."""
 
@@ -591,11 +606,18 @@ class MlflowClient:
         )
 
     def _put_artifact(
-        self, path: str, content: bytes | Iterable[bytes], content_type: str
+        self,
+        path: str,
+        content: bytes | Iterable[bytes],
+        content_type: str,
+        *,
+        content_length: int | None = None,
     ) -> None:
         """Raw PUT to the MLflow Artifacts server."""
         url = f"{self._tracking_uri}{path}"
         headers = {"Content-Type": content_type}
+        if content_length is not None:
+            headers["Content-Length"] = str(content_length)
         logger.debug("PUT artifact url=%s content_type=%s", url, content_type)
         resp = self._client.put(url, content=content, headers=headers)
         logger.debug(
@@ -611,6 +633,8 @@ class MlflowClient:
         artifact_path: str,
         content: bytes | Iterable[bytes],
         content_type: str = "application/octet-stream",
+        *,
+        content_length: int | None = None,
     ) -> None:
         """Upload content to the MLflow Artifacts server.
 
@@ -620,6 +644,8 @@ class MlflowClient:
         The run's ``artifact_uri`` is resolved first so the file lands at the
         correct path in the artifact store (the ODH fork ignores ``?run_id=``
         for storage path resolution).
+        When supplying an iterable, ``content_length`` can specify its known
+        total byte length without buffering it.
         """
         run_info = self.get_run(run_id)
         path = self._artifact_server_path(
@@ -628,7 +654,7 @@ class MlflowClient:
             experiment_id=run_info.experiment_id,
             run_id=run_info.run_id,
         )
-        self._put_artifact(path, content, content_type)
+        self._put_artifact(path, content, content_type, content_length=content_length)
         logger.debug("Uploaded artifact %s for run %s", artifact_path, run_id)
 
     def upload_artifact_file(
@@ -636,22 +662,28 @@ class MlflowClient:
         run_id: str,
         artifact_path: str,
         local_path: str | Path,
+        content_type: str | None = None,
     ) -> None:
         """Upload a local file to the MLflow Artifacts server.
 
-        The Content-Type is guessed from the file extension; unknown types
-        fall back to ``application/octet-stream``.
+        An explicit Content-Type overrides inference from the source extension;
+        unknown types fall back to ``application/octet-stream``. The SDK opens
+        and closes the source file and reads it in bounded 64 KiB chunks.
+        Content-Length comes from the opened file's size, including zero for
+        empty files. Keep the file complete and unchanged during the upload.
         """
         local_path = Path(local_path)
-        content_type, _ = mimetypes.guess_type(str(local_path))
-        if not content_type:
-            content_type = "application/octet-stream"
+        if content_type is None:
+            content_type = (
+                mimetypes.guess_type(str(local_path))[0] or "application/octet-stream"
+            )
         with local_path.open("rb") as f:
             self.upload_artifact(
                 run_id,
                 artifact_path,
                 iter(lambda: f.read(65536), b""),
                 content_type,
+                content_length=os.fstat(f.fileno()).st_size,
             )
 
     def list_artifacts(self, run_id: str, path: str = "") -> list[ArtifactInfo]:

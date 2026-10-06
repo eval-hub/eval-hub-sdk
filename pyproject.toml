@@ -29,6 +29,7 @@ dependencies = [
     "pydantic>=2.7.0",
     "pydantic-settings>=2.0.0",
     "importlib-metadata>=6.0.0",
+    "urllib3>=2.8.0",
 ]
 
 [project.optional-dependencies]
@@ -78,6 +79,7 @@ dev = [
     "ruff==0.1.6",  # Match ruff-pre-commit v0.1.6
     "mypy==1.19.1",  # Match mirrors-mypy v1.19.1
     "pre-commit>=3.4.0",
+    "virtualenv>=21.7.13",
     "opentelemetry-sdk>=1.44.0",
     "opentelemetry-exporter-otlp-proto-grpc>=1.44.0",
 ]
@@ -216,6 +218,7 @@ dev = [
     "eval-hub-server",
     "fastapi>=0.124.4",
     "httpx>=0.28.1",
+    "mlflow==3.10.*",
     "mypy>=1.19.1",
     "olot>=0.1.15",
     "oras>=0.2.39",
