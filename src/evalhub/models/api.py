@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, cast
+from typing import Any, ClassVar, Literal, cast
 from urllib.parse import urlsplit
 
 from pydantic import (
@@ -225,6 +225,77 @@ class MessageInfo(BaseModel):
     )
 
 
+class _OCIOptionalFieldsModel(BaseModel):
+    """Omit absent OCI fields without changing serialization of other fields."""
+
+    _oci_optional_fields: ClassVar[tuple[str, ...]] = ()
+
+    @model_serializer(mode="wrap")
+    def serialize_oci_fields(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, Any]:
+        data = cast(dict[str, Any], handler(self))
+        for name in self._oci_optional_fields:
+            if data.get(name) is None:
+                data.pop(name, None)
+        return data
+
+
+class OCISigningConfig(_OCIOptionalFieldsModel):
+    """Signing configuration only; no key resolution or signing is performed."""
+
+    _oci_optional_fields = ("secret_ref",)
+    type: Literal["key-pair"] = Field(..., description="Signing method")
+    secret_ref: str | None = Field(
+        default=None,
+        description="Tenant namespace Kubernetes Secret containing private.key",
+    )
+
+    @field_validator("secret_ref")
+    @classmethod
+    def validate_secret_ref(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("secret_ref cannot be empty or whitespace-only")
+        return value
+
+
+class OCIProcessingStatus(BaseModel):
+    """Stored server progress, including unfamiliar states, and its message."""
+
+    state: str
+    message: MessageInfo
+
+
+class OCIArtifactReference(BaseModel):
+    """Actual published artifact identity, preserved exactly as returned."""
+
+    oci_digest: str
+    oci_reference: str
+
+    @field_validator("oci_digest", "oci_reference")
+    @classmethod
+    def validate_identity(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Artifact identity cannot be empty or whitespace-only")
+        return value
+
+
+class OCISigningResult(BaseModel):
+    """Server-reported signing method, separate from request configuration."""
+
+    type: Literal["key-pair"]
+
+
+class EvaluationOCIResults(_OCIOptionalFieldsModel):
+    """Independently optional OCI outputs; no workflow outcomes are inferred."""
+
+    _oci_optional_fields = ("status", "evaluation_card", "evaluation_bundle", "signing")
+    status: OCIProcessingStatus | None = None
+    evaluation_card: OCIArtifactReference | None = None
+    evaluation_bundle: OCIArtifactReference | None = None
+    signing: OCISigningResult | None = None
+
+
 class EvaluationJobResource(BaseModel):
     """Resource information for an evaluation job."""
 
@@ -309,8 +380,11 @@ class BenchmarkResult(BaseModel):
     )
 
 
-class EvaluationJobResults(BaseModel):
+class EvaluationJobResults(_OCIOptionalFieldsModel):
     """Results from an evaluation job."""
+
+    _oci_optional_fields = ("oci",)
+    oci: EvaluationOCIResults | None = None
 
     benchmarks: list[BenchmarkResult] = Field(
         default_factory=list, description="Benchmark results"
@@ -550,8 +624,11 @@ class OCIConnectionConfig(BaseModel):
     )
 
 
-class EvaluationExportsOCI(BaseModel):
+class EvaluationExportsOCI(_OCIOptionalFieldsModel):
     """OCI export configuration for an evaluation job."""
+
+    _oci_optional_fields = ("signing",)
+    signing: OCISigningConfig | None = None
 
     coordinates: OCICoordinates = Field(..., description="OCI artifact coordinates")
     k8s: OCIConnectionConfig | None = Field(

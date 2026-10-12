@@ -15,6 +15,7 @@ from typing import Any, cast
 
 import click
 import yaml
+from pydantic import ValidationError
 
 import evalhub
 from evalhub.client.job_logs import TERMINAL_JOB_STATES, JobLogOptions
@@ -24,6 +25,7 @@ from evalhub.models import (
     CollectionRef,
     EvaluationExports,
     EvaluationExportsOCI,
+    EvaluationJob,
     ExperimentConfig,
     GitTestDataRef,
     HFTestDataRef,
@@ -495,7 +497,10 @@ def eval_run(
 
     if config_file:
         data = _load_config_file(config_file)
-        request = JobSubmissionRequest(**data)
+        try:
+            request = JobSubmissionRequest(**data)
+        except ValidationError as exc:
+            raise click.ClickException(f"Invalid job configuration: {exc}") from exc
     else:
         if not all([name, model_url, model_name, provider, benchmark]):
             raise click.ClickException(
@@ -647,6 +652,8 @@ def eval_run(
             f"Job {job.id} finished with state: {job.effective_state.value}",
             err=structured,
         )
+        if not structured:
+            _print_oci_detail(job)
         if job.effective_state == JobStatus.FAILED:
             ctx.exit(1)
 
@@ -702,6 +709,9 @@ def eval_status(
 ) -> None:
     """Show job status or list all jobs.
 
+    Default status output shows only the OCI state. Use JSON or YAML for
+    complete OCI configuration, messages, and artifact references.
+
     \b
     Examples:
       evalhub eval status                            # list all jobs
@@ -740,6 +750,7 @@ def eval_status(
                 "id": j.id,
                 "name": j.name,
                 "state": j.state.value,
+                "oci_state": _oci_state(j),
                 "provider": j.benchmarks[0].provider_id if j.benchmarks else "",
                 "benchmarks": len(j.benchmarks) if j.benchmarks else 0,
                 "created": str(j.resource.created_at),
@@ -749,7 +760,15 @@ def eval_status(
         output(
             rows,
             output_format=output_format,
-            columns=["id", "name", "state", "provider", "benchmarks", "created"],
+            columns=[
+                "id",
+                "name",
+                "state",
+                "oci_state",
+                "provider",
+                "benchmarks",
+                "created",
+            ],
         )
         return
 
@@ -820,6 +839,8 @@ def _watch_job_logs(
         ctx.exit(2)
 
     click.echo(f"Job {job_id} finished with state: {final_state.value}", err=True)
+    if final_job is not None:
+        _print_oci_detail(final_job, err=True)
     if final_state == JobStatus.FAILED:
         ctx.exit(1)
     return final_job
@@ -844,6 +865,8 @@ def _watch_job(client: Any, job_id: str, poll_interval: float) -> None:
                 phase_info = f" phase={benchmarks[0].phase.value}"
             benchmarks_status = f" [{done}/{len(benchmarks)} benchmarks{phase_info}]"
         line = f"{job.id}: {job.effective_state.value}{benchmarks_status}"
+        if _oci_state(job):
+            line += f" OCI={_oci_state(job)}"
         cols = shutil.get_terminal_size().columns
         click.echo(f"\r{line:<{cols}}", nl=False)
         sys.stdout.flush()
@@ -876,6 +899,23 @@ def _print_job_detail(job: Any) -> None:
 
     if job.status and job.status.message:
         click.echo(f"\nMessage: {job.status.message.message}")
+    _print_oci_detail(job)
+
+
+def _oci_state(job: EvaluationJob) -> str:
+    """Return only the server's reported OCI state."""
+    oci = job.results.oci if job.results else None
+    return oci.status.state if oci and oci.status else ""
+
+
+def _print_oci_detail(job: EvaluationJob, *, err: bool = False) -> None:
+    """Display only OCI state separately from evaluation."""
+    config = job.exports.oci if job.exports else None
+    oci = job.results.oci if job.results else None
+    if config is None and oci is None:
+        return
+    click.echo("\nOCI:", err=err)
+    click.echo(f"  State: {_oci_state(job) or 'unavailable'}", err=err)
 
 
 @eval.command("results")
@@ -885,6 +925,9 @@ def _print_job_detail(job: Any) -> None:
 @handle_api_errors
 def eval_results(ctx: click.Context, job_id: str, output_format: str) -> None:
     """Retrieve and display evaluation results.
+
+    OCI reporting is omitted. Use eval status --format json or yaml for
+    job-level OCI information.
 
     \b
     Examples:
@@ -902,18 +945,18 @@ def eval_results(ctx: click.Context, job_id: str, output_format: str) -> None:
             err=True,
         )
 
-    if not job.results or not job.results.benchmarks:
-        click.echo("No results available.")
-        return
-
     if output_format in ("json", "yaml"):
-        data = [b.model_dump(mode="json") for b in job.results.benchmarks]
+        data = (
+            [b.model_dump(mode="json") for b in job.results.benchmarks]
+            if job.results
+            else []
+        )
         output(data, output_format=output_format)
         return
 
     # Table/CSV: flatten metrics into rows
     rows: list[dict[str, Any]] = []
-    for b in job.results.benchmarks:
+    for b in job.results.benchmarks if job.results else []:
         for metric_name, metric_value in b.metrics.items():
             rows.append(
                 {
@@ -924,17 +967,29 @@ def eval_results(ctx: click.Context, job_id: str, output_format: str) -> None:
                 }
             )
 
-    if not rows:
-        click.echo("No metric results available.")
+    if output_format == "csv":
+        output(
+            rows,
+            output_format=output_format,
+            columns=["benchmark", "provider", "metric", "value"],
+        )
         return
 
-    output(
-        rows,
-        output_format=output_format,
-        columns=["benchmark", "provider", "metric", "value"],
-    )
+    if rows:
+        output(
+            rows,
+            output_format=output_format,
+            columns=["benchmark", "provider", "metric", "value"],
+        )
+    elif not job.results or not job.results.benchmarks:
+        if job.results and job.results.oci is not None:
+            click.echo("No benchmark results available.")
+        else:
+            click.echo("No results available.")
+    else:
+        click.echo("No metric results available.")
 
-    if job.results.mlflow_experiment_url:
+    if job.results and job.results.mlflow_experiment_url:
         click.echo(f"\nMLflow experiment: {job.results.mlflow_experiment_url}")
 
 
@@ -1408,6 +1463,8 @@ def collections_run(
             f"Job {job.id} finished with state: {job.effective_state.value}",
             err=structured,
         )
+        if not structured:
+            _print_oci_detail(job)
         if job.effective_state == JobStatus.FAILED:
             ctx.exit(1)
 

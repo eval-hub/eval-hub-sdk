@@ -164,6 +164,9 @@ class AsyncJobsResource:
     ) -> EvaluationJob:
         """Wait for an evaluation job to complete.
 
+        OCI post-processing may still be active or unavailable when this returns.
+        Call ``get`` again to observe later stored OCI outcomes.
+
         Args:
             job_id: The job identifier
             timeout: Maximum time to wait in seconds (optional)
@@ -415,6 +418,9 @@ class SyncJobsResource:
         tenant: str | None = None,
     ) -> EvaluationJob:
         """Wait for an evaluation job to complete.
+
+        OCI post-processing may still be active or unavailable when this returns.
+        Call ``get`` again to observe later stored OCI outcomes.
 
         Args:
             job_id: The job identifier

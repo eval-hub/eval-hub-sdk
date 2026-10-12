@@ -34,6 +34,7 @@ from .models import (
     EvaluationExports,
     EvaluationExportsOCI,
     EvaluationJob,
+    EvaluationOCIResults,
     EvaluationResponse,
     EvaluationResult,
     EvaluationStatus,
@@ -44,8 +45,12 @@ from .models import (
     JobStatus,
     JobSubmissionRequest,
     ModelConfig,
+    OCIArtifactReference,
     OCIConnectionConfig,
     OCICoordinates,
+    OCIProcessingStatus,
+    OCISigningConfig,
+    OCISigningResult,
 )
 
 # ATIF trajectory models — always available (pure pydantic + stdlib)
@@ -105,6 +110,11 @@ __all__ = [
     "ModelConfig",
     "OCIConnectionConfig",
     "OCICoordinates",
+    "EvaluationOCIResults",
+    "OCIArtifactReference",
+    "OCIProcessingStatus",
+    "OCISigningConfig",
+    "OCISigningResult",
 ]
 
 # Conditional imports based on available extras
