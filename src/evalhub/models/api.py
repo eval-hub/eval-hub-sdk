@@ -520,10 +520,6 @@ class OCICoordinates(BaseModel):
         ..., description="OCI repository (e.g., 'my-org/my-repo')"
     )
     oci_tag: str | None = Field(default=None, description="OCI tag (e.g., 'eval-123')")
-    oci_subject: str | None = Field(
-        default=None,
-        description="Optional OCI subject identifier (in same registry and repo)",
-    )
     annotations: dict[str, str] = Field(
         default_factory=dict, description="Custom annotations"
     )

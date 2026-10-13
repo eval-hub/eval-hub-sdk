@@ -558,7 +558,6 @@ class TestJobSubmissionRequest:
                         oci_host="quay.io",
                         oci_repository="my-org/my-repo",
                         oci_tag="eval-123",
-                        oci_subject="quay.io/my-org/my-repo:model",
                         annotations={"model": "llama2"},
                     ),
                     k8s=OCIConnectionConfig(connection="my-pull-secret"),
