@@ -20,7 +20,6 @@ class TestOCICoordinates:
         assert coord.oci_host == "quay.io"
         assert coord.oci_repository == "my-org/my-repo"
         assert coord.oci_tag is None
-        assert coord.oci_subject is None
         assert coord.annotations == {}
 
     def test_oci_coordinates_all_fields(self) -> None:
@@ -29,13 +28,11 @@ class TestOCICoordinates:
             oci_host="quay.io",
             oci_repository="my-org/my-repo",
             oci_tag="eval-123",
-            oci_subject="quay.io/my-org/my-repo:model",
             annotations={"model": "quay.io/my-org/my-repo:model"},
         )
         assert coord.oci_host == "quay.io"
         assert coord.oci_repository == "my-org/my-repo"
         assert coord.oci_tag == "eval-123"
-        assert coord.oci_subject == "quay.io/my-org/my-repo:model"
         assert coord.annotations == {"model": "quay.io/my-org/my-repo:model"}
 
     def test_oci_coordinates_missing_required_fields(self) -> None:
@@ -52,13 +49,11 @@ class TestOCICoordinates:
             oci_host="quay.io",
             oci_repository="my-org/my-repo",
             oci_tag="eval-123",
-            oci_subject="subject_value",
         )
         data = coord.model_dump()
         assert data["oci_host"] == "quay.io"
         assert data["oci_repository"] == "my-org/my-repo"
         assert data["oci_tag"] == "eval-123"
-        assert data["oci_subject"] == "subject_value"
 
         restored = OCICoordinates(**data)
         assert restored == coord
