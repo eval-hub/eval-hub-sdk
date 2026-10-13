@@ -1,0 +1,20 @@
+# For a local mode server, Ollama running locally with llama3.2:3b-instruct-q4_K_M,
+# and an anonymous OCI registry at localhost:5001.
+# Replace the provider ID if your configured gsm8k provider has a different ID.
+# The CLI defaults to http://localhost:8080.
+# evalhub eval run --config examples/oci_job.yaml
+name: oci-evaluation
+model:
+  url: http://localhost:11434/v1
+  name: llama3.2:3b-instruct-q4_K_M
+benchmarks:
+  - id: gsm8k
+    provider_id: 5f1ee53f-35e6-44ca-bc6a-d4c28e2c0f97
+    parameters:
+      num_examples: 5
+exports:
+  oci:
+    coordinates:
+      oci_host: http://localhost:5001
+      oci_repository: myorg/eval-results
+      oci_tag: final

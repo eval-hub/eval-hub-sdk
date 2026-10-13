@@ -451,6 +451,35 @@ with SyncEvalHubClient() as client:
 
 ## Examples
 
+### Export evaluation results to an OCI registry
+
+Set `exports.oci` in your job request to choose a registry and repository:
+
+```python
+from evalhub import EvaluationExports, EvaluationExportsOCI, OCICoordinates
+
+exports = EvaluationExports(
+    oci=EvaluationExportsOCI(
+        coordinates=OCICoordinates(
+            oci_host="quay.io", oci_repository="my-org/eval-results"
+        )
+    )
+)
+```
+
+Pass `exports` to `JobSubmissionRequest`, or use a YAML/JSON configuration file
+with the CLI. See the [OCI example setup](examples/README.md#oci-job-exports)
+for the prerequisites and settings to customize.
+
+```shell
+evalhub eval run --config examples/oci_job.yaml
+evalhub eval status <job-id> --format json
+```
+
+Use job status to check OCI publication and find published artifact references.
+Publication may finish after the evaluation; check status again if it is still
+pending.
+
 ### Watch job logs
 
 Stream workload logs while a job runs using the client API or the example script:

@@ -1,5 +1,23 @@
 # How to run the examples
 
+## OCI job exports
+
+[oci_job.yaml](oci_job.yaml) demonstrates CLI usage with a local mode server,
+Ollama running locally with the model `llama3.2:3b-instruct-q4_K_M` at
+`http://localhost:11434/v1`, and an anonymous OCI registry at
+`http://localhost:5001`. The CLI defaults to `http://localhost:8080`.
+The example limits `gsm8k` to five examples to reduce runtime. Replace the
+provider ID if your configured provider supporting `gsm8k` has a different ID.
+
+```shell
+evalhub eval run --config examples/oci_job.yaml
+evalhub eval status <job-id> --format json
+```
+
+The status response includes OCI publication details and published artifact
+references. Publication may finish after the evaluation; check status again
+if it is still pending.
+
 ## Watching logs
 
 **File:** [watch_job_logs.py](watch_job_logs.py)
