@@ -148,18 +148,25 @@ def test_human_future_outputs_and_metrics_survive_failure(
     assert "Reported signing result" not in result.output
 
 
-@pytest.mark.parametrize("kind", ["configured", "disabled", "empty_results"])
+@pytest.mark.parametrize(
+    "kind", ["configured", "disabled", "missing_oci", "null_oci", "empty_results"]
+)
 def test_absent_oci_status(cli_client: MagicMock, kind: str) -> None:
     data = job_data()
     data.pop("results")
     if kind == "disabled":
         data.pop("exports")
+    if kind == "missing_oci":
+        data["results"] = {"benchmarks": []}
+    if kind == "null_oci":
+        data["results"] = {"oci": None}
     if kind == "empty_results":
         data.pop("exports")
         data["results"] = {"oci": {}}
     cli_client.jobs.get.return_value = EvaluationJob.model_validate(data)
     result = CliRunner().invoke(main, ["eval", "status", "job-id"])
-    if kind == "disabled":
+    assert result.exit_code == 0, result.output
+    if kind != "empty_results":
         assert "OCI:" not in result.output
     else:
         assert "State: unavailable" in result.output
