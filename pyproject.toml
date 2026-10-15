@@ -89,6 +89,8 @@ examples = [
     "lm-eval>=0.4.0",  # For LM-Eval example adapter
     "ragas>=0.1.0",    # For RAGAS example adapter
     "aiohttp>=3.14.3",
+    "fsspec>=2026.6.0",
+    "langgraph-sdk>=0.4.4",
     "nltk>=3.10.3",
     "pillow>=12.3.0",
 ]

@@ -910,9 +910,8 @@ def _oci_state(job: EvaluationJob) -> str:
 
 def _print_oci_detail(job: EvaluationJob, *, err: bool = False) -> None:
     """Display only OCI state separately from evaluation."""
-    config = job.exports.oci if job.exports else None
     oci = job.results.oci if job.results else None
-    if config is None and oci is None:
+    if oci is None:
         return
     click.echo("\nOCI:", err=err)
     click.echo(f"  State: {_oci_state(job) or 'unavailable'}", err=err)
