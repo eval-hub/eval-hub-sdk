@@ -17,14 +17,14 @@ These tests pin the contract:
   HTTPS trust anchor, and
 * an explicitly configured ``ca_bundle_path`` still wins over it, and
 * the CLI, running in a pod-shaped environment, must verify a certificate
-  issued by a CA the system trust store trusts.
+  issued by a CA the client's trust store trusts.
 
 The end-to-end tests run the real ``evalhub`` console script in a subprocess
 against a loopback TLS server. The pod is simulated on two axes:
 
-* ``SSL_CERT_FILE`` points at the test CA to stand in for a system trust store
-  that trusts the endpoint (OpenSSL reads it only at process start, hence the
-  subprocess), and
+* ``SSL_CERT_FILE`` points at the test CA, which HTTPX prefers over its
+  bundled certifi store, so that CA becomes the client's trust store (OpenSSL
+  reads the variable only at process start, hence the subprocess), and
 * the CLI runs in a private mount namespace (``unshare -rm``) where the
   ServiceAccount CA really exists at its canonical path, holding a CA that
   does *not* issue the server certificate — exactly what a pod sees.
@@ -291,8 +291,8 @@ def test_auto_detection_ignores_serviceaccount_ca(
         "CA auto-detection selected "
         f"{resolved}, which is the Kubernetes API server CA projected into "
         "every pod. It cannot validate a publicly-trusted endpoint and it "
-        "shadows the system trust store; auto-detection "
-        "must fall through to the system trust store instead."
+        "shadows the default trust store; auto-detection must fall through "
+        "to HTTPX's default CA bundle instead."
     )
 
 
@@ -338,16 +338,16 @@ def test_cli_health_trusts_publicly_signed_endpoint_inside_pod(
     cli_config: Path,
     tls_pki: dict[str, Path],
 ) -> None:
-    """The reported bug: a pod-shaped env must reach the system trust store."""
+    """The reported bug: a pod-shaped env must reach the default CA bundle."""
     result = _run_cli_health(cli_config, tls_pki, in_pod=True)
     output = result.stdout + result.stderr
 
     assert result.returncode == 0, (
-        "evalhub health could not verify a certificate issued by the CA the "
-        "system trust store trusts, while the pod's ServiceAccount CA was "
-        "present. The SDK used "
-        f"{SERVICEACCOUNT_CA} as its trust anchor instead of the system "
-        "store.\n"
+        "evalhub health could not verify a certificate issued by a CA its "
+        "trust store trusts, while the pod's ServiceAccount CA was present. "
+        "The SDK used "
+        f"{SERVICEACCOUNT_CA} as its trust anchor instead of HTTPX's default "
+        "CA bundle.\n"
         f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
     assert "CERTIFICATE_VERIFY_FAILED" not in output
