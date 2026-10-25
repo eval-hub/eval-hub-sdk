@@ -120,8 +120,17 @@ def _resolve_ca_bundle(ca_bundle_path: Path | str | None) -> Path | None:
     Priority:
     1. Explicitly specified CA bundle path
     2. Auto-detected OpenShift service-ca
-    3. Auto-detected Kubernetes ServiceAccount CA
-    4. None (use system defaults or insecure mode)
+    3. None (use system defaults or insecure mode)
+
+    The Kubernetes ServiceAccount CA
+    (``/var/run/secrets/kubernetes.io/serviceaccount/ca.crt``) is deliberately
+    not used as an auto-detected trust anchor. It is projected into every pod
+    and contains the kube-apiserver CA, so preferring it makes the
+    ``verify=True`` (system trust store) branch unreachable in-cluster and every
+    endpoint signed by a public CA — a Let's Encrypt-terminated Route, for
+    instance — fails verification with ``unable to get issuer certificate``.
+    Callers that need to reach the API server can pass that bundle explicitly
+    via ``ca_bundle_path``.
 
     Args:
         ca_bundle_path: Path to CA bundle file
@@ -136,10 +145,10 @@ def _resolve_ca_bundle(ca_bundle_path: Path | str | None) -> Path | None:
             return path
         logger.warning(f"Specified CA bundle does not exist: {ca_bundle_path}")
 
-    # Try common CA bundle locations
+    # OpenShift service-ca: signs in-cluster service certificates, which is the
+    # common way an EvalHub endpoint inside a cluster is served.
     ca_paths = [
         Path("/etc/pki/ca-trust/source/anchors/service-ca.crt"),  # OpenShift
-        Path("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"),  # Kubernetes
     ]
 
     for path in ca_paths:
