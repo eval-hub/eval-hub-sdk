@@ -573,7 +573,7 @@ def test_resolve_overall_score_ignores_bool_false() -> None:
 
 
 def test_report_results_uses_primary_score_when_overall_score_not_set() -> None:
-    """report_results auto-resolves overall_score from primary_score and includes it in the payload."""
+    """report_results auto-resolves overall_score from callbacks primary_score."""
     ps = PrimaryScore(metric="output_tokens_per_second", lower_is_better=False)
     callbacks, mock_http = _make_callbacks_with_primary_score(primary_score=ps)
 
@@ -585,10 +585,6 @@ def test_report_results_uses_primary_score_when_overall_score_not_set() -> None:
     event = body["benchmark_status_event"]
     assert event["overall_score"] == 41.38
     assert results.overall_score == 41.38
-    assert event["primary_score"] == {
-        "metric": "output_tokens_per_second",
-        "lower_is_better": False,
-    }
 
 
 def test_report_results_includes_primary_score_on_event() -> None:
@@ -616,8 +612,41 @@ def test_report_results_includes_primary_score_on_event() -> None:
     callbacks.report_results(results)
 
     event = mock_http.post.call_args.kwargs["json"]["benchmark_status_event"]
-    assert event["primary_score"]["metric"] == "choice/accuracy"
+    assert event["primary_score"] == {
+        "metric": "choice/accuracy",
+        "lower_is_better": False,
+    }
     assert event["metrics"]["choice/accuracy"] == 0.2
+
+
+def test_report_results_prefers_job_results_primary_score() -> None:
+    """JobResults.primary_score wins over callbacks.primary_score for event and overall."""
+    job_ps = PrimaryScore(metric="output_tokens_per_second", lower_is_better=False)
+    run_ps = PrimaryScore(metric="mean_ttft_ms", lower_is_better=True)
+    callbacks, mock_http = _make_callbacks_with_primary_score(primary_score=job_ps)
+
+    results = _guidellm_results(overall_score=None)
+    results.primary_score = run_ps
+    callbacks.report_results(results)
+
+    event = mock_http.post.call_args.kwargs["json"]["benchmark_status_event"]
+    assert event["primary_score"] == {
+        "metric": "mean_ttft_ms",
+        "lower_is_better": True,
+    }
+    assert event["overall_score"] == 0.0
+    assert results.overall_score == 0.0
+
+
+def test_report_results_omits_primary_score_when_unset() -> None:
+    """No primary_score on the event when neither results nor callbacks set one."""
+    callbacks, mock_http = _make_callbacks_with_primary_score(primary_score=None)
+
+    results = _guidellm_results(overall_score=1.0)
+    callbacks.report_results(results)
+
+    event = mock_http.post.call_args.kwargs["json"]["benchmark_status_event"]
+    assert "primary_score" not in event
 
 
 def test_report_results_preserves_explicit_overall_score() -> None:
