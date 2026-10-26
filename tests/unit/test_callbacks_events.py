@@ -585,6 +585,39 @@ def test_report_results_uses_primary_score_when_overall_score_not_set() -> None:
     event = body["benchmark_status_event"]
     assert event["overall_score"] == 41.38
     assert results.overall_score == 41.38
+    assert event["primary_score"] == {
+        "metric": "output_tokens_per_second",
+        "lower_is_better": False,
+    }
+
+
+def test_report_results_includes_primary_score_on_event() -> None:
+    """Completed status events carry primary_score for EvalHub test wiring."""
+    ps = PrimaryScore(metric="choice/accuracy", lower_is_better=False)
+    callbacks, mock_http = _make_callbacks_with_primary_score(primary_score=ps)
+
+    results = JobResults(
+        id="job-1",
+        benchmark_id="inspect/custom",
+        benchmark_index=0,
+        model_name="m",
+        results=[
+            EvaluationResult(
+                metric_name="choice/accuracy",
+                metric_value=0.2,
+                metric_type="float",
+            ),
+        ],
+        num_examples_evaluated=10,
+        duration_seconds=1.0,
+        completed_at=datetime.now(UTC),
+        overall_score=0.2,
+    )
+    callbacks.report_results(results)
+
+    event = mock_http.post.call_args.kwargs["json"]["benchmark_status_event"]
+    assert event["primary_score"]["metric"] == "choice/accuracy"
+    assert event["metrics"]["choice/accuracy"] == 0.2
 
 
 def test_report_results_preserves_explicit_overall_score() -> None:

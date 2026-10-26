@@ -779,6 +779,15 @@ class DefaultCallbacks(JobCallbacks):
                 if overall_score is not None:
                     status_event["overall_score"] = overall_score
 
+                # Adapter/job primary metric name for EvalHub results.benchmarks[].test
+                # (exact key must appear in metrics). Used when catalog primary drifts
+                # from task-dependent scorers (e.g. inspect/custom).
+                if self.primary_score is not None and self.primary_score.metric:
+                    status_event["primary_score"] = {
+                        "metric": self.primary_score.metric,
+                        "lower_is_better": bool(self.primary_score.lower_is_better),
+                    }
+
                 if results.metrics_schema:
                     status_event["metrics_schema"] = [
                         {"name": ms.name, "type": ms.type.value}
