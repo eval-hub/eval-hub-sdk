@@ -740,11 +740,19 @@ class DefaultCallbacks(JobCallbacks):
             except Exception:
                 logger.debug("generate_additional_info_fn failed", exc_info=True)
 
+        # Prefer the run-resolved primary on JobResults; fall back to the
+        # job/catalog primary stored on the callbacks.
+        primary_score = (
+            results.primary_score
+            if results.primary_score is not None
+            else self.primary_score
+        )
+
         # Resolve overall_score from primary_score when the adapter did not set one.
         # Unlike additional_info / env_card we DO write back so that downstream
         # consumers (MLflow, logging) also see the resolved value.
-        if results.overall_score is None and self.primary_score:
-            resolved = self._resolve_overall_score(results.results, self.primary_score)
+        if results.overall_score is None and primary_score is not None:
+            resolved = self._resolve_overall_score(results.results, primary_score)
             if resolved is not None:
                 results.overall_score = resolved
         overall_score = results.overall_score
@@ -778,6 +786,15 @@ class DefaultCallbacks(JobCallbacks):
 
                 if overall_score is not None:
                     status_event["overall_score"] = overall_score
+
+                # Adapter/job primary metric name for EvalHub results.benchmarks[].test
+                # (exact key must appear in metrics). Used when catalog primary drifts
+                # from task-dependent scorers (e.g. inspect/custom).
+                if primary_score is not None and primary_score.metric:
+                    status_event["primary_score"] = {
+                        "metric": primary_score.metric,
+                        "lower_is_better": bool(primary_score.lower_is_better),
+                    }
 
                 if results.metrics_schema:
                     status_event["metrics_schema"] = [

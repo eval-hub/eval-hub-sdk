@@ -305,6 +305,15 @@ class JobResults(BaseModel):
     overall_score: float | None = Field(
         default=None, description="Overall score if applicable"
     )
+    primary_score: PrimaryScore | None = Field(
+        default=None,
+        description=(
+            "Resolved primary metric for this completed run. When set, "
+            "report_results prefers it over the job/catalog primary_score on "
+            "the callbacks for overall_score resolution and the completed "
+            "status event (task-dependent adapters such as inspect/custom)."
+        ),
+    )
     num_examples_evaluated: int = Field(
         ..., description="Number of examples actually evaluated"
     )
