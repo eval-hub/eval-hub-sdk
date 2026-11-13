@@ -499,6 +499,9 @@ The SDK includes a reference implementation showing all adapter patterns:
 
 **Example Adapter**: `examples/simple_adapter/simple_adapter.py`
 
+To extend the example with LM-Eval or RAGAS, follow the
+[dependency installation instructions](examples/simple_adapter/README.md#installing-dependencies).
+
 This example demonstrates:
 
 - Loading JobSpec from mounted ConfigMap
