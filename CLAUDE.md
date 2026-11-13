@@ -61,9 +61,9 @@ Components are gated behind pip extras: `core`, `adapter`, `client`, `cli`, `dev
 ## Code Style
 
 - **Formatter/linter**: ruff (v0.1.6, pinned). Line length 88. Rules: E, W, F, I, N, UP. E501 ignored.
-- **Type checking**: mypy in strict mode (Python 3.11 target).
+- **Type checking**: mypy in strict mode (Python 3.12 target).
 - **Commits**: conventional commits enforced by commitizen/commitlint.
-- **Python**: >=3.11. CI tests on 3.12, 3.13, 3.14.
+- **Python**: >=3.12. CI tests on 3.12, 3.13, 3.14.
 
 ## Test Markers
 

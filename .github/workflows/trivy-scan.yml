@@ -34,6 +34,7 @@ jobs:
       - name: Run Trivy vulnerability scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
         with:
+          version: v0.76.2
           scan-type: fs
           scan-ref: .
           format: sarif
@@ -45,6 +46,7 @@ jobs:
       - name: Check for critical and high vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
         with:
+          version: v0.76.2
           scan-type: fs
           scan-ref: .
           format: table

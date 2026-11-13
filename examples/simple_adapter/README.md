@@ -124,6 +124,25 @@ sequenceDiagram
 
 ## Running the Example
 
+### Installing Dependencies
+
+Install the adapter SDK in your virtual environment:
+
+```bash
+uv pip install "eval-hub-sdk[adapter]"
+```
+
+To extend the example with LM-Eval or RAGAS, install the optional framework
+packages:
+
+```bash
+uv pip install "lm-eval>=0.4.0" "ragas>=0.1.0" "aiohttp>=3.14.4" \
+  "nltk>=3.10.4" "pillow>=13.0.0"
+```
+
+Install only the packages your adapter needs. Add your chosen dependencies to
+the adapter's `requirements.txt` when building its container.
+
 ### In Production (Kubernetes Pod)
 
 The adapter runs as a container in a Kubernetes pod with:

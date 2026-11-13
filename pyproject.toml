@@ -10,7 +10,7 @@ authors = [
     {name = "Rui Vieira", email = "rui@redhat.com"},
 ]
 readme = "README.md"
-requires-python = ">=3.11"  # needed for LMEval compatibility
+requires-python = ">=3.12"
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
@@ -84,22 +84,13 @@ dev = [
     "opentelemetry-exporter-otlp-proto-grpc>=1.44.0",
 ]
 
-# Example framework integrations
-examples = [
-    "lm-eval>=0.4.0",  # For LM-Eval example adapter
-    "ragas>=0.1.0",    # For RAGAS example adapter
-    "aiohttp>=3.14.4",
-    "nltk>=3.10.4",
-    "pillow>=13.0.0",
-]
-
 # Server - eval-hub-server binary for local/embedded use
 server = [
     "eval-hub-sdk[cli]",
     "eval-hub-server>=1.0.1",
 ]
 
-# All core functionality (excludes examples which are optional)
+# All core functionality
 all = ["eval-hub-sdk[core,adapter,client,cli,mcp,dev]"]
 
 [project.scripts]
@@ -121,7 +112,7 @@ local_scheme = "node-and-date"
 tag_regex = "^v(?P<version>.*)$"
 
 [tool.ruff]
-target-version = "py311"  # needed for LMEval compatibility
+target-version = "py312"
 line-length = 88
 select = [
     "E",  # pycodestyle errors
@@ -139,7 +130,7 @@ ignore = [
 "__init__.py" = ["F401"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

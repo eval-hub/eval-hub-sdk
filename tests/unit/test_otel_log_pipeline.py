@@ -97,7 +97,7 @@ def _reset_global_state() -> Generator[None, None, None]:
 
 
 @pytest.fixture()
-def log_exporter() -> InMemoryLogExporter:
+def log_exporter() -> Generator[InMemoryLogExporter, None, None]:
     """Set up a LoggerProvider with in-memory exporter and attach to root logger.
 
     Returns the exporter so tests can inspect captured log records.
