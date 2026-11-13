@@ -49,6 +49,7 @@ import threading
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -93,7 +94,7 @@ def _fake_exists(monkeypatch: pytest.MonkeyPatch, present: set[Path]) -> None:
     probed = {str(SERVICEACCOUNT_CA), str(OPENSHIFT_SERVICE_CA)}
     real_exists = Path.exists
 
-    def exists(self: Path, *args: object, **kwargs: object) -> bool:
+    def exists(self: Path, *args: Any, **kwargs: Any) -> bool:
         if str(self) in probed:
             return self in present
         return bool(real_exists(self, *args, **kwargs))

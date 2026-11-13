@@ -23,7 +23,7 @@ jobs:
     - name: Set up Python ${{ matrix.python-version }}
       run: uv python install ${{ matrix.python-version }}
     - name: Install dependencies
-      run: uv sync --all-extras
+      run: uv sync --all-extras --python ${{ matrix.python-version }}
     - name: Run tests with coverage
       run: |
         uv run pytest -m unit --cov=src/evalhub --cov-report=term-missing --cov-report=xml
@@ -40,13 +40,13 @@ jobs:
     - name: Set up Python
       run: uv python install ${{ env.MIN_PY_VER }}
     - name: Install dependencies
-      run: uv sync --all-extras
+      run: uv sync --all-extras --python ${{ env.MIN_PY_VER }}
     - name: Run ruff linting
       run: uv run ruff check src/ tests/
     - name: Run ruff formatting check
       run: uv run ruff format --check src/ tests/
     - name: Run mypy type checking
-      run: uv run mypy src/evalhub
+      run: make mypy
 
   e2e:
     name: "Optional: E2E Tests"
@@ -62,7 +62,7 @@ jobs:
     - name: Set up Python
       run: uv python install ${{ env.MIN_PY_VER }}
     - name: Install dependencies
-      run: uv sync --all-extras
+      run: uv sync --all-extras --python ${{ env.MIN_PY_VER }}
     - name: Create kind cluster
       uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1
     - name: Deploy distribution registry

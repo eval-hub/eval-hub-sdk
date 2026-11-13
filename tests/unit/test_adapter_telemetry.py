@@ -296,5 +296,10 @@ class TestMultipleInferenceBatches:
         spans = exporter.get_finished_spans()
         inf_spans = [s for s in spans if s.name == "evalhub.evaluation.inference"]
         assert len(inf_spans) == 3
-        sizes = sorted(int(s.attributes["batch.size"]) for s in inf_spans)
-        assert sizes == [16, 32, 64]
+        sizes: list[int] = []
+        for span in inf_spans:
+            assert span.attributes is not None
+            batch_size = span.attributes["batch.size"]
+            assert isinstance(batch_size, int)
+            sizes.append(batch_size)
+        assert sorted(sizes) == [16, 32, 64]
