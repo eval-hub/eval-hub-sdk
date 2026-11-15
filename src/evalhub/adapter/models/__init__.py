@@ -18,6 +18,7 @@ from .job import (
     MessageInfo,
     OCIArtifactResult,
     OCIArtifactSpec,
+    TrajectoryScore,
 )
 
 __all__ = [
@@ -40,4 +41,5 @@ __all__ = [
     # OCI models
     "OCIArtifactSpec",
     "OCIArtifactResult",
+    "TrajectoryScore",
 ]

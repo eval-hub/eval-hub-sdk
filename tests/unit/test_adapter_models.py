@@ -24,6 +24,7 @@ from evalhub.adapter import (
     OCIArtifactResult,
     OCIArtifactSpec,
     SafetyEvalEntry,
+    TrajectoryScore,
 )
 from evalhub.models import MetricSchema, PrimaryScore, ResultType
 from pydantic import ValidationError
@@ -537,6 +538,44 @@ class TestOCIArtifactResult:
 
 class TestJobResults:
     """Tests for JobResults model."""
+
+    def test_job_results_round_trip_typed_trajectory_summaries(self) -> None:
+        summary = TrajectoryScore(
+            trajectory_id="gym-task-0-rollout-1",
+            source_path="/test_data/0-1.json",
+            score=0.85,
+            aggregate_score=0.9,
+            status="scored",
+            training_eligible=True,
+        )
+        results = JobResults(
+            id="test-job-trajectory-summary",
+            benchmark_id="atif_trajectory_default",
+            benchmark_index=0,
+            model_name="judge-model",
+            results=[],
+            num_examples_evaluated=1,
+            duration_seconds=1.0,
+            trajectory_results=[summary],
+        )
+
+        payload = results.model_dump(mode="json")
+        restored = JobResults.model_validate(payload)
+
+        assert payload["trajectory_results"] == [summary.model_dump(mode="json")]
+        assert restored.trajectory_results == [summary]
+        assert (
+            JobResults(
+                id="legacy-job",
+                benchmark_id="mmlu",
+                benchmark_index=0,
+                model_name="model",
+                results=[],
+                num_examples_evaluated=1,
+                duration_seconds=1.0,
+            ).trajectory_results
+            is None
+        )
 
     def test_creating_job_results(self) -> None:
         """Test creating job results."""
