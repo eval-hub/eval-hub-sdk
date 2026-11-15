@@ -1,0 +1,51 @@
+{
+  "schema_version": "ATIF-v1.7",
+  "session_id": "session-1",
+  "trajectory_id": "v17-trajectory",
+  "producer_sha256": "synthetic-root-provenance-value",
+  "agent": {
+    "name": "fixture-agent",
+    "version": "2.1.0",
+    "model_name": "fixture-model",
+    "tool_definitions": [
+      {"type": "function", "function": {"name": "search"}}
+    ]
+  },
+  "extra": {
+    "task_instruction": "Find the answer using the available tool",
+    "producer_metadata": {
+      "producer": "contract-fixture",
+      "record_id": "record-17"
+    }
+  },
+  "steps": [
+    {
+      "step_id": 1,
+      "source": "agent",
+      "message": "I will search for the answer.",
+      "reasoning_content": "The tool should provide the requested evidence.",
+      "tool_calls": [
+        {
+          "tool_call_id": "call-1",
+          "function_name": "search",
+          "arguments": {"query": "ATIF"}
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "call-1",
+            "content": "ATIF search result"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 2,
+      "source": "agent",
+      "message": "The answer is supported by the search result.",
+      "reasoning_content": "The observation contains the relevant result.",
+      "tool_calls": []
+    }
+  ]
+}

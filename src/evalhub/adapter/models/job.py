@@ -324,7 +324,13 @@ class JobResults(BaseModel):
         default_factory=lambda: datetime.now(UTC), description="Completion timestamp"
     )
     evaluation_metadata: dict[str, Any] = Field(
-        default_factory=dict, description="Framework-specific metadata"
+        default_factory=dict,
+        description=(
+            "Framework-specific metadata. DefaultCallbacks does not serialize "
+            "this field wholesale into BenchmarkStatusEvent.additional_info; "
+            "only its 'artifacts' mapping is merged into event artifacts. "
+            "Use additional_info for explicit event-level supplementary data."
+        ),
     )
 
     # Artifact information (if persisted)

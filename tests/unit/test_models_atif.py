@@ -1,5 +1,9 @@
 """Tests for ATIF trajectory pydantic models (evalhub.models.atif)."""
 
+import hashlib
+import json
+from pathlib import Path
+
 import evalhub
 import evalhub.atif as atif_shim
 import pytest
@@ -684,6 +688,51 @@ class TestTrajectory:
 
 
 class TestTrajectoryRoundtrip:
+    def test_atif_v1_7_contract_fixture_preserves_extra_metadata(self) -> None:
+        fixture_path = (
+            Path(__file__).parents[1] / "fixtures" / "atif_v1_7_contract.json"
+        )
+        payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+
+        trajectory = Trajectory.model_validate(payload)
+        serialized = trajectory.to_json_dict()
+
+        assert trajectory.schema_version == "ATIF-v1.7"
+        assert trajectory.trajectory_id == "v17-trajectory"
+        assert serialized["extra"] == payload["extra"]
+        assert serialized["extra"]["producer_metadata"] == {
+            "producer": "contract-fixture",
+            "record_id": "record-17",
+        }
+
+    def test_nemogym_export_fixture_validates_and_preserves_provenance(self) -> None:
+        fixture_dir = Path(__file__).parents[1] / "fixtures" / "nemogym_maas"
+        manifest = json.loads(
+            (fixture_dir / "manifest.jsonl").read_text(encoding="utf-8").splitlines()[0]
+        )
+        trajectory_path = fixture_dir / manifest["trajectory_path"]
+        raw = trajectory_path.read_bytes()
+
+        assert hashlib.sha256(raw).hexdigest() == manifest["expected_sha256"]
+        trajectory = Trajectory.model_validate_json(raw)
+        serialized = trajectory.to_json_dict()
+
+        assert trajectory.schema_version == "ATIF-v1.7"
+        assert serialized["extra"]["nemo_gym"]["exporter"]["name"] == "nemo-gym"
+        assert serialized["extra"]["nemo_gym"]["conversion"]["status"] == "complete"
+        assert serialized["extra"]["nemo_gym"] == json.loads(raw)["extra"]["nemo_gym"]
+
+    def test_atif_v1_7_fixture_rejects_undeclared_root_provenance(self) -> None:
+        fixture_path = (
+            Path(__file__).parents[1]
+            / "fixtures"
+            / "atif_v1_7_undeclared_provenance.json"
+        )
+        payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+
+        with pytest.raises(ValidationError, match="producer_sha256"):
+            Trajectory.model_validate(payload)
+
     def test_agent_trajectory_roundtrip(self, agent_trajectory: Trajectory) -> None:  # noqa: F811
         data = agent_trajectory.model_dump(mode="json")
         restored = Trajectory.model_validate(data)
