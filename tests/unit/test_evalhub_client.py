@@ -16,7 +16,7 @@ Example:
 
 import os
 from typing import Any
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from evalhub import (
@@ -46,6 +46,7 @@ from evalhub.models.api import (
     Provider,
     Resource,
     ScoreRange,
+    StandalonePostProcessingRequest,
     TestDataRef,
 )
 
@@ -66,6 +67,60 @@ JOBS_LIST_PARAM_CASES = [
     ),
     pytest.param({}, {}, id="no-params"),
 ]
+
+
+def _make_post_processing_request() -> StandalonePostProcessingRequest:
+    """Build a minimal standalone post-processing request."""
+    return StandalonePostProcessingRequest.model_validate(
+        {
+            "name": "accuracy-ci",
+            "operations": {
+                "confidence_interval": {
+                    "results_data_ref": {"eval_job": {"id": "eval-123"}},
+                    "calibration_data_ref": [
+                        {
+                            "pvc": {"claim_name": "calibration-data"},
+                            "data_config": {
+                                "format": "jsonl",
+                                "columns": {
+                                    "label": "expected",
+                                    "prediction": "actual",
+                                },
+                            },
+                        }
+                    ],
+                    "significance_level": 0.05,
+                }
+            },
+        }
+    )
+
+
+def _make_post_processing_response() -> dict[str, Any]:
+    """Build a representative post-processing response."""
+    return {
+        "resource": {"id": "post-processing-123", "tenant": "default"},
+        "name": "accuracy-ci",
+        "operations": {
+            "confidence_interval": {
+                "results_data_ref": {"eval_job": {"id": "eval-123"}},
+                "calibration_data_ref": [
+                    {
+                        "pvc": {"claim_name": "calibration-data"},
+                        "data_config": {
+                            "format": "jsonl",
+                            "columns": {
+                                "label": "expected",
+                                "prediction": "actual",
+                            },
+                        },
+                    }
+                ],
+                "significance_level": 0.05,
+            }
+        },
+        "status": {"state": "pending"},
+    }
 
 
 @pytest.fixture
@@ -147,6 +202,7 @@ class TestClientInheritance:
         assert hasattr(client, "benchmarks")
         assert hasattr(client, "collections")
         assert hasattr(client, "jobs")
+        assert hasattr(client, "post_processing")
 
         # Resource methods
         assert hasattr(client.providers, "list")
@@ -183,6 +239,7 @@ class TestClientInheritance:
         assert hasattr(client, "benchmarks")
         assert hasattr(client, "collections")
         assert hasattr(client, "jobs")
+        assert hasattr(client, "post_processing")
 
         # Resource methods
         assert hasattr(client.providers, "list")
@@ -205,6 +262,91 @@ class TestClientInheritance:
         assert hasattr(client.jobs, "wait_for_completion")
 
         client.close()
+
+
+class TestPostProcessingResource:
+    """Tests for standalone post-processing client operations."""
+
+    def test_sync_resource_submit_get_and_delete(self) -> None:
+        request = _make_post_processing_request()
+        response = Mock()
+        response.json.return_value = _make_post_processing_response()
+
+        with SyncEvalHubClient() as client:
+            with (
+                patch.object(
+                    client, "_request_post", return_value=response
+                ) as mock_post,
+                patch.object(client, "_request_get", return_value=response) as mock_get,
+                patch.object(client, "_request_delete") as mock_delete,
+            ):
+                submitted = client.post_processing.submit(request, tenant="tenant-a")
+                fetched = client.post_processing.get(
+                    "post-processing-123", tenant="tenant-b"
+                )
+                client.post_processing.delete("post-processing-123", tenant="tenant-c")
+
+        assert submitted.resource.id == "post-processing-123"
+        assert fetched.resource.id == "post-processing-123"
+        mock_post.assert_called_once_with(
+            "/evaluations/post-processing",
+            json=request.model_dump(mode="json", exclude_none=True, by_alias=True),
+            tenant="tenant-a",
+        )
+        mock_get.assert_called_once_with(
+            "/evaluations/post-processing/post-processing-123",
+            tenant="tenant-b",
+        )
+        mock_delete.assert_called_once_with(
+            "/evaluations/post-processing/post-processing-123",
+            tenant="tenant-c",
+        )
+
+    @pytest.mark.asyncio
+    async def test_async_resource_submit_get_and_delete(self) -> None:
+        request = _make_post_processing_request()
+        response = Mock()
+        response.json.return_value = _make_post_processing_response()
+
+        async with AsyncEvalHubClient() as client:
+            with (
+                patch.object(
+                    client, "_request_post", new_callable=AsyncMock
+                ) as mock_post,
+                patch.object(
+                    client, "_request_get", new_callable=AsyncMock
+                ) as mock_get,
+                patch.object(
+                    client, "_request_delete", new_callable=AsyncMock
+                ) as mock_delete,
+            ):
+                mock_post.return_value = response
+                mock_get.return_value = response
+                submitted = await client.post_processing.submit(
+                    request, tenant="tenant-a"
+                )
+                fetched = await client.post_processing.get(
+                    "post-processing-123", tenant="tenant-b"
+                )
+                await client.post_processing.delete(
+                    "post-processing-123", tenant="tenant-c"
+                )
+
+        assert submitted.resource.id == "post-processing-123"
+        assert fetched.resource.id == "post-processing-123"
+        mock_post.assert_awaited_once_with(
+            "/evaluations/post-processing",
+            json=request.model_dump(mode="json", exclude_none=True, by_alias=True),
+            tenant="tenant-a",
+        )
+        mock_get.assert_awaited_once_with(
+            "/evaluations/post-processing/post-processing-123",
+            tenant="tenant-b",
+        )
+        mock_delete.assert_awaited_once_with(
+            "/evaluations/post-processing/post-processing-123",
+            tenant="tenant-c",
+        )
 
 
 class TestEvalHubClient:
