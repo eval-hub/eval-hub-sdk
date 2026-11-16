@@ -11,6 +11,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    RootModel,
     SerializationInfo,
     field_validator,
     model_serializer,
@@ -546,6 +547,9 @@ class BenchmarkConfig(BaseModel):
     test_data_ref: TestDataRef | None = Field(
         default=None, description="Reference to custom external test data"
     )
+    hardware_config: BenchmarkHardwareConfig | None = Field(
+        default=None, description="Hardware override for this benchmark"
+    )
 
 
 class CollectionRef(BaseModel):
@@ -668,7 +672,11 @@ class JobSubmissionRequest(BaseModel):
     )
     queue: QueueConfig | None = Field(
         default=None,
-        description="Optional scheduling queue for Kubernetes-backed evaluation jobs (e.g. Kueue).",
+        description="Deprecated: use hardware_config.queue instead. Retained as a backward-compatible scheduling queue fallback.",
+    )
+    hardware_config: BenchmarkHardwareConfig | None = Field(
+        default=None,
+        description="Default hardware configuration for benchmarks without their own hardware_config",
     )
 
     @model_validator(mode="after")
@@ -717,7 +725,11 @@ class EvaluationJob(BaseModel):
     )
     queue: QueueConfig | None = Field(
         default=None,
-        description="Optional scheduling queue for Kubernetes-backed evaluation jobs (e.g. Kueue).",
+        description="Deprecated: use hardware_config.queue instead. Retained as a backward-compatible scheduling queue fallback.",
+    )
+    hardware_config: BenchmarkHardwareConfig | None = Field(
+        default=None,
+        description="Default hardware configuration for benchmarks without their own hardware_config",
     )
 
     # Convenience properties to access nested fields
@@ -1176,3 +1188,469 @@ class HealthResponse(BaseModel):
     metadata: dict[str, Any] = Field(
         default_factory=dict, description="Additional health metadata"
     )
+
+
+# ---------------------------------------------------------------------------
+# Standalone post-processing models
+# ---------------------------------------------------------------------------
+
+
+class _PostProcessingModel(BaseModel):
+    """Base configuration shared by standalone post-processing models."""
+
+    # Ensure their submission path uses exclude_none=True.
+    model_config = ConfigDict(
+        # Response payloads may gain fields as the server evolves. Ignore
+        # unknown fields so older SDK versions remain forward-compatible.
+        extra="ignore",
+        populate_by_name=True,
+        allow_inf_nan=False,
+    )
+
+
+class HardwareResourceQuantity(_PostProcessingModel):
+    """Optional CPU or memory request and limit quantities."""
+
+    request: str | None = None
+    limit: str | None = None
+
+
+class HardwareGPUConfig(_PostProcessingModel):
+    """Legacy extended-resource GPU configuration."""
+
+    name: str | None = None
+    count: int | None = Field(default=None, ge=1)
+
+
+class HardwareDRAConfig(_PostProcessingModel):
+    """Dynamic Resource Allocation configuration."""
+
+    resource_claim_template: str
+    claim_name: str | None = None
+
+
+class BenchmarkHardwareConfig(_PostProcessingModel):
+    """Direct or profile-based hardware override.
+
+    The server uses this same shape for benchmark and post-processing hardware
+    configuration.
+    """
+
+    hardware_profile_name: str | None = None
+    queue: QueueConfig | None = None
+    cpu: HardwareResourceQuantity | None = None
+    memory: HardwareResourceQuantity | None = None
+    gpu: HardwareGPUConfig | None = None
+    dra: HardwareDRAConfig | None = None
+
+    @model_validator(mode="after")
+    def check_modes(self) -> BenchmarkHardwareConfig:
+        direct_fields = (self.queue, self.cpu, self.memory, self.gpu, self.dra)
+        if self.hardware_profile_name and any(
+            field is not None for field in direct_fields
+        ):
+            raise ValueError(
+                "hardware_profile_name cannot be combined with queue, cpu, "
+                "memory, gpu, or dra"
+            )
+        if self.gpu is not None and self.dra is not None:
+            raise ValueError("gpu and dra are mutually exclusive")
+        return self
+
+
+class PostProcessingCommon(_PostProcessingModel):
+    """Fields shared by standalone post-processing requests and resources."""
+
+    name: str | None = None
+    hardware_config: BenchmarkHardwareConfig | None = None
+    operation_order: list[Literal["confidence_interval"]] | None = Field(
+        default=None,
+        min_length=1,
+    )
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str | None) -> str | None:
+        # The Go model uses omitempty,notblank: an empty string is treated as
+        # omitted, but a nonempty whitespace-only value is invalid.
+        if value and not value.strip():
+            raise ValueError("name must not be whitespace-only")
+        return value
+
+
+class EvaluationJobDataRef(_PostProcessingModel):
+    """The nested ``eval_job`` source object, matching the Go server type.
+
+    Unlike the OpenAPI component named ``EvaluationJobDataRef``, this class
+    does not include the outer ``eval_job`` key or ``data_config``. Use
+    ``PostProcessingResultsDataRef(eval_job=..., data_config=...)`` for that
+    wrapper.
+    """
+
+    id: str
+    num_parallel_threads: int | None = Field(default=None, ge=1)
+
+    @field_validator("id")
+    @classmethod
+    def validate_id(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("id must not be blank")
+        return value
+
+
+class MLflowDataRef(_PostProcessingModel):
+    """The nested ``mlflow`` source object, matching the Go server type.
+
+    Unlike the OpenAPI component named ``MLflowDataRef``, this class does not
+    include the outer ``mlflow`` key or ``data_config``. Use
+    ``PostProcessingResultsDataRef(mlflow=..., data_config=...)`` for that
+    wrapper.
+    """
+
+    run_id: str
+    artifact_path: str
+
+    @field_validator("run_id", "artifact_path")
+    @classmethod
+    def validate_nonblank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value must not be blank")
+        return value
+
+
+class OCIDataRef(_PostProcessingModel):
+    """The nested ``oci`` source object, matching the Go server type.
+
+    Unlike the OpenAPI component named ``OCIDataRef``, this class does not
+    include the outer ``oci`` key or ``data_config``. Use
+    ``PostProcessingResultsDataRef(oci=..., data_config=...)`` for that wrapper.
+    """
+
+    coordinates: OCICoordinates
+    digest: str | None = Field(
+        default=None,
+        pattern=r"^$|^sha256:[a-f0-9]{64}$",
+    )
+    artifact_path: str
+    k8s: OCIConnectionConfig | None = None
+
+    @field_validator("artifact_path")
+    @classmethod
+    def validate_artifact_path(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("artifact_path must not be blank")
+        return value
+
+
+class ResultsDataConfigEntry(_PostProcessingModel):
+    """Format and field mappings for one result artifact."""
+
+    format: Literal["", "auto", "json", "jsonl", "csv", "parquet"] | None = None
+    path: str | None = None
+    columns: dict[str, str] | None = None
+    selection: dict[str, str] | None = None
+    value_mappings: dict[str, dict[str, float]] | None = None
+
+    @field_validator("path")
+    @classmethod
+    def validate_path(cls, value: str | None) -> str | None:
+        if value:
+            if not value.strip():
+                raise ValueError("path must not be blank")
+            if value.startswith("/"):
+                raise ValueError("path must be relative")
+        return value
+
+    @field_validator("value_mappings", mode="before")
+    @classmethod
+    def validate_numeric_mappings(cls, value: Any) -> Any:
+        if value is None or not isinstance(value, dict):
+            return value
+        for mapping in value.values():
+            if not isinstance(mapping, dict):
+                continue
+            for target in mapping.values():
+                if (
+                    target is None
+                    or isinstance(target, bool)
+                    or not isinstance(target, int | float)
+                ):
+                    raise ValueError("value_mappings values must be numeric")
+        return value
+
+    @model_validator(mode="after")
+    def validate_mappings(self) -> ResultsDataConfigEntry:
+        allowed_columns = {
+            "sample_id",
+            "prediction",
+            "label",
+            "metric",
+            "benchmark_id",
+            "provider_id",
+        }
+        allowed_selection = {"benchmark_id", "provider_id", "metric"}
+        allowed_value_mappings = {"prediction", "label"}
+
+        if self.columns is not None:
+            unknown = set(self.columns) - allowed_columns
+            if unknown:
+                raise ValueError(f"unsupported columns: {sorted(unknown)}")
+            if any(not value.strip() for value in self.columns.values()):
+                raise ValueError("column mappings must not be blank")
+
+        if self.selection is not None:
+            unknown = set(self.selection) - allowed_selection
+            if unknown:
+                raise ValueError(f"unsupported selection fields: {sorted(unknown)}")
+            if not self.selection:
+                raise ValueError("selection must not be empty")
+            if any(not value.strip() for value in self.selection.values()):
+                raise ValueError("selection values must not be blank")
+
+        if self.value_mappings is not None:
+            unknown = set(self.value_mappings) - allowed_value_mappings
+            if unknown:
+                raise ValueError(f"unsupported value mapping fields: {sorted(unknown)}")
+            for mapping in self.value_mappings.values():
+                if not mapping:
+                    raise ValueError("value mappings must not be empty")
+
+        return self
+
+
+class ResultsDataConfig(
+    RootModel[ResultsDataConfigEntry | list[ResultsDataConfigEntry]]
+):
+    """A single result-data mapping or per-benchmark mappings.
+
+    The wire representation is the root value itself: an object for one
+    mapping, or a non-empty array for per-benchmark mappings.
+    """
+
+    @model_validator(mode="after")
+    def validate_array_entries(self) -> ResultsDataConfig:
+        if isinstance(self.root, list):
+            if not self.root:
+                raise ValueError("data_config array must not be empty")
+            if any(entry.selection is None for entry in self.root):
+                raise ValueError(
+                    "array data_config entries require a nonempty selection"
+                )
+        return self
+
+    @property
+    def single(self) -> ResultsDataConfigEntry | None:
+        """Return the object form, if this config uses object form."""
+
+        return self.root if isinstance(self.root, ResultsDataConfigEntry) else None
+
+    @property
+    def per_benchmark(self) -> list[ResultsDataConfigEntry] | None:
+        """Return the array form, if this config uses array form."""
+
+        return self.root if isinstance(self.root, list) else None
+
+
+class PostProcessingResultsDataRef(_PostProcessingModel):
+    """Exactly one result source plus optional result-data configuration.
+
+    This wrapper holds ``data_config`` alongside the selected source key.
+    For ``eval_job``, ``mlflow``, and ``oci``, the complete wrapper corresponds
+    to the OpenAPI component ``EvaluationJobDataRef``, ``MLflowDataRef``, or
+    ``OCIDataRef``, respectively. The SDK classes with those names model only
+    the nested source objects, following the Go server's type names.
+    """
+
+    data_config: ResultsDataConfig | None = None
+    eval_job: EvaluationJobDataRef | None = None
+    s3: S3TestDataRef | None = None
+    pvc: PVCTestDataRef | None = None
+    git: GitTestDataRef | None = None
+    hf: HFTestDataRef | None = None
+    mlflow: MLflowDataRef | None = None
+    oci: OCIDataRef | None = None
+
+    @model_validator(mode="after")
+    def check_exactly_one_source(self) -> PostProcessingResultsDataRef:
+        sources = (
+            self.eval_job,
+            self.s3,
+            self.pvc,
+            self.git,
+            self.hf,
+            self.mlflow,
+            self.oci,
+        )
+        count = sum(source is not None for source in sources)
+        if count != 1:
+            raise ValueError(
+                "must specify exactly one result data source: eval_job, s3, pvc, "
+                "git, hf, mlflow, or oci"
+            )
+        return self
+
+
+class CalibrationDataColumns(_PostProcessingModel):
+    """Logical-to-physical column mapping for calibration data."""
+
+    label: str
+    prediction: str
+    sample_id: str | None = None
+    benchmark_id: str | None = None
+    provider_id: str | None = None
+
+    @field_validator("label", "prediction")
+    @classmethod
+    def validate_required_columns(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("calibration column names must not be blank")
+        return value
+
+
+class CalibrationDataSelection(_PostProcessingModel):
+    """Metric selection for calibration data containing multiple metrics."""
+
+    metric: str
+
+    @field_validator("metric")
+    @classmethod
+    def validate_metric(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("metric must not be blank")
+        return value
+
+
+class CalibrationDataConfig(_PostProcessingModel):
+    """Description of a calibration dataset."""
+
+    format: str
+    columns: CalibrationDataColumns
+    selection: CalibrationDataSelection | None = None
+
+    @field_validator("format")
+    @classmethod
+    def validate_format(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("format must not be blank")
+        return value
+
+
+class CalibrationDataRef(_PostProcessingModel):
+    """Exactly one external calibration source and its data configuration."""
+
+    s3: S3TestDataRef | None = None
+    pvc: PVCTestDataRef | None = None
+    git: GitTestDataRef | None = None
+    hf: HFTestDataRef | None = None
+    data_config: CalibrationDataConfig
+
+    @model_validator(mode="after")
+    def check_exactly_one_source(self) -> CalibrationDataRef:
+        sources = (self.s3, self.pvc, self.git, self.hf)
+        if sum(source is not None for source in sources) != 1:
+            raise ValueError("must specify exactly one calibration data source")
+        return self
+
+
+class StandaloneConfidenceIntervalConfig(_PostProcessingModel):
+    """Configuration for a standalone confidence interval computation."""
+
+    results_data_ref: PostProcessingResultsDataRef
+    calibration_data_ref: list[CalibrationDataRef] = Field(..., min_length=1)
+    significance_level: float = Field(..., gt=0, lt=1)
+    primary_score: PrimaryScore | None = None
+
+    @model_validator(mode="after")
+    def validate_primary_score(self) -> StandaloneConfidenceIntervalConfig:
+        is_eval_job = self.results_data_ref.eval_job is not None
+        if is_eval_job and self.primary_score is not None:
+            raise ValueError(
+                "primary_score is not allowed for evaluation-job result data"
+            )
+        if not is_eval_job and self.primary_score is None:
+            raise ValueError("primary_score is required for external result data")
+        return self
+
+
+class StandalonePostProcessingOperations(_PostProcessingModel):
+    """Supported standalone post-processing operations."""
+
+    confidence_interval: StandaloneConfidenceIntervalConfig
+
+
+class StandalonePostProcessingRequest(PostProcessingCommon):
+    """Request body for standalone post-processing."""
+
+    operations: StandalonePostProcessingOperations
+
+
+class PostProcessingState(str, Enum):
+    """States exposed by the standalone post-processing endpoints."""
+
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class PostProcessingStatus(_PostProcessingModel):
+    """Status of a standalone post-processing computation."""
+
+    state: PostProcessingState
+    error_message: MessageInfo | None = None
+    warning_message: MessageInfo | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
+class ConfidenceInterval(_PostProcessingModel):
+    """Confidence interval and optional computation metadata."""
+
+    lower: float
+    upper: float
+    point_estimate: float | None = None
+    # The server returns adapter-reported metadata without range validation.
+    n_labeled: int | None = None
+    n_unlabeled: int | None = None
+    alpha: float | None = None
+    method: str | None = None
+    lambda_: float | None = Field(default=None, alias="lambda")
+
+    @model_serializer(mode="wrap")
+    def serialize_lambda(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, Any]:
+        data = cast(dict[str, Any], handler(self))
+        if "lambda_" in data:
+            data["lambda"] = data.pop("lambda_")
+        return data
+
+
+class PostProcessingBenchmarkResult(_PostProcessingModel):
+    """Confidence interval result for one evaluation benchmark."""
+
+    id: str
+    provider_id: str
+    benchmark_index: int
+    confidence_interval: ConfidenceInterval
+
+
+class PostProcessingResults(_PostProcessingModel):
+    """Optional result fields returned by the server.
+
+    Current workflows populate one field, but responses may contain either,
+    both, or neither as the server evolves.
+    """
+
+    benchmarks: list[PostProcessingBenchmarkResult] | None = None
+    confidence_interval: ConfidenceInterval | None = None
+
+
+class PostProcessingResource(PostProcessingCommon):
+    """Standalone post-processing resource returned by POST and GET."""
+
+    resource: Resource
+    operations: StandalonePostProcessingOperations
+    status: PostProcessingStatus
+    results: PostProcessingResults | None = None

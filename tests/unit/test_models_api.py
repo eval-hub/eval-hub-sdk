@@ -6,11 +6,14 @@ from typing import Any
 import pytest
 from evalhub.models.api import (
     BenchmarkConfig,
+    BenchmarkHardwareConfig,
     BenchmarkInfo,
     BenchmarkResult,
     BenchmarksList,
+    CalibrationDataRef,
     CollectionList,
     CollectionRef,
+    ConfidenceInterval,
     ErrorInfo,
     ErrorResponse,
     EvaluationExports,
@@ -22,6 +25,8 @@ from evalhub.models.api import (
     EvaluationStatus,
     FrameworkInfo,
     GitTestDataRef,
+    HardwareDRAConfig,
+    HardwareResourceQuantity,
     HealthResponse,
     HFTestDataRef,
     JobsList,
@@ -31,13 +36,23 @@ from evalhub.models.api import (
     ModelConfig,
     OCIConnectionConfig,
     OCICoordinates,
+    OCIDataRef,
     PassCriteria,
+    PostProcessingCommon,
+    PostProcessingResource,
+    PostProcessingResults,
+    PostProcessingResultsDataRef,
+    PostProcessingStatus,
     PrimaryScore,
     ProviderList,
     PVCTestDataRef,
     QueueConfig,
+    ResultsDataConfig,
+    ResultsDataConfigEntry,
     ResultType,
     S3TestDataRef,
+    StandaloneConfidenceIntervalConfig,
+    StandalonePostProcessingRequest,
     TestDataRef,
 )
 from pydantic import ValidationError
@@ -150,6 +165,40 @@ class TestEvaluationJob:
         assert job.benchmarks is not None
         assert job.benchmarks[0].id == "test"
         assert job.resource.created_at == now
+        assert job.hardware_config is None
+        assert "hardware_config" not in job.model_dump(exclude_none=True)
+
+    @pytest.mark.parametrize(
+        "hardware_config",
+        [
+            {"hardware_profile_name": "gpu-profile"},
+            {"cpu": {"request": "2"}, "queue": {"name": "eval-queue"}},
+        ],
+    )
+    def test_hardware_config_response_round_trip(
+        self, hardware_config: dict[str, Any]
+    ) -> None:
+        payload = {
+            "resource": {
+                "id": "job-hardware",
+                "created_at": "2026-01-01T00:00:00Z",
+            },
+            "name": "hardware-eval",
+            "model": {"name": "test-model"},
+            "benchmarks": [{"id": "mmlu", "provider_id": "lm_eval"}],
+            "hardware_config": hardware_config,
+        }
+
+        job = EvaluationJob.model_validate(payload)
+
+        assert job.hardware_config == BenchmarkHardwareConfig.model_validate(
+            hardware_config
+        )
+        assert job.benchmarks is not None
+        assert job.benchmarks[0].hardware_config is None
+        serialized = job.model_dump(mode="json", exclude_none=True)
+        assert serialized["hardware_config"] == hardware_config
+        assert EvaluationJob.model_validate(serialized) == job
 
     def test_completed_evaluation_job(self) -> None:
         """Test completed EvaluationJob."""
@@ -473,6 +522,58 @@ class TestCollectionRef:
 class TestJobSubmissionRequest:
     """Test cases for JobSubmissionRequest model."""
 
+    @pytest.mark.parametrize("collection", [False, True])
+    def test_hardware_config_submission(self, collection: bool) -> None:
+        benchmark = BenchmarkConfig(
+            id="mmlu",
+            provider_id="lm_eval",
+            hardware_config=BenchmarkHardwareConfig(
+                hardware_profile_name="gpu-profile"
+            ),
+        )
+        request = JobSubmissionRequest(
+            name="hardware-eval",
+            model=ModelConfig(url="http://localhost:8000/v1", name="test-model"),
+            benchmarks=None if collection else [benchmark],
+            collection=(
+                CollectionRef(id="my-collection", benchmarks=[benchmark])
+                if collection
+                else None
+            ),
+            hardware_config=BenchmarkHardwareConfig.model_validate(
+                {"cpu": {"request": "2"}, "queue": {"name": "eval-queue"}}
+            ),
+        )
+        payload = request.model_dump(
+            exclude_none=True, context={"for_submission": True}
+        )
+        assert payload["hardware_config"] == {
+            "cpu": {"request": "2"},
+            "queue": {"name": "eval-queue"},
+        }
+        benchmarks = (
+            payload["collection"]["benchmarks"] if collection else payload["benchmarks"]
+        )
+        assert benchmarks[0]["hardware_config"] == {
+            "hardware_profile_name": "gpu-profile"
+        }
+        assert JobSubmissionRequest.model_validate(payload) == request
+
+    @pytest.mark.parametrize("level", ["evaluation", "benchmark"])
+    def test_invalid_hardware_config(self, level: str) -> None:
+        raw: dict[str, Any] = {
+            "name": "hardware-eval",
+            "model": {"url": "http://localhost:8000/v1", "name": "test-model"},
+            "benchmarks": [{"id": "mmlu", "provider_id": "lm_eval"}],
+        }
+        hardware = {"hardware_profile_name": "gpu-profile", "cpu": {"request": "2"}}
+        if level == "evaluation":
+            raw["hardware_config"] = hardware
+        else:
+            raw["benchmarks"][0]["hardware_config"] = hardware
+        with pytest.raises(ValidationError, match="hardware_profile_name"):
+            JobSubmissionRequest.model_validate(raw)
+
     def test_submission_with_benchmarks(self) -> None:
         """Test JobSubmissionRequest with direct benchmarks."""
         request = JobSubmissionRequest(
@@ -484,6 +585,11 @@ class TestJobSubmissionRequest:
         )
         assert request.benchmarks is not None
         assert request.collection is None
+        assert request.hardware_config is None
+        assert request.benchmarks[0].hardware_config is None
+        payload = request.model_dump(exclude_none=True)
+        assert "hardware_config" not in payload
+        assert "hardware_config" not in payload["benchmarks"][0]
 
     def test_submission_with_collection(self) -> None:
         """Test JobSubmissionRequest with collection reference."""
@@ -1671,6 +1777,439 @@ class TestMetricSchema:
         from evalhub.models import MetricSchema as Imported
 
         assert Imported is MetricSchema
+
+
+class TestPostProcessingResponseCompatibility:
+    """Tests for forward-compatible post-processing response parsing."""
+
+    def test_status_ignores_unknown_server_fields(self) -> None:
+        status = PostProcessingStatus.model_validate(
+            {"state": "running", "progress": 0.5}
+        )
+
+        assert status.state.value == "running"
+        assert status.model_extra is None
+
+    def test_confidence_interval_ignores_unknown_server_fields(self) -> None:
+        interval = ConfidenceInterval.model_validate(
+            {"lower": 0.1, "upper": 0.9, "confidence_level": 0.95}
+        )
+
+        assert interval.lower == 0.1
+        assert interval.model_extra is None
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("n_labeled", -1),
+            ("n_unlabeled", -1),
+            ("alpha", -0.1),
+            ("alpha", 0.0),
+            ("alpha", 1.0),
+            ("alpha", 1.1),
+        ],
+    )
+    def test_results_preserve_out_of_range_adapter_metadata(
+        self, field: str, value: int | float
+    ) -> None:
+        payload = {"confidence_interval": {"lower": 0.1, "upper": 0.9, field: value}}
+
+        results = PostProcessingResults.model_validate(payload)
+
+        assert results.model_dump(exclude_none=True) == payload
+
+
+@pytest.fixture
+def post_processing_config_data() -> dict[str, Any]:
+    """Minimal confidence-interval configuration using stored job results."""
+    return {
+        "results_data_ref": {"eval_job": {"id": "eval-123"}},
+        "calibration_data_ref": [
+            {
+                "pvc": {"claim_name": "calibration-data"},
+                "data_config": {
+                    "format": "jsonl",
+                    "columns": {"label": "expected", "prediction": "actual"},
+                },
+            }
+        ],
+        "significance_level": 0.05,
+    }
+
+
+class TestPostProcessingContract:
+    """Representative wire shapes and business rules, not field permutations."""
+
+    @pytest.mark.parametrize("field", ["format", "path"])
+    def test_empty_optional_result_config_strings(self, field: str) -> None:
+        config = ResultsDataConfigEntry.model_validate({field: ""})
+
+        assert getattr(config, field) == ""
+        assert config.model_dump(exclude_none=True) == {field: ""}
+
+    @pytest.mark.parametrize(
+        "payload",
+        [{"format": " "}, {"path": " "}, {"path": "/results.jsonl"}],
+    )
+    def test_invalid_nonempty_result_config_strings(
+        self, payload: dict[str, str]
+    ) -> None:
+        with pytest.raises(ValidationError):
+            ResultsDataConfigEntry.model_validate(payload)
+
+    def test_minimal_request_wire_shape(
+        self, post_processing_config_data: dict[str, Any]
+    ) -> None:
+        payload = {"operations": {"confidence_interval": post_processing_config_data}}
+        request = StandalonePostProcessingRequest.model_validate(payload)
+
+        assert request.model_dump(mode="json", exclude_none=True) == payload
+
+    def test_external_request_wire_shape(
+        self, post_processing_config_data: dict[str, Any]
+    ) -> None:
+        post_processing_config_data.update(
+            results_data_ref={
+                "mlflow": {"run_id": "run-123", "artifact_path": "results.jsonl"},
+                "data_config": {
+                    "format": "jsonl",
+                    "columns": {"prediction": "score"},
+                    "value_mappings": {"prediction": {"correct": 1.0}},
+                },
+            },
+            primary_score={"metric": "accuracy", "lower_is_better": False},
+        )
+        payload = {
+            "name": "accuracy-ci",
+            "hardware_config": {"hardware_profile_name": "small-cpu"},
+            "operation_order": ["confidence_interval"],
+            "operations": {"confidence_interval": post_processing_config_data},
+        }
+        request = StandalonePostProcessingRequest.model_validate(payload)
+
+        assert request.model_dump(mode="json", exclude_none=True) == payload
+
+    @pytest.mark.parametrize(
+        "source",
+        [
+            {"eval_job": {"id": "eval-123"}},
+            {"s3": {"bucket": "results", "key": "scores.jsonl", "secret_ref": "s3"}},
+            {"pvc": {"claim_name": "results"}},
+            {"git": {"url": "https://example.com/results.git", "ref": "main"}},
+            {"hf": {"repo_id": "org/results"}},
+            {"mlflow": {"run_id": "run-123", "artifact_path": "scores.jsonl"}},
+            {
+                "oci": {
+                    "coordinates": {
+                        "oci_host": "quay.io",
+                        "oci_repository": "org/results",
+                    },
+                    "artifact_path": "scores.jsonl",
+                }
+            },
+        ],
+        ids=["eval-job", "s3", "pvc", "git", "hf", "mlflow", "oci"],
+    )
+    def test_result_sources(self, source: dict[str, Any]) -> None:
+        ref = PostProcessingResultsDataRef.model_validate(source)
+
+        assert getattr(ref, next(iter(source))) is not None
+        assert set(ref.model_dump(exclude_none=True)) == set(source)
+
+    @pytest.mark.parametrize("multiple", [False, True], ids=["none", "multiple"])
+    def test_source_exclusivity(
+        self, post_processing_config_data: dict[str, Any], multiple: bool
+    ) -> None:
+        source = (
+            {"pvc": {"claim_name": "data"}, "hf": {"repo_id": "org/data"}}
+            if multiple
+            else {}
+        )
+        with pytest.raises(ValidationError, match="exactly one result data source"):
+            PostProcessingResultsDataRef.model_validate(source)
+
+        with pytest.raises(
+            ValidationError, match="exactly one calibration data source"
+        ):
+            CalibrationDataRef.model_validate(
+                {
+                    **source,
+                    "data_config": post_processing_config_data["calibration_data_ref"][
+                        0
+                    ]["data_config"],
+                }
+            )
+
+    @pytest.mark.parametrize("eval_job", [False, True], ids=["external", "eval-job"])
+    def test_primary_score_source_rules(
+        self, post_processing_config_data: dict[str, Any], eval_job: bool
+    ) -> None:
+        if eval_job:
+            post_processing_config_data["primary_score"] = {"metric": "accuracy"}
+        else:
+            post_processing_config_data["results_data_ref"] = {
+                "pvc": {"claim_name": "results"}
+            }
+
+        with pytest.raises(ValidationError, match="primary_score"):
+            StandaloneConfidenceIntervalConfig.model_validate(
+                post_processing_config_data
+            )
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("significance_level", 0),
+            ("significance_level", 1),
+            ("calibration_data_ref", []),
+        ],
+    )
+    def test_configuration_constraints(
+        self, post_processing_config_data: dict[str, Any], field: str, value: Any
+    ) -> None:
+        post_processing_config_data[field] = value
+        with pytest.raises(ValidationError) as error:
+            StandaloneConfidenceIntervalConfig.model_validate(
+                post_processing_config_data
+            )
+        assert error.value.errors()[0]["loc"] == (field,)
+
+    @pytest.mark.parametrize("per_benchmark", [False, True], ids=["object", "array"])
+    def test_data_config_wire_shape(self, per_benchmark: bool) -> None:
+        entry = {"format": "csv", "selection": {"benchmark_id": "arc"}}
+        payload = [entry] if per_benchmark else entry
+        config = ResultsDataConfig.model_validate(payload)
+
+        assert config.model_dump(mode="json", exclude_none=True) == payload
+        assert (config.single is None) is per_benchmark
+        assert (config.per_benchmark is not None) is per_benchmark
+
+    @pytest.mark.parametrize("payload", [[], [{"format": "csv"}]])
+    def test_data_config_array_requires_entries_with_selection(
+        self, payload: Any
+    ) -> None:
+        with pytest.raises(ValidationError):
+            ResultsDataConfig.model_validate(payload)
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"path": "/absolute.json"},
+            {"columns": {"unknown": "score"}},
+            {"columns": {"prediction": " "}},
+            {"selection": {}},
+            {"value_mappings": {"prediction": {"correct": True}}},
+        ],
+        ids=[
+            "absolute-path",
+            "unknown-column",
+            "blank-column",
+            "empty-selection",
+            "boolean-mapping",
+        ],
+    )
+    def test_invalid_data_mappings(self, payload: dict[str, Any]) -> None:
+        with pytest.raises(ValidationError):
+            ResultsDataConfigEntry.model_validate(payload)
+
+    def test_direct_hardware_and_conflicting_modes(self) -> None:
+        direct = {
+            "cpu": {"request": "1"},
+            "gpu": {"name": "nvidia.com/gpu", "count": 1},
+        }
+        hardware = BenchmarkHardwareConfig.model_validate(direct)
+        assert hardware.model_dump(exclude_none=True) == direct
+
+        with pytest.raises(
+            ValidationError, match="hardware_profile_name cannot be combined"
+        ):
+            BenchmarkHardwareConfig.model_validate(
+                {"hardware_profile_name": "small", **direct}
+            )
+        with pytest.raises(ValidationError, match="gpu and dra are mutually exclusive"):
+            BenchmarkHardwareConfig.model_validate(
+                {**direct, "dra": {"resource_claim_template": "gpu-template"}}
+            )
+
+    @pytest.mark.parametrize("field_name", ["lambda", "lambda_"])
+    def test_lambda_input_alias_and_wire_serialization(self, field_name: str) -> None:
+        interval = ConfidenceInterval.model_validate(
+            {"lower": 0.1, "upper": 0.9, field_name: 0.5}
+        )
+        assert interval.lambda_ == 0.5
+        assert interval.model_dump(exclude_none=True) == {
+            "lower": 0.1,
+            "upper": 0.9,
+            "lambda": 0.5,
+        }
+
+    @pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+    def test_nonfinite_interval_values_are_rejected(self, value: float) -> None:
+        with pytest.raises(ValidationError) as error:
+            ConfidenceInterval(lower=value, upper=0.9)
+        assert error.value.errors()[0]["type"] == "finite_number"
+
+    @pytest.mark.parametrize(
+        "result_kind", ["absent", "empty", "benchmarks", "aggregate", "both"]
+    )
+    def test_resource_response_shapes(
+        self, post_processing_config_data: dict[str, Any], result_kind: str
+    ) -> None:
+        interval = {"lower": 0.7, "upper": 0.9, "lambda": 0.5, "future_metadata": True}
+        results: dict[str, Any] = {}
+        if result_kind in {"benchmarks", "both"}:
+            results["benchmarks"] = [
+                {
+                    "id": "arc",
+                    "provider_id": "lm_eval",
+                    "benchmark_index": 0,
+                    "confidence_interval": interval,
+                }
+            ]
+        if result_kind in {"aggregate", "both"}:
+            results["confidence_interval"] = interval
+        payload = {
+            "resource": {"id": "pp-123"},
+            "operations": {
+                "confidence_interval": {
+                    **post_processing_config_data,
+                    "future_option": True,
+                }
+            },
+            "hardware_config": {
+                "cpu": {"request": "1", "future_quantity": True},
+                "future_hardware": True,
+            },
+            "status": {
+                "state": "completed",
+                "completed_at": "2026-01-01T00:00:00Z",
+                "progress": 1,
+            },
+            "future_field": True,
+        }
+        if result_kind != "absent":
+            payload["results"] = {**results, "future_result": True}
+        response = PostProcessingResource.model_validate(payload)
+
+        assert response.resource.id == "pp-123"
+        assert response.status.completed_at == datetime(2026, 1, 1, tzinfo=UTC)
+        assert response.model_extra is None
+        if result_kind == "absent":
+            assert response.results is None
+        else:
+            assert response.results is not None
+            assert (response.results.benchmarks is not None) == (
+                "benchmarks" in results
+            )
+            assert (response.results.confidence_interval is not None) == (
+                "confidence_interval" in results
+            )
+            if response.results.benchmarks is not None:
+                benchmark = response.results.benchmarks[0]
+                assert (
+                    benchmark.id,
+                    benchmark.provider_id,
+                    benchmark.benchmark_index,
+                ) == ("arc", "lm_eval", 0)
+                assert benchmark.confidence_interval.lower == 0.7
+            if response.results.confidence_interval is not None:
+                assert response.results.confidence_interval.lambda_ == 0.5
+
+    def test_failed_response_without_results(
+        self, post_processing_config_data: dict[str, Any]
+    ) -> None:
+        response = PostProcessingResource.model_validate(
+            {
+                "resource": {"id": "pp-123"},
+                "operations": {"confidence_interval": post_processing_config_data},
+                "status": {
+                    "state": "failed",
+                    "error_message": {
+                        "message": "Artifact missing",
+                        "message_code": "not_found",
+                    },
+                },
+            }
+        )
+
+        assert response.status.state.value == "failed"
+        assert response.status.error_message is not None
+        assert response.status.error_message.message_code == "not_found"
+        assert response.results is None
+
+
+@pytest.mark.parametrize("name", ["Invalid_Name!", "a" * 64, ""])
+def test_hardware_names_are_validated_by_server(name: str) -> None:
+    hardware = BenchmarkHardwareConfig(hardware_profile_name=name)
+    dra = HardwareDRAConfig(resource_claim_template=name, claim_name=name)
+
+    assert hardware.model_dump(exclude_none=True) == {"hardware_profile_name": name}
+    assert dra.model_dump(exclude_none=True) == {
+        "resource_claim_template": name,
+        "claim_name": name,
+    }
+
+
+class TestPostProcessingEmptyStringSemantics:
+    """Test server-compatible handling of optional empty strings."""
+
+    def test_empty_hardware_strings_are_preserved(self) -> None:
+        hardware = BenchmarkHardwareConfig(
+            hardware_profile_name="",
+            cpu=HardwareResourceQuantity(request="1"),
+        )
+        dra = HardwareDRAConfig(
+            resource_claim_template="claim-template",
+            claim_name="",
+        )
+
+        assert hardware.hardware_profile_name == ""
+        assert hardware.model_dump(exclude_none=True) == {
+            "hardware_profile_name": "",
+            "cpu": {"request": "1"},
+        }
+        assert dra.claim_name == ""
+        assert dra.model_dump(exclude_none=True) == {
+            "resource_claim_template": "claim-template",
+            "claim_name": "",
+        }
+
+    def test_empty_digest_is_preserved(self) -> None:
+        data_ref = OCIDataRef(
+            coordinates=OCICoordinates(
+                oci_host="quay.io", oci_repository="org/results"
+            ),
+            digest="",
+            artifact_path="results.json",
+        )
+
+        assert data_ref.digest == ""
+        assert data_ref.model_dump(exclude_none=True) == {
+            "coordinates": {
+                "oci_host": "quay.io",
+                "oci_repository": "org/results",
+                "annotations": {},
+            },
+            "artifact_path": "results.json",
+            "digest": "",
+        }
+
+    def test_empty_name_is_preserved(self) -> None:
+        common = PostProcessingCommon(name="")
+
+        assert common.name == ""
+        # Ensure their submission path uses exclude_none=True.
+        assert common.model_dump(exclude_none=True) == {"name": ""}
+
+    def test_nonempty_invalid_values_still_fail_validation(self) -> None:
+        with pytest.raises(ValidationError):
+            OCIDataRef(
+                coordinates=OCICoordinates(
+                    oci_host="quay.io", oci_repository="org/results"
+                ),
+                digest="not-a-sha256-digest",
+                artifact_path="results.json",
+            )
 
 
 class TestBenchmarkResultMetricsSchema:

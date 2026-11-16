@@ -100,6 +100,47 @@ class TestEvalRun:
         assert "Job submitted: eval-123" in result.output
         mock_client.jobs.submit.assert_called_once()
 
+    @pytest.mark.usefixtures("config_file")
+    def test_run_with_hardware_config(
+        self,
+        runner: CliRunner,
+        mock_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        cfg = {
+            "name": "hardware-eval",
+            "model": {"url": "http://vllm:8000/v1", "name": "llama3"},
+            "hardware_config": {
+                "cpu": {"request": "2"},
+                "memory": {"request": "4Gi"},
+            },
+            "benchmarks": [
+                {
+                    "id": "mmlu",
+                    "provider_id": "lm_eval",
+                    "hardware_config": {"hardware_profile_name": "gpu-profile"},
+                },
+                {"id": "hellaswag", "provider_id": "lm_eval"},
+            ],
+        }
+        cfg_path = tmp_path / "eval.yaml"
+        cfg_path.write_text(yaml.safe_dump(cfg))
+        mock_client.jobs.submit.return_value = _make_job()
+
+        with patch("evalhub.cli.main.get_client", return_value=mock_client):
+            result = runner.invoke(main, ["eval", "run", "--config", str(cfg_path)])
+
+        assert result.exit_code == 0, result.output
+        request = mock_client.jobs.submit.call_args[0][0]
+        payload = request.model_dump(
+            exclude_none=True, context={"for_submission": True}
+        )
+        assert payload["hardware_config"] == cfg["hardware_config"]
+        assert payload["benchmarks"][0]["hardware_config"] == {
+            "hardware_profile_name": "gpu-profile"
+        }
+        assert "hardware_config" not in payload["benchmarks"][1]
+
     def test_run_with_json_config(
         self,
         runner: CliRunner,
