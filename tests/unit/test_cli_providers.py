@@ -488,6 +488,46 @@ class TestProvidersCreate:
 
 
 class TestProvidersUpdate:
+    @pytest.mark.parametrize("extension", ["yaml", "json"])
+    @pytest.mark.parametrize(
+        "provider_id",
+        [
+            "my-provider",
+            "other-provider",
+            "b8e4306d-2a91-47f5-a6c3-90d12e7f845b",
+            "",
+            None,
+        ],
+    )
+    def test_update_rejects_top_level_id(
+        self,
+        runner: CliRunner,
+        config_file: Path,
+        mock_client: MagicMock,
+        tmp_path: Path,
+        extension: str,
+        provider_id: str | None,
+    ) -> None:
+        spec = {"id": provider_id, "name": "My Provider"}
+        spec_file = tmp_path / f"provider.{extension}"
+        spec_file.write_text(
+            yaml.safe_dump(spec) if extension == "yaml" else json.dumps(spec)
+        )
+
+        with patch(
+            "evalhub.cli.main.get_client", return_value=mock_client
+        ) as get_client:
+            result = runner.invoke(
+                main,
+                ["providers", "update", "my-provider", "--file", str(spec_file)],
+            )
+
+        assert result.exit_code == 1
+        assert f"Remove the top-level 'id' field from {spec_file}." in result.output
+        assert "Supply the provider ID as the command argument." in result.output
+        get_client.assert_not_called()
+        mock_client.providers.update.assert_not_called()
+
     def test_update_from_yaml(
         self,
         runner: CliRunner,
@@ -526,6 +566,7 @@ class TestProvidersUpdate:
         mock_client.providers.update.assert_called_once()
         call_args = mock_client.providers.update.call_args
         assert call_args[0][0] == "my-provider"
+        assert call_args[0][1]["benchmarks"][0]["id"] == "my-benchmark"
 
     def test_update_from_json(
         self,

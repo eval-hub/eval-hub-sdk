@@ -522,6 +522,51 @@ class TestCollectionsCreate:
 
 
 class TestCollectionsUpdate:
+    @pytest.mark.parametrize("extension", ["yaml", "json"])
+    @pytest.mark.parametrize(
+        "collection_id",
+        [
+            "rag-safety",
+            "other-collection",
+            "7c51f9a2-63e4-4b8d-9f20-1a6d05c3e872",
+            "",
+            None,
+        ],
+    )
+    def test_update_rejects_top_level_id(
+        self,
+        runner: CliRunner,
+        config_file: Path,
+        mock_client: MagicMock,
+        tmp_path: Path,
+        extension: str,
+        collection_id: str | None,
+    ) -> None:
+        spec = {
+            "id": collection_id,
+            "name": "My Collection",
+            "category": "reasoning",
+            "benchmarks": [{"id": "arc_easy", "provider_id": "lm_evaluation_harness"}],
+        }
+        spec_file = tmp_path / f"collection.{extension}"
+        spec_file.write_text(
+            yaml.safe_dump(spec) if extension == "yaml" else json.dumps(spec)
+        )
+
+        with patch(
+            "evalhub.cli.main.get_client", return_value=mock_client
+        ) as get_client:
+            result = runner.invoke(
+                main,
+                ["collections", "update", "rag-safety", "--file", str(spec_file)],
+            )
+
+        assert result.exit_code == 1
+        assert f"Remove the top-level 'id' field from {spec_file}." in result.output
+        assert "Supply the collection ID as the command argument." in result.output
+        get_client.assert_not_called()
+        mock_client.collections.update.assert_not_called()
+
     def test_update_from_yaml(
         self,
         runner: CliRunner,
@@ -553,6 +598,7 @@ class TestCollectionsUpdate:
         mock_client.collections.update.assert_called_once()
         call_args = mock_client.collections.update.call_args
         assert call_args[0][0] == "rag-safety"
+        assert call_args[0][1]["benchmarks"][0]["id"] == "mmlu"
 
     def test_update_from_json(
         self,
