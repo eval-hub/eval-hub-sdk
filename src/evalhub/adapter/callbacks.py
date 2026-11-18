@@ -27,12 +27,6 @@ from .oci import DEFAULT_OCI_PROXY_HOST, OCIArtifactPersister
 from .oci.persister import OCIArtifactContext
 from .telemetry import EvalTracer
 
-_MLFLOW_SAVE_FAILED = MessageInfo(
-    message="Failed to save evaluation results to MLflow.",
-    message_code="mlflow_save_failed",
-    message_origin=MessageOrigin.SDK,
-)
-
 logger = logging.getLogger(__name__)
 
 
@@ -104,7 +98,13 @@ class _MlflowOps:
                 self._callbacks.report_status(
                     JobStatusUpdate(
                         status=JobStatus.FAILED,
-                        error_message=_MLFLOW_SAVE_FAILED,
+                        # This first terminal event must retain the backend cause;
+                        # later adapter events may be rejected once the job is failed.
+                        error_message=MessageInfo(
+                            message=f"Failed to save evaluation results to MLflow: {e}",
+                            message_code="mlflow_save_failed",
+                            message_origin=MessageOrigin.SDK,
+                        ),
                         message=MessageInfo(
                             message="Evaluation failed",
                             message_code="evaluation_failed",

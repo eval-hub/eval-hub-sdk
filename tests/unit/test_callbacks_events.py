@@ -161,12 +161,16 @@ def test_mlflow_save_returns_run_id_from_upstream_path() -> None:
     m.assert_called_once()
 
 
-def test_mlflow_save_posts_failed_event_on_mlflow_error() -> None:
+@pytest.mark.parametrize("backend", ["odh", "upstream"])
+def test_mlflow_save_posts_failed_event_on_mlflow_error(backend: str) -> None:
+    from evalhub.adapter.config import MlflowBackend
+
     callbacks, mock_http = _make_callbacks()
+    callbacks.mlflow._backend = MlflowBackend(backend)
 
     with patch.object(
         callbacks.mlflow,
-        "_save_odh",
+        f"_save_{backend}",
         side_effect=RuntimeError("mlflow offline"),
     ):
         with pytest.raises(RuntimeError, match="MLflow save failed: mlflow offline"):
@@ -176,11 +180,11 @@ def test_mlflow_save_posts_failed_event_on_mlflow_error() -> None:
     assert body["status"] == JobStatus.FAILED.value
     assert (
         body["error_message"]["message"]
-        == "Failed to save evaluation results to MLflow."
+        == "Failed to save evaluation results to MLflow: mlflow offline"
     )
     assert body["error_message"]["message_code"] == "mlflow_save_failed"
     assert body["error_message"]["message_origin"] == "sdk"
-    assert "mlflow offline" not in body["error_message"]["message"]
+    assert mock_http.post.call_count == 1
     assert "warning_message" not in body
 
 
