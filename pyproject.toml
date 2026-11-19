@@ -57,7 +57,7 @@ client = [
 # CLI - command-line interface
 cli = [
     "eval-hub-sdk[core]",
-    "click>=8.1.0",
+    "click>=8.2.0",
     "packaging>=21.0",
     "pyyaml>=6.0",
     "rich>=13.0.0",

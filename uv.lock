@@ -633,7 +633,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "anyio", marker = "extra == 'core'", specifier = ">=4.14.2" },
-    { name = "click", marker = "extra == 'cli'", specifier = ">=8.1.0" },
+    { name = "click", marker = "extra == 'cli'", specifier = ">=8.2.0" },
     { name = "eval-hub-mcp", marker = "extra == 'mcp'", specifier = ">=1.0.0" },
     { name = "eval-hub-sdk", extras = ["adapter", "cli", "client", "core", "dev", "mcp"], marker = "extra == 'all'" },
     { name = "eval-hub-sdk", extras = ["cli"], marker = "extra == 'dev'" },

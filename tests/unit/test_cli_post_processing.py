@@ -838,15 +838,70 @@ def test_invalid_request(client: MagicMock, config_path: Path, content: str) -> 
 
 
 @pytest.mark.parametrize(
-    "filename",
+    "payload",
     [
-        "post_processing_eval_job.yaml",
-        "post_processing_external.yaml",
+        """
+name: evaluation-confidence-interval
+hardware_config:
+  cpu:
+    request: "1"
+  memory:
+    request: 2Gi
+operation_order:
+  - confidence_interval
+operations:
+  confidence_interval:
+    results_data_ref:
+      eval_job:
+        id: eval-123
+    calibration_data_ref:
+      - s3:
+          bucket: evaluation-data
+          key: calibration.jsonl
+          secret_ref: evaluation-s3-credentials
+        data_config:
+          format: jsonl
+          columns:
+            label: human_score
+            prediction: model_score
+            sample_id: id
+    significance_level: 0.05
+""",
+        """
+name: external-confidence-interval
+operations:
+  confidence_interval:
+    results_data_ref:
+      s3:
+        bucket: evaluation-data
+        key: predictions.jsonl
+        secret_ref: evaluation-s3-credentials
+      data_config:
+        format: jsonl
+        columns:
+          prediction: model_score
+          sample_id: id
+    calibration_data_ref:
+      - s3:
+          bucket: evaluation-data
+          key: calibration.jsonl
+          secret_ref: evaluation-s3-credentials
+        data_config:
+          format: jsonl
+          columns:
+            label: human_score
+            prediction: model_score
+            sample_id: id
+    significance_level: 0.05
+    primary_score:
+      metric: accuracy
+      lower_is_better: false
+""",
     ],
+    ids=["evaluation-job", "external"],
 )
-def test_example_requests(filename: str) -> None:
-    path = Path(__file__).parents[2] / "examples" / filename
-    StandalonePostProcessingRequest.model_validate(yaml.safe_load(path.read_text()))
+def test_example_requests(payload: str) -> None:
+    StandalonePostProcessingRequest.model_validate(yaml.safe_load(payload))
 
 
 def test_operation_discovery_and_order() -> None:
