@@ -224,10 +224,17 @@ def evalhub_server_with_real_config() -> Generator[str, None, None]:
             # Give the OS a moment to release the port
             time.sleep(0.5)
 
+        # Submission smoke tests do not need an installed post-processing adapter.
+        # Scope the no-op override to this server, not the pytest process.
+        server_env = {
+            **os.environ,
+            "EVALHUB_POST_PROCESSING_LOCAL_COMMAND": "sleep 1; true",
+        }
         with open(log_file, "w") as log_f:
             server_process = subprocess.Popen(
                 [binary_path, "--local"],
                 cwd=str(config_dir.parent),
+                env=server_env,
                 stdout=log_f,
                 stderr=subprocess.STDOUT,
             )

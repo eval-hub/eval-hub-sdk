@@ -9,6 +9,7 @@ import re
 import shutil
 import sys
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
@@ -18,6 +19,7 @@ import yaml
 from pydantic import ValidationError
 
 import evalhub
+from evalhub.client import SyncEvalHubClient
 from evalhub.client.job_logs import TERMINAL_JOB_STATES, JobLogOptions
 from evalhub.models import (
     BenchmarkConfig,
@@ -35,10 +37,13 @@ from evalhub.models import (
     ModelConfig,
     OCIConnectionConfig,
     OCICoordinates,
+    PostProcessingResource,
+    PostProcessingState,
     ProviderCreateRequest,
     PVCTestDataRef,
     QueueConfig,
     S3TestDataRef,
+    StandalonePostProcessingRequest,
     TestDataRef,
 )
 
@@ -178,16 +183,21 @@ def _coerce_param_value(value: str) -> Any:
 
 
 def _load_config_file(path: str) -> dict[str, Any]:
-    """Load a YAML or JSON config file for eval run."""
-    with open(path) as f:
-        content = f.read()
-    if path.endswith((".yaml", ".yml")):
-        data = yaml.safe_load(content)
-    else:
-        data = json.loads(content)
+    """Load a shared YAML or JSON command configuration."""
+    try:
+        with open(path) as f:
+            content = f.read()
+        if path.endswith((".yaml", ".yml")):
+            data = yaml.safe_load(content)
+        else:
+            data = json.loads(content)
+    except (yaml.YAMLError, json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
+        raise click.ClickException(
+            f"Cannot load configuration {path!r}: {exc}"
+        ) from exc
     if not isinstance(data, dict):
         raise click.ClickException(
-            f"Config file must contain a mapping, got {type(data).__name__}"
+            f"Config file {path!r} must contain a mapping, got {type(data).__name__}"
         )
     return data
 
@@ -260,7 +270,7 @@ def _build_request_from_flags(
 @click.option(
     "--config",
     "config_file",
-    type=click.Path(exists=True),
+    type=click.Path(exists=True, readable=False),
     default=None,
     help=(
         "YAML or JSON file with the full job body. When set, all other "
@@ -1147,6 +1157,331 @@ def eval_cancel(ctx: click.Context, job_id: str, hard_delete: bool) -> None:
     client.jobs.cancel(job_id, hard_delete=hard_delete)
     action = "deleted" if hard_delete else "cancelled"
     click.echo(f"Job {job_id} {action}.")
+
+
+@main.group("post-processing")
+def post_processing() -> None:
+    """Submit, inspect, and delete standalone post-processing jobs.
+
+    Operations are configured in a YAML or JSON request file. Currently supports
+    confidence_interval. Status and results each require one job ID.
+    """
+
+
+def _post_processing_wait_options(command: Callable) -> Callable:
+    """Waiting options for standalone post-processing submission."""
+    command = click.option(
+        "--poll-interval",
+        type=FiniteFloatRange(min=0, min_open=True),
+        default=5.0,
+        show_default=True,
+        help="Polling interval in seconds with --wait.",
+    )(command)
+    command = click.option(
+        "--timeout",
+        type=FiniteFloatRange(min=0, min_open=True),
+        default=None,
+        help="Soft waiting timeout in seconds (default: unlimited).",
+    )(command)
+    return click.option(
+        "--wait", "wait_for", is_flag=True, help="Wait for a terminal job state."
+    )(command)
+
+
+def _validate_post_processing_wait(ctx: click.Context, wait_for: bool) -> None:
+    if not wait_for:
+        for name in ("timeout", "poll_interval"):
+            if ctx.get_parameter_source(name) == click.core.ParameterSource.COMMANDLINE:
+                raise click.UsageError(f"--{name.replace('_', '-')} requires --wait.")
+
+
+def _wait_for_post_processing(
+    client: SyncEvalHubClient,
+    job_id: str,
+    timeout: float | None,
+    poll_interval: float,
+) -> PostProcessingResource:
+    """Poll with the same soft-timeout convention as evaluation waiting."""
+    click.echo(f"Waiting for post-processing job {job_id}...", err=True)
+    start = time.time()
+    while True:
+        job = client.post_processing.get(job_id)
+        if job.status.state in (
+            PostProcessingState.COMPLETED,
+            PostProcessingState.FAILED,
+            PostProcessingState.CANCELLED,
+        ):
+            # Unlike eval run --wait, failed computations intentionally exit 0:
+            # the CLI operation succeeded; the resource reports computation state.
+            click.echo(
+                f"Job {job_id} finished with state: {job.status.state.value}",
+                err=True,
+            )
+            return job
+        if timeout is not None and time.time() - start > timeout:
+            raise click.ClickException(
+                f"Timed out waiting for post-processing job {job_id} after "
+                f"{timeout} seconds. The job may still be running."
+            )
+        time.sleep(poll_interval)
+
+
+def _confidence_interval_source(config: dict[str, Any]) -> list[tuple[str, str]]:
+    """Extract source details specific to confidence-interval configuration."""
+    source = config.get("results_data_ref") or {}
+    if source.get("eval_job") is not None:
+        return [("Source evaluation", source["eval_job"]["id"])]
+    labels = {
+        "s3": "S3",
+        "pvc": "PVC",
+        "git": "Git",
+        "hf": "Hugging Face",
+        "mlflow": "MLflow",
+        "oci": "OCI",
+    }
+    return [
+        ("Source", label)
+        for key, label in labels.items()
+        if source.get(key) is not None
+    ]
+
+
+def _output_post_processing(
+    job: PostProcessingResource, output_format: str | None
+) -> None:
+    data = job.model_dump(mode="json")
+    if output_format in ("json", "yaml"):
+        output([data], output_format=output_format)
+        return
+
+    fields: list[tuple[str, Any]] = [
+        ("Job", data["resource"]["id"]),
+        ("Name", data.get("name")),
+        ("State", data["status"]["state"]),
+        ("Created", data["resource"]["created_at"]),
+        ("Started", data["status"].get("started_at")),
+        ("Completed", data["status"].get("completed_at")),
+    ]
+    operations = data["operations"]
+    names = list(dict.fromkeys([*(data.get("operation_order") or []), *operations]))
+    names = [name for name in names if operations.get(name) is not None]
+    fields.append(("Operations", ", ".join(names)))
+    source_extractors = {"confidence_interval": _confidence_interval_source}
+    for name in names:
+        extractor = source_extractors.get(name)
+        if extractor is not None:
+            for label, value in extractor(operations[name]):
+                fields.append((f"{name}: {label}" if len(names) > 1 else label, value))
+    for key, label in (("error_message", "Error"), ("warning_message", "Warning")):
+        message = data["status"].get(key)
+        if message is not None:
+            fields.append((label, message.get("message")))
+    fields = [(label, value) for label, value in fields if value is not None]
+    if output_format is None:
+        width = max(len(label) for label, _ in fields)
+        for label, value in fields:
+            click.echo(f"{label + ':':<{width + 2}}{value}")
+    else:
+        output(
+            [{"field": label, "value": value} for label, value in fields],
+            columns=("field", "value"),
+        )
+
+
+def _confidence_interval_statistics(result: dict[str, Any]) -> dict[str, Any]:
+    """The statistics reported by a confidence-interval result."""
+    return {
+        key: result[key]
+        for key in (
+            "lower",
+            "upper",
+            "point_estimate",
+            "n_labeled",
+            "n_unlabeled",
+            "alpha",
+            "method",
+            "lambda",
+        )
+        if result.get(key) is not None
+    }
+
+
+def _post_processing_result_records(
+    job: PostProcessingResource
+) -> list[dict[str, Any]]:
+    """Normalize benchmark and aggregate results without losing operation keys."""
+    if job.results is None:
+        return []
+    data = job.results.model_dump(mode="json", exclude_none=True)
+    records: list[dict[str, Any]] = list(data.pop("benchmarks", None) or [])
+    aggregate = {key: value for key, value in data.items() if value is not None}
+    if aggregate:
+        records.append(aggregate)
+    return records
+
+
+def _output_post_processing_results(
+    job: PostProcessingResource, output_format: str | None
+) -> None:
+    for label, message in (
+        ("Error", job.status.error_message),
+        ("Warning", job.status.warning_message),
+    ):
+        if message is not None:
+            click.echo(f"{label}: {message.message}", err=True)
+    records = _post_processing_result_records(job)
+    incomplete = job.status.state != PostProcessingState.COMPLETED
+    if not records:
+        availability_message = (
+            f"Job state is {job.status.state.value}; no results available."
+            if incomplete
+            else "No results available."
+        )
+        click.echo(availability_message, err=output_format is not None)
+        if output_format in (None, "table"):
+            return
+    elif incomplete:
+        click.echo(
+            f"Job state is {job.status.state.value}; results may be incomplete.",
+            err=True,
+        )
+    if output_format in ("json", "yaml"):
+        output(records, output_format=output_format)
+        return
+
+    statistics = {"confidence_interval": _confidence_interval_statistics}
+    if output_format is None:
+        for index, record in enumerate(records):
+            if index:
+                click.echo()
+            indent = ""
+            if "id" in record:
+                click.echo(
+                    f"Benchmark: {record['id']} "
+                    f"(provider: {record.get('provider_id', '')}, "
+                    f"index: {record.get('benchmark_index', '')})"
+                )
+                indent = "  "
+            for operation, result in record.items():
+                extract = statistics.get(operation)
+                if extract is None or result is None:
+                    continue
+                click.echo(f"{indent}{operation}:")
+                values = extract(result)
+                width = max((len(key) for key in values), default=0)
+                for key, value in values.items():
+                    click.echo(f"{indent}  {key + ':':<{width + 2}}{value}")
+        return
+
+    rows = []
+    with_identity = any("id" in record for record in records)
+    for record in records:
+        for operation, result in record.items():
+            extract = statistics.get(operation)
+            if extract is None or result is None:
+                continue
+            for statistic, value in extract(result).items():
+                row = {
+                    "operation": operation,
+                    "statistic": statistic,
+                    "value": value,
+                }
+                if with_identity:
+                    row.update(
+                        benchmark=record.get("id", ""),
+                        provider=record.get("provider_id", ""),
+                        index=record.get("benchmark_index", ""),
+                    )
+                rows.append(row)
+    columns = ["benchmark", "provider", "index"] if with_identity else []
+    output(rows, columns=[*columns, "operation", "statistic", "value"])
+
+
+@post_processing.command("run")
+@click.option(
+    "--config",
+    "config_file",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, readable=False),
+    help="YAML or JSON file containing the complete post-processing request.",
+)
+@_post_processing_wait_options
+@format_option(default=None, formats=("table", "json", "yaml"))
+@click.pass_context
+@handle_api_errors
+def post_processing_run(
+    ctx: click.Context,
+    config_file: str,
+    wait_for: bool,
+    timeout: float | None,
+    poll_interval: float,
+    output_format: str | None,
+) -> None:
+    """Submit one standalone post-processing job from a configuration file."""
+    _validate_post_processing_wait(ctx, wait_for)
+    data = _load_config_file(config_file)
+    try:
+        request = StandalonePostProcessingRequest(**data)
+    except ValidationError as exc:
+        raise click.ClickException(
+            f"Invalid post-processing configuration {config_file!r}: {exc}"
+        ) from exc
+    client = get_client(ctx)
+    job = client.post_processing.submit(request)
+    click.echo(
+        f"Post-processing job submitted: {job.resource.id}",
+        err=output_format is not None or wait_for,
+    )
+    if output_format is None and not wait_for:
+        return
+    if wait_for:
+        job = _wait_for_post_processing(client, job.resource.id, timeout, poll_interval)
+    _output_post_processing(job, output_format)
+
+
+@post_processing.command("status")
+@click.argument("job_id")
+@format_option(default=None, formats=("table", "json", "yaml"))
+@click.pass_context
+@handle_api_errors
+def post_processing_status(
+    ctx: click.Context,
+    job_id: str,
+    output_format: str | None,
+) -> None:
+    """Retrieve a single snapshot of one post-processing job."""
+    client = get_client(ctx)
+    job = client.post_processing.get(job_id)
+    _output_post_processing(job, output_format)
+
+
+@post_processing.command("results")
+@click.argument("job_id")
+@format_option(default=None, formats=("table", "json", "yaml"))
+@click.pass_context
+@handle_api_errors
+def post_processing_results(
+    ctx: click.Context,
+    job_id: str,
+    output_format: str | None,
+) -> None:
+    """Retrieve operation results from a single post-processing job snapshot."""
+    client = get_client(ctx)
+    job = client.post_processing.get(job_id)
+    _output_post_processing_results(job, output_format)
+
+
+@post_processing.command("delete")
+@click.argument("job_id")
+@click.confirmation_option(
+    prompt="Are you sure you want to delete this post-processing job?"
+)
+@click.pass_context
+@handle_api_errors
+def post_processing_delete(ctx: click.Context, job_id: str) -> None:
+    """Delete a resource and request runtime cleanup (not evaluation cancellation)."""
+    get_client(ctx).post_processing.delete(job_id)
+    click.echo(f"Post-processing job {job_id} deleted.", err=True)
 
 
 @main.group()

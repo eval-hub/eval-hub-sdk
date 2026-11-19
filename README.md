@@ -77,6 +77,88 @@ The SDK is organized into distinct, focused packages:
 - Resource navigation (providers, benchmarks, collections)
 - See [Getting Started with the CLI](https://eval-hub.github.io/getting-started/cli/)
 
+### Standalone post-processing CLI
+
+Install the CLI with `pip install 'eval-hub-sdk[cli]'`. The commands use the
+same profile, authentication, tenant, and connection settings as `evalhub eval`.
+Post-processing is operation-based; `confidence_interval` is currently supported.
+
+```bash
+# Submit one job from a complete YAML or JSON request.
+evalhub post-processing run --config examples/post_processing_eval_job.yaml
+
+# Use the returned post-processing job ID, not the source evaluation ID.
+evalhub post-processing status pp-123
+evalhub post-processing results pp-123 --format json > results.json
+
+# Run can wait and emit only its final snapshot.
+evalhub post-processing run --config examples/post_processing_external.yaml --wait --timeout 120 --poll-interval 5 --format yaml
+
+# Remove the resource and request runtime cleanup.
+evalhub post-processing delete pp-123 --yes
+```
+
+Configuration files contain the full `StandalonePostProcessingRequest`, including
+`operations`, optional `name`, `hardware_config`, and `operation_order`.
+Confidence-interval configuration requires `results_data_ref`, a nonempty
+`calibration_data_ref` list, and `significance_level` (between 0 and 1).
+Each calibration source includes its format and label/prediction column mappings.
+Evaluation-job sources use `results_data_ref.eval_job.id`; external sources
+require `primary_score` instead. See the complete
+[evaluation-job](examples/post_processing_eval_job.yaml) and
+[external S3](examples/post_processing_external.yaml) examples; replace IDs,
+paths, and credential references for your environment.
+
+Without `--format`, run prints the submitted job ID, status prints labeled details,
+and results prints statistics grouped by benchmark and operation, without table
+borders. Run with `--wait` sends the submission message to stderr and prints final
+status details on stdout. Explicit `--format table|json|yaml` is supported (not CSV).
+Run/status tables show job identity, state, timestamps, operations,
+source, and server messages without detailed configuration or result statistics.
+Their JSON/YAML output is a one-element list of the full SDK-serialized resource,
+including null fields. Results tables show one row per operation statistic, with
+benchmark/provider/index columns only when benchmark results are present.
+Results JSON/YAML is a list of benchmark records followed by an aggregate record
+when present, preserving nested operation keys and metadata such as `lambda`,
+omitting null optional fields, and preserving zeros. Unavailable results produce
+`No results available.` in human-readable/table output or `[]` in JSON/YAML.
+For default human-readable output, a non-completed job with no results instead
+prints one message: `Job state is pending; no results available.` (using the
+actual state). State/availability messages are informational, not warnings.
+With available results, non-completed state is reported on stderr as
+`Job state is running; results may be incomplete.` Actual server warnings and
+errors retain their labels. Explicit formats keep informational messages on stderr.
+Progress and diagnostics also go to stderr, keeping stdout suitable for redirection.
+
+Only run supports `--wait`, with a default 5-second polling interval
+and no overall timeout. Explicit `--timeout` and `--poll-interval` require
+`--wait` and strictly positive finite seconds. Waiting stops on `completed`,
+`failed`, or `cancelled`. The timeout is soft: synchronous requests and SDK retries
+finish normally, and a terminal response is accepted even after the timeout.
+Submission time is excluded; nonterminal responses are checked against the timeout
+before sleeping the full polling interval. A timeout does not stop the job.
+Status/results require exactly one ID and retrieve a single snapshot; they do not
+support `--wait`, `--timeout`, or `--poll-interval`. Listing and `--watch` are not supported.
+
+Exit codes:
+
+- `0`: successful submission, retrieval, deletion, or waiting to any terminal
+  state, including failed/cancelled computations or missing results. Inspect
+  the returned state to determine computation success.
+- `1`: API/connection errors, waiting timeout, configuration read/parse/validation
+  errors, or declined deletion. Waiting errors leave stdout empty.
+- `2`: invalid arguments, missing config files, directories supplied as
+  post-processing configuration, unsupported formats, or invalid polling options.
+
+Deletion prompts on stdout unless `--yes` is supplied; success and errors go to
+stderr. It deletes the standalone resource and requests runtime cleanup, rather
+than cancelling the source evaluation.
+
+Configuration parsing/read failures also receive friendly errors for `eval run`.
+Existing-but-unreadable evaluation config files now exit `1` through the shared
+loader rather than Click's readability-check exit `2`; evaluation directories
+continue to reach the loader and exit `1`.
+
 ### Key Components
 
 1. **JobSpec** - Job configuration loaded from ConfigMap at pod startup

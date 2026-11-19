@@ -87,7 +87,7 @@ dev = [
 # Server - eval-hub-server binary for local/embedded use
 server = [
     "eval-hub-sdk[cli]",
-    "eval-hub-server>=1.0.1",
+    "eval-hub-server>=1.0.3",
 ]
 
 # All core functionality

@@ -118,7 +118,6 @@ def post_processing_request() -> StandalonePostProcessingRequest:
     )
 
 
-@pytest.mark.skip(reason="Requires eval-hub-server >=1.0.4; pending PyPI release")
 @pytest.mark.e2e
 def test_post_processing_endpoint(
     evalhub_server_with_real_config: str,
@@ -126,7 +125,7 @@ def test_post_processing_endpoint(
 ) -> None:
     """Test submission without requiring a working post-processing adapter."""
     with SyncEvalHubClient(base_url=evalhub_server_with_real_config) as client:
-        # Execution may fail asynchronously when the local adapter is unavailable.
+        # The server fixture uses a no-op local post-processing command.
         # Like the jobs smoke tests, only verify acceptance, not completion.
         job = client.post_processing.submit(post_processing_request)
 
@@ -135,7 +134,6 @@ def test_post_processing_endpoint(
         assert job.operations == post_processing_request.operations
 
 
-@pytest.mark.skip(reason="Requires eval-hub-server >=1.0.4; pending PyPI release")
 @pytest.mark.e2e
 @pytest.mark.asyncio
 async def test_async_post_processing_endpoint(

@@ -1,0 +1,25 @@
+name: evaluation-confidence-interval
+hardware_config:
+  cpu:
+    request: "1"
+  memory:
+    request: 2Gi
+operation_order:
+  - confidence_interval
+operations:
+  confidence_interval:
+    results_data_ref:
+      eval_job:
+        id: eval-123
+    calibration_data_ref:
+      - s3:
+          bucket: evaluation-data
+          key: calibration.jsonl
+          secret_ref: evaluation-s3-credentials
+        data_config:
+          format: jsonl
+          columns:
+            label: human_score
+            prediction: model_score
+            sample_id: id
+    significance_level: 0.05
