@@ -1198,10 +1198,10 @@ class HealthResponse(BaseModel):
 class _PostProcessingModel(BaseModel):
     """Base configuration shared by standalone post-processing models."""
 
-    # Ensure their submission path uses exclude_none=True.
     model_config = ConfigDict(
         # Response payloads may gain fields as the server evolves. Ignore
-        # unknown fields so older SDK versions remain forward-compatible.
+        # unknown fields. Shared structural validators still enforce today's
+        # contract for known configuration fields.
         extra="ignore",
         populate_by_name=True,
         allow_inf_nan=False,
@@ -1263,7 +1263,7 @@ class PostProcessingCommon(_PostProcessingModel):
 
     name: str | None = None
     hardware_config: BenchmarkHardwareConfig | None = None
-    operation_order: list[Literal["confidence_interval"]] | None = Field(
+    operation_order: list[str] | None = Field(
         default=None,
         min_length=1,
     )
@@ -1573,9 +1573,9 @@ class StandaloneConfidenceIntervalConfig(_PostProcessingModel):
 
 
 class StandalonePostProcessingOperations(_PostProcessingModel):
-    """Supported standalone post-processing operations."""
+    """Known operation configurations; unknown fields are ignored."""
 
-    confidence_interval: StandaloneConfidenceIntervalConfig
+    confidence_interval: StandaloneConfidenceIntervalConfig | None = None
 
 
 class StandalonePostProcessingRequest(PostProcessingCommon):

@@ -1840,6 +1840,134 @@ def post_processing_config_data() -> dict[str, Any]:
 class TestPostProcessingContract:
     """Representative wire shapes and business rules, not field permutations."""
 
+    @pytest.mark.parametrize("future_only", [False, True])
+    def test_unknown_operation_configurations_are_ignored(
+        self, post_processing_config_data: dict[str, Any], future_only: bool
+    ) -> None:
+        operations = {"bootstrap": {"samples": 1000}}
+        order = ["bootstrap"]
+        if not future_only:
+            operations["confidence_interval"] = post_processing_config_data
+            order.insert(0, "confidence_interval")
+        payload = {"operations": operations, "operation_order": order}
+
+        response = PostProcessingResource.model_validate(
+            {**payload, "resource": {"id": "pp-123"}, "status": {"state": "running"}}
+        )
+        assert response.operation_order == order
+        assert (response.operations.confidence_interval is None) is future_only
+        known_operations = (
+            {} if future_only else {"confidence_interval": post_processing_config_data}
+        )
+        assert response.operations.model_dump(exclude_none=True) == known_operations
+        request = StandalonePostProcessingRequest.model_validate(payload)
+        assert request.model_dump(mode="json", exclude_none=True) == {
+            "operation_order": order,
+            "operations": known_operations,
+        }
+
+    @pytest.mark.parametrize(
+        "extension",
+        [
+            "future-result-source",
+            "future-calibration-source",
+            "multiple-result-sources",
+            "multiple-calibration-sources",
+            "eval-job-primary-score",
+            "external-without-primary-score",
+            "future-mappings",
+            "array-without-selection",
+            "hardware-modes",
+            "future-git-scheme",
+        ],
+    )
+    def test_known_configuration_rules_remain_shared(
+        self, post_processing_config_data: dict[str, Any], extension: str
+    ) -> None:
+        config = post_processing_config_data
+        calibration = config["calibration_data_ref"][0]
+        payload: dict[str, Any] = {"operations": {"confidence_interval": config}}
+        if extension == "future-result-source":
+            config["results_data_ref"] = {"azure": {"container": "results"}}
+        elif extension == "future-calibration-source":
+            calibration.pop("pvc")
+            calibration["azure"] = {"container": "calibration"}
+        elif extension == "multiple-result-sources":
+            config["results_data_ref"]["pvc"] = {"claim_name": "results"}
+        elif extension == "multiple-calibration-sources":
+            calibration["hf"] = {"repo_id": "org/calibration"}
+        elif extension == "eval-job-primary-score":
+            config["primary_score"] = {"metric": "accuracy"}
+        elif extension == "external-without-primary-score":
+            config["results_data_ref"] = {"pvc": {"claim_name": "results"}}
+        elif extension == "future-mappings":
+            config["results_data_ref"]["data_config"] = {
+                "format": "arrow",
+                "columns": {"weight": "sample_weight"},
+                "selection": {"split": "test"},
+                "value_mappings": {"weight": {"high": 1.0}},
+            }
+        elif extension == "array-without-selection":
+            config["results_data_ref"]["data_config"] = [{"format": "csv"}]
+        elif extension == "hardware-modes":
+            payload["hardware_config"] = {
+                "hardware_profile_name": "small",
+                "cpu": {"request": "1"},
+            }
+        elif extension == "future-git-scheme":
+            calibration.pop("pvc")
+            calibration["git"] = {
+                "url": "ssh://git@example.com/calibration",
+                "ref": "main",
+            }
+
+        with pytest.raises(ValidationError):
+            PostProcessingResource.model_validate(
+                {
+                    **payload,
+                    "resource": {"id": "pp-123"},
+                    "status": {"state": "running"},
+                }
+            )
+        with pytest.raises(ValidationError):
+            StandalonePostProcessingRequest.model_validate(payload)
+
+    @pytest.mark.parametrize("operations", [{}, {"confidence_interval": None}])
+    def test_missing_known_operation_is_left_to_server_validation(
+        self, operations: dict[str, Any]
+    ) -> None:
+        response = PostProcessingResource.model_validate(
+            {
+                "resource": {"id": "pp-123"},
+                "status": {"state": "running"},
+                "operations": operations,
+            }
+        )
+        assert response.operations.confidence_interval is None
+        request = StandalonePostProcessingRequest.model_validate(
+            {"operations": operations}
+        )
+        assert request.operations.confidence_interval is None
+        assert request.model_dump(exclude_none=True) == {"operations": {}}
+
+    def test_response_still_validates_known_field_types(
+        self, post_processing_config_data: dict[str, Any]
+    ) -> None:
+        post_processing_config_data["significance_level"] = {"invalid": "type"}
+        with pytest.raises(ValidationError) as error:
+            PostProcessingResource.model_validate(
+                {
+                    "resource": {"id": "pp-123"},
+                    "status": {"state": "running"},
+                    "operations": {"confidence_interval": post_processing_config_data},
+                }
+            )
+        assert error.value.errors()[0]["loc"] == (
+            "operations",
+            "confidence_interval",
+            "significance_level",
+        )
+
     @pytest.mark.parametrize("field", ["format", "path"])
     def test_empty_optional_result_config_strings(self, field: str) -> None:
         config = ResultsDataConfigEntry.model_validate({field: ""})
@@ -2198,7 +2326,6 @@ class TestPostProcessingEmptyStringSemantics:
         common = PostProcessingCommon(name="")
 
         assert common.name == ""
-        # Ensure their submission path uses exclude_none=True.
         assert common.model_dump(exclude_none=True) == {"name": ""}
 
     def test_nonempty_invalid_values_still_fail_validation(self) -> None:
