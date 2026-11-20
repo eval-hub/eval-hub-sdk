@@ -284,6 +284,23 @@ class OCIArtifactResult(BaseModel):
     reference: str = Field(..., description="Full OCI reference with digest")
 
 
+class TrajectoryScore(BaseModel):
+    """Compact typed summary for a scored or selected trajectory."""
+
+    trajectory_id: str | None = Field(
+        default=None, description="Producer trajectory ID"
+    )
+    source_path: str | None = Field(default=None, description="Trajectory source path")
+    score: float | None = Field(default=None, description="Trajectory score")
+    aggregate_score: float | None = Field(
+        default=None, description="Score including nested trajectories"
+    )
+    status: str = Field(default="scored", description="Trajectory scoring status")
+    training_eligible: bool | None = Field(
+        default=None, description="Whether the trajectory meets a training threshold"
+    )
+
+
 class JobResults(BaseModel):
     """Results returned by run_benchmark_job.
 
@@ -324,7 +341,20 @@ class JobResults(BaseModel):
         default_factory=lambda: datetime.now(UTC), description="Completion timestamp"
     )
     evaluation_metadata: dict[str, Any] = Field(
-        default_factory=dict, description="Framework-specific metadata"
+        default_factory=dict,
+        description=(
+            "Framework-specific metadata. DefaultCallbacks does not serialize "
+            "this field wholesale into BenchmarkStatusEvent.additional_info; "
+            "only its 'artifacts' mapping is merged into event artifacts. "
+            "Use additional_info for explicit event-level supplementary data."
+        ),
+    )
+    trajectory_results: list[TrajectoryScore] | None = Field(
+        default=None,
+        description=(
+            "Optional compact per-trajectory summaries. Detailed framework-specific "
+            "results remain in evaluation_metadata."
+        ),
     )
 
     # Artifact information (if persisted)

@@ -2,7 +2,7 @@
 
 from typing import Any
 
-pytest_plugins = ["tests.fixtures.atif"]
+pytest_plugins = ["tests.fixtures.atif", "tests.fixtures.nemogym"]
 
 
 def pytest_addoption(parser: Any) -> None:

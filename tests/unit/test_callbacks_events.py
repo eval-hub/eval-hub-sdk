@@ -90,6 +90,38 @@ def test_report_results_omits_mlflow_run_id_when_not_set() -> None:
     assert "mlflow_run_id" not in body["benchmark_status_event"]
 
 
+def test_evaluation_metadata_is_not_projected_to_additional_info() -> None:
+    callbacks, mock_http = _make_callbacks()
+    results = _results()
+    results.evaluation_metadata = {
+        "producer_provenance": {"source_sha256": "fixture-only"}
+    }
+
+    callbacks.report_results(results)
+
+    event = mock_http.post.call_args.kwargs["json"]["benchmark_status_event"]
+    assert "evaluation_metadata" not in event
+    assert "additional_info" not in event
+    assert "producer_provenance" not in event
+
+
+def test_evaluation_metadata_artifacts_are_sent_separately() -> None:
+    callbacks, mock_http = _make_callbacks()
+    results = _results()
+    results.evaluation_metadata = {
+        "producer_provenance": {"source_sha256": "fixture-only"},
+        "artifacts": {"fixture_manifest": {"path": "manifest.jsonl"}},
+    }
+
+    callbacks.report_results(results)
+
+    event = mock_http.post.call_args.kwargs["json"]["benchmark_status_event"]
+    assert event["artifacts"]["fixture_manifest"] == {"path": "manifest.jsonl"}
+    assert "producer_provenance" not in event["artifacts"]
+    assert "additional_info" not in event
+    assert "producer_provenance" not in event
+
+
 def test_mlflow_save_returns_run_id_from_odh_path() -> None:
     """Regression: save() must return _save_odh/_save_upstream result (not None)."""
     from evalhub.adapter.callbacks import _MlflowOps

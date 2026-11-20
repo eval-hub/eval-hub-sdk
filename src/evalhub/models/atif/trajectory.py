@@ -29,7 +29,13 @@ from .step import Step
 
 
 class Trajectory(BaseModel):
-    """Agent Trajectory in ATIF (Agent Trajectory Interchange Format)."""
+    """Agent Trajectory in ATIF (Agent Trajectory Interchange Format).
+
+    Producer-specific root metadata belongs in the declared ``extra`` object.
+    Other undeclared fields are rejected, so adding a producer field to the
+    ATIF root requires an explicit schema change rather than a global
+    ``extra=allow`` policy.
+    """
 
     schema_version: Literal[
         "ATIF-v1.0",
@@ -101,7 +107,10 @@ class Trajectory(BaseModel):
     )
     extra: dict[str, Any] | None = Field(
         default=None,
-        description="Custom root-level metadata",
+        description=(
+            "Custom producer metadata carried by ATIF's declared extra object. "
+            "The SDK preserves its JSON values but does not interpret or verify them."
+        ),
     )
     subagent_trajectories: list["Trajectory"] | None = Field(
         default=None,
