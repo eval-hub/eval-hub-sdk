@@ -1,24 +1,37 @@
 # ATIF test fixtures
 
-## ATIF v1.7 contract fixtures
+## ATIF v1.7 contract fixtures (downloaded on demand)
 
-`atif_v1_7_contract.json` exercises the SDK's ATIF v1.7 model and the declared
-`Trajectory.extra` extension point. Its trajectory body is adapted from
-`eval-hub-contrib/adapters/atif/tests/fixtures/trajectory_v1_7.json` at
-`eval-hub-contrib` commit `175dafd245152c4b7aa0b91ef939cae40c5c3537` (Apache-2.0).
-The `producer_metadata` object was added here as synthetic contract-test data;
-it is not a NeMo Gym artifact or a claim about NeMo Gym's output schema.
+The ATIF v1.7 contract tests validate NeMo Gym's own ATIF document instead of a
+committed copy of it:
 
-`atif_v1_7_undeclared_provenance.json` is the same synthetic trajectory with a
-`producer_sha256` key at the ATIF document root. It exists to test the SDK's
-unknown-field policy, not to represent a verified Gym field or hash contract.
+- `tests/unit_tests/trajectory/fixtures/relay_atif_v1_7_responses_tool_trajectory.json`
+  from `NVIDIA-NeMo/Gym` commit
+  `76116d5d78c8f613cf2038231c66cc02d7ae4a5f`, SHA-256
+  `8d9c3c2d21c4ef0a8d9488eac560b1fdfaa532712b8a4fc628023a94d0bab825`.
+
+`tests/fixtures/nemogym.py` fetches it once per test session, verifies the pinned
+digest, and caches it under `tests/fixtures/.cache/nemogym-76116d5d78c8/`, which
+is git-ignored. No copy of that Gym relay document is stored in this repository.
+
+- `EVALHUB_GYM_FIXTURE_CACHE` points the cache at another directory, for example a
+  pre-populated one on an air-gapped machine. A warm cache needs no network.
+- A transport failure skips the dependent tests and names the URL in the skip
+  reason. A digest mismatch fails instead: the bytes of a fixed commit are
+  immutable, so a mismatch means the pin or the cached copy is wrong.
+- The undeclared-root-field case is derived in the test by adding a
+  `producer_sha256` key to a deep copy of the downloaded document. It needs no
+  second fixture and cannot drift from the document the SDK otherwise accepts.
 
 ## Contract exercised
 
-- The SDK accepts the standard ATIF v1.7 fields, including `trajectory_id`.
+- The SDK accepts NeMo Gym's ATIF v1.7 document, including `trajectory_id`,
+  `final_metrics`, and step-level `extra`.
 - `Trajectory.extra` is a declared custom-metadata object. JSON placed inside
   it survives `Trajectory.model_validate()` followed by `to_json_dict()`; the
-  SDK does not interpret, validate, or authenticate those values.
+  SDK does not interpret, validate, or authenticate those values. In the pinned
+  Gym document this is where the producer's `relay_revision`,
+  `relay_qualification`, and digest values live.
 - The model configuration is `extra="forbid"`. An unrecognized key at the
   trajectory root (or another model level) fails validation. The SDK does not
   globally ignore or allow undeclared fields.
@@ -68,6 +81,6 @@ This demonstrates compatibility for this specific Gym revision, exporter
 profile, MCQA example and MaaS-backed run. It does not prove that every Gym
 benchmark or producer revision emits the same data, nor does it establish a
 canonicalization rule beyond the bytes Gym hashed in this manifest. The separate
-synthetic root-field fixture still demonstrates the SDK's strict rejection of
-undeclared root fields; the genuine export does not add such a field because
-Gym places its provenance in `extra`.
+root-field test still demonstrates the SDK's strict rejection of undeclared root
+fields; the genuine export does not add such a field because Gym places its
+provenance in `extra`.

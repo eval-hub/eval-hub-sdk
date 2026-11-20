@@ -1,8 +1,10 @@
 """Tests for ATIF trajectory pydantic models (evalhub.models.atif)."""
 
+import copy
 import hashlib
 import json
 from pathlib import Path
+from typing import Any
 
 import evalhub
 import evalhub.atif as atif_shim
@@ -688,22 +690,20 @@ class TestTrajectory:
 
 
 class TestTrajectoryRoundtrip:
-    def test_atif_v1_7_contract_fixture_preserves_extra_metadata(self) -> None:
-        fixture_path = (
-            Path(__file__).parents[1] / "fixtures" / "atif_v1_7_contract.json"
-        )
-        payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+    def test_nemogym_atif_v1_7_fixture_preserves_extra_provenance(
+        self, nemogym_atif_v1_7_document: dict[str, Any]
+    ) -> None:
+        payload = nemogym_atif_v1_7_document
 
         trajectory = Trajectory.model_validate(payload)
         serialized = trajectory.to_json_dict()
 
+        assert payload["schema_version"] == "ATIF-v1.7"
         assert trajectory.schema_version == "ATIF-v1.7"
-        assert trajectory.trajectory_id == "v17-trajectory"
+        assert trajectory.trajectory_id == payload["trajectory_id"]
         assert serialized["extra"] == payload["extra"]
-        assert serialized["extra"]["producer_metadata"] == {
-            "producer": "contract-fixture",
-            "record_id": "record-17",
-        }
+        assert serialized["extra"]["relay_revision"]
+        assert serialized["extra"]["relay_qualification"]
 
     def test_nemogym_export_fixture_validates_and_preserves_provenance(self) -> None:
         fixture_dir = Path(__file__).parents[1] / "fixtures" / "nemogym_maas"
@@ -722,13 +722,11 @@ class TestTrajectoryRoundtrip:
         assert serialized["extra"]["nemo_gym"]["conversion"]["status"] == "complete"
         assert serialized["extra"]["nemo_gym"] == json.loads(raw)["extra"]["nemo_gym"]
 
-    def test_atif_v1_7_fixture_rejects_undeclared_root_provenance(self) -> None:
-        fixture_path = (
-            Path(__file__).parents[1]
-            / "fixtures"
-            / "atif_v1_7_undeclared_provenance.json"
-        )
-        payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+    def test_nemogym_atif_v1_7_fixture_rejects_undeclared_root_provenance(
+        self, nemogym_atif_v1_7_document: dict[str, Any]
+    ) -> None:
+        payload = copy.deepcopy(nemogym_atif_v1_7_document)
+        payload["producer_sha256"] = "synthetic-root-provenance-value"
 
         with pytest.raises(ValidationError, match="producer_sha256"):
             Trajectory.model_validate(payload)
