@@ -240,6 +240,12 @@ results = adapter.run_benchmark_job(adapter.job_spec, callbacks)
 
 #### Saving MLflow artifacts
 
+On failure, the SDK reports a bounded (256-character maximum) diagnostic in the
+first FAILED event and raises an exception with the same safe message. Public
+details include HTTP status, recognized MLflow error codes, and timeout/connection
+categories. Raw backend messages, URLs, and response bodies are excluded from
+API-facing text; the original exception remains chained and logged for debugging.
+
 `DefaultCallbacks.mlflow.save()` saves metrics, params, and artifacts in the same
 run when `job_spec.experiment_name` is configured. Mix small in-memory artifacts
 with file references to stream large result files:

@@ -253,7 +253,8 @@ def test_upstream_mixed_artifacts_and_cleanup(
                 ops = _MlflowOps(MlflowBackend.UPSTREAM)
                 if fail:
                     with pytest.raises(
-                        RuntimeError, match="MLflow save failed: upload failed"
+                        RuntimeError,
+                        match="Failed to save evaluation results to MLflow: local file operation failed",
                     ):
                         ops.save(_results(), _job_spec(), artifacts)
                 else:

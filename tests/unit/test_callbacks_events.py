@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 from evalhub.adapter.callbacks import DefaultCallbacks
 from evalhub.adapter.models.job import (
@@ -173,14 +174,17 @@ def test_mlflow_save_posts_failed_event_on_mlflow_error(backend: str) -> None:
         f"_save_{backend}",
         side_effect=RuntimeError("mlflow offline"),
     ):
-        with pytest.raises(RuntimeError, match="MLflow save failed: mlflow offline"):
+        with pytest.raises(
+            RuntimeError,
+            match="Failed to save evaluation results to MLflow: backend error",
+        ):
             callbacks.mlflow.save(_results(), _job_spec())
 
     body = mock_http.post.call_args.kwargs["json"]["benchmark_status_event"]
     assert body["status"] == JobStatus.FAILED.value
     assert (
         body["error_message"]["message"]
-        == "Failed to save evaluation results to MLflow: mlflow offline"
+        == "Failed to save evaluation results to MLflow: backend error. See adapter logs for details."
     )
     assert body["error_message"]["message_code"] == "mlflow_save_failed"
     assert body["error_message"]["message_origin"] == "sdk"
@@ -675,3 +679,67 @@ def test_callbacks_primary_score_defaults_to_none() -> None:
     """DefaultCallbacks defaults primary_score to None."""
     callbacks, _ = _make_callbacks_with_primary_score(primary_score=None)
     assert callbacks.primary_score is None
+
+
+@pytest.mark.parametrize("backend", ["odh", "upstream"])
+@pytest.mark.parametrize(
+    "kind", ["raw", "http", "mlflow", "unknown_code", "timeout", "upstream_code"]
+)
+def test_mlflow_failure_diagnostics_are_safe_and_bounded(
+    backend: str, kind: str
+) -> None:
+    from evalhub.adapter.config import MlflowBackend
+    from evalhub.adapter.mlflow import MLflowAPIError
+
+    secret = "private-credential-value"
+    unsafe = (
+        f"https://user:{secret}@private-host/run?token={secret} Authorization: Bearer {secret} "
+        + "<html>" * 10000
+    )
+    if kind == "http":
+        response = httpx.Response(
+            503,
+            text=unsafe,
+            request=httpx.Request(
+                "POST", f"https://user:{secret}@private-host/?token={secret}"
+            ),
+        )
+        error = httpx.HTTPStatusError(
+            unsafe, request=response.request, response=response
+        )
+        expected = "HTTP 503"
+    elif kind in {"mlflow", "unknown_code"}:
+        error = MLflowAPIError(
+            403, "PERMISSION_DENIED" if kind == "mlflow" else secret, unsafe
+        )
+        expected = "HTTP 403"
+    elif kind == "timeout":
+        error = TimeoutError(unsafe)
+        expected = "request timed out"
+    elif kind == "upstream_code":
+
+        class UpstreamError(Exception):
+            error_code = "RESOURCE_DOES_NOT_EXIST"
+
+        error = UpstreamError(unsafe)
+        expected = "RESOURCE_DOES_NOT_EXIST"
+    else:
+        error = RuntimeError(unsafe)
+        expected = "backend error"
+    callbacks, mock_http = _make_callbacks()
+    callbacks.mlflow._backend = MlflowBackend(backend)
+    with patch.object(callbacks.mlflow, f"_save_{backend}", side_effect=error):
+        with pytest.raises(RuntimeError) as raised:
+            callbacks.mlflow.save(_results(), _job_spec())
+    body = mock_http.post.call_args.kwargs["json"]["benchmark_status_event"]
+    message = body["error_message"]["message"]
+    assert expected in message
+    assert len(message) <= 256
+    assert str(raised.value) == message
+    assert raised.value.__cause__ is error
+    for forbidden in (secret, "private-host", "https://", "Authorization", "<html>"):
+        assert forbidden not in message
+    assert body["status"] == JobStatus.FAILED.value
+    assert body["error_message"]["message_code"] == "mlflow_save_failed"
+    assert body["error_message"]["message_origin"] == "sdk"
+    assert mock_http.post.call_count == 1

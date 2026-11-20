@@ -7,11 +7,13 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 from evalhub.adapter.models.adapter import FrameworkAdapter
 
 from ..models.api import EvaluationResult, JobStatus, MessageOrigin, PrimaryScore
 from .config import EvalHubMode, MlflowBackend
-from .mlflow import Metric, MlflowArtifact, MlflowFileArtifact, Param
+from .mlflow import Metric, MLflowAPIError, MlflowArtifact, MlflowFileArtifact, Param
 from .models import (
     EnvironmentCardMetadata,
     ErrorInfo,
@@ -28,6 +30,58 @@ from .oci.persister import OCIArtifactContext
 from .telemetry import EvalTracer
 
 logger = logging.getLogger(__name__)
+
+
+_MLFLOW_FAILURE_MESSAGE_LIMIT = 256
+_MLFLOW_PUBLIC_ERROR_CODES = frozenset(
+    {
+        "BAD_REQUEST",
+        "ENDPOINT_NOT_FOUND",
+        "INTERNAL_ERROR",
+        "INVALID_PARAMETER_VALUE",
+        "INVALID_STATE",
+        "NOT_FOUND",
+        "PERMISSION_DENIED",
+        "REQUEST_LIMIT_EXCEEDED",
+        "RESOURCE_ALREADY_EXISTS",
+        "RESOURCE_DOES_NOT_EXIST",
+        "TEMPORARILY_UNAVAILABLE",
+        "UNAUTHENTICATED",
+        "UNKNOWN",
+    }
+)
+
+
+def _mlflow_failure_message(error: Exception) -> str:
+    """Expose bounded diagnostic categories, never backend text, URLs or response bodies."""
+    details = []
+    if isinstance(error, httpx.HTTPStatusError):
+        details.append(f"HTTP {error.response.status_code}")
+    elif (
+        isinstance(error, MLflowAPIError)
+        and isinstance(error.status_code, int)
+        and not isinstance(error.status_code, bool)
+        and 100 <= error.status_code <= 599
+    ):
+        details.append(f"HTTP {error.status_code}")
+    # Upstream MLflow exceptions also expose error_code; only known constants are safe.
+    try:
+        code = getattr(error, "error_code", None)
+    except Exception:
+        code = None
+    if isinstance(code, str) and code in _MLFLOW_PUBLIC_ERROR_CODES:
+        details.append(code)
+    if isinstance(error, TimeoutError | httpx.TimeoutException):
+        details.append("request timed out")
+    elif isinstance(error, ConnectionError | httpx.ConnectError):
+        details.append("connection failed")
+    elif isinstance(error, OSError):
+        details.append("local file operation failed")
+    reason = "; ".join(details) or "backend error"
+    return (
+        f"Failed to save evaluation results to MLflow: {reason}. "
+        "See adapter logs for details."
+    )[:_MLFLOW_FAILURE_MESSAGE_LIMIT]
 
 
 class _MlflowOps:
@@ -94,14 +148,15 @@ class _MlflowOps:
             return self._save_odh(results, job_spec, artifacts)
         except Exception as e:
             logger.error("Failed to save to MLflow: %s", e, exc_info=True)
+            public_message = _mlflow_failure_message(e)
             if self._callbacks is not None:
                 self._callbacks.report_status(
                     JobStatusUpdate(
                         status=JobStatus.FAILED,
-                        # This first terminal event must retain the backend cause;
-                        # later adapter events may be rejected once the job is failed.
+                        # The first terminal event needs safe diagnostics; later adapter
+                        # events may be rejected once the job is failed.
                         error_message=MessageInfo(
-                            message=f"Failed to save evaluation results to MLflow: {e}",
+                            message=public_message,
                             message_code="mlflow_save_failed",
                             message_origin=MessageOrigin.SDK,
                         ),
@@ -111,7 +166,7 @@ class _MlflowOps:
                         ),
                     )
                 )
-            raise RuntimeError(f"MLflow save failed: {e}") from e
+            raise RuntimeError(public_message) from e
 
     # ------------------------------------------------------------------
     # Private helpers
