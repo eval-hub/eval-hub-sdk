@@ -96,8 +96,11 @@ def fetch_pinned_fixture(source_path: str, expected_sha256: str) -> bytes:
         cached.write_bytes(payload)
         return payload
 
-    pytest.skip(  # pragma: no cover - offline environments
-        f"cannot download pinned NeMo Gym fixture {url}: {last_error}"
+    # Raise instead of calling pytest.skip() so the function is unambiguously
+    # terminal for type checkers that run without pytest's annotations.
+    raise pytest.skip.Exception(  # pragma: no cover - offline environments
+        f"cannot download pinned NeMo Gym fixture {url}: {last_error}",
+        pytrace=False,
     )
 
 
