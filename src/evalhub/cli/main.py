@@ -185,7 +185,7 @@ def _coerce_param_value(value: str) -> Any:
 def _load_config_file(path: str) -> dict[str, Any]:
     """Load a shared YAML or JSON command configuration."""
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             content = f.read()
         if path.endswith((".yaml", ".yml")):
             data = yaml.safe_load(content)
@@ -1481,7 +1481,7 @@ def post_processing_results(
 def post_processing_delete(ctx: click.Context, job_id: str) -> None:
     """Delete a resource and request runtime cleanup (not evaluation cancellation)."""
     get_client(ctx).post_processing.delete(job_id)
-    click.echo(f"Post-processing job {job_id} deleted.", err=True)
+    click.echo(f"Post-processing job {job_id} deleted.")
 
 
 @main.group()

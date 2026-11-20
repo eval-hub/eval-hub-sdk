@@ -44,7 +44,7 @@ make test-e2e
 - **`models/`** — Pydantic v2 request/response models (JobStatus, EvaluationStatus, BenchmarkConfig, etc.). Always importable with zero optional deps.
 - **`adapter/`** — SDK for framework developers. `FrameworkAdapter` is the abstract base class; implementers override `run_benchmark_job(config, callbacks) -> JobResults`. Includes `DefaultCallbacks`, `AdapterSettings` (env-based config), and `OCIArtifactPersister`.
 - **`client/`** — `AsyncEvalHubClient` and `SyncEvalHubClient` with nested resource classes (providers, benchmarks, collections, jobs). Job resources support `submit`, `get`, `list`, `cancel`, `wait_for_completion`, `get_logs`, and `watch_logs`. Log helpers live in `client/job_logs.py` (`JobLogOptions`, `JobLogUpdate`). Requires `httpx`.
-- **`cli/`** — Click command groups (`eval`, `provider`, `benchmark`, `collections`, `config`, `health`, `mcp`, `post-processing`, `server`, `completion`). Entry point: `evalhub.cli.bootstrap:main`. The `mcp` subcommand manages the standalone Go binary (`evalhub-mcp`).
+- **`cli/`** — Click commands and command groups (`eval`, `providers`, `collections`, `config`, `health`, `mcp`, `post-processing`, `server`, `completion`, `version`). Entry point: `evalhub.cli.bootstrap:main`. The `mcp` subcommand manages the standalone Go binary (`evalhub-mcp`).
 
 ### Adapter job lifecycle (Kubernetes)
 

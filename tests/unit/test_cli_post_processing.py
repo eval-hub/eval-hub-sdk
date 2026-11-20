@@ -705,14 +705,15 @@ def test_delete_confirmation(client: MagicMock, answer: str | None) -> None:
         result = CliRunner().invoke(main, args, input=answer)
     assert result.exit_code == (1 if answer == "n\n" else 0)
     if answer is None:
-        assert result.stdout == ""
+        assert result.stdout == "Post-processing job pp-123 deleted.\n"
     else:
         assert "Are you sure" in result.stdout
     if answer == "n\n":
         assert "Aborted!" in result.stderr
         client.post_processing.delete.assert_not_called()
     else:
-        assert "deleted" in result.stderr
+        assert "Post-processing job pp-123 deleted." in result.stdout
+        assert result.stderr == ""
         client.post_processing.delete.assert_called_once_with("pp-123")
 
 
