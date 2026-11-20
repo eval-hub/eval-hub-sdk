@@ -6,8 +6,10 @@ import io
 import json
 import re
 
+import click
 import pytest
 import yaml
+from click.testing import CliRunner
 from evalhub.cli.formatter import (
     FORMATS,
     _format_csv,
@@ -161,6 +163,45 @@ class TestTtyBehaviour:
 
 
 class TestFormatOption:
+    @pytest.mark.parametrize("fmt", [None, "table", "json", "yaml"])
+    def test_optional_format(self, fmt: str | None) -> None:
+        @click.command()
+        @format_option(default=None, formats=("table", "json", "yaml"))
+        def cmd(output_format: str | None) -> None:
+            click.echo(repr(output_format))
+
+        result = CliRunner().invoke(cmd, [] if fmt is None else ["--format", fmt])
+        assert result.exit_code == 0
+        assert result.stdout.strip() == repr(fmt)
+        help_result = CliRunner().invoke(cmd, ["--help"])
+        assert "Omit for human-readable output" in help_result.stdout
+        assert "default: table" not in help_result.stdout
+
+    @pytest.mark.parametrize("fmt", FORMATS)
+    def test_default_formats_remain_supported(self, fmt: str) -> None:
+        @click.command()
+        @format_option("json")
+        def cmd(output_format: str) -> None:
+            click.echo(output_format)
+
+        runner = CliRunner()
+        assert runner.invoke(cmd).stdout.strip() == "json"
+        result = runner.invoke(cmd, ["--format", fmt])
+        assert result.exit_code == 0
+        assert result.stdout.strip() == fmt
+
+    @pytest.mark.parametrize("fmt", FORMATS)
+    def test_restricted_formats(self, fmt: str) -> None:
+        @click.command()
+        @format_option(formats=("table", "json", "yaml"))
+        def cmd(output_format: str) -> None:
+            click.echo(output_format)
+
+        result = CliRunner().invoke(cmd, ["--format", fmt])
+        assert result.exit_code == (2 if fmt == "csv" else 0)
+        if fmt == "csv":
+            assert result.stdout == ""
+
     def test_returns_callable(self) -> None:
         opt = format_option()
         assert callable(opt)

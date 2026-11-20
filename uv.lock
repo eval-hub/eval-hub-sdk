@@ -633,7 +633,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "anyio", marker = "extra == 'core'", specifier = ">=4.14.2" },
-    { name = "click", marker = "extra == 'cli'", specifier = ">=8.1.0" },
+    { name = "click", marker = "extra == 'cli'", specifier = ">=8.2.0" },
     { name = "eval-hub-mcp", marker = "extra == 'mcp'", specifier = ">=1.0.0" },
     { name = "eval-hub-sdk", extras = ["adapter", "cli", "client", "core", "dev", "mcp"], marker = "extra == 'all'" },
     { name = "eval-hub-sdk", extras = ["cli"], marker = "extra == 'dev'" },
@@ -642,7 +642,7 @@ requires-dist = [
     { name = "eval-hub-sdk", extras = ["core"], marker = "extra == 'adapter'" },
     { name = "eval-hub-sdk", extras = ["core"], marker = "extra == 'cli'" },
     { name = "eval-hub-sdk", extras = ["core"], marker = "extra == 'client'" },
-    { name = "eval-hub-server", marker = "extra == 'server'", specifier = ">=1.0.1" },
+    { name = "eval-hub-server", marker = "extra == 'server'", specifier = ">=1.0.3" },
     { name = "httpx", marker = "extra == 'core'", specifier = ">=0.25.0" },
     { name = "importlib-metadata", specifier = ">=6.0.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = "==1.19.1" },
@@ -689,14 +689,14 @@ dev = [
 
 [[package]]
 name = "eval-hub-server"
-version = "1.0.2"
+version = "1.0.3"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/73/9a/5fe5e2b91f5a2396a1ab92b2208035302fa7ffc248840ea2bfa68699c7c4/eval_hub_server-1.0.2-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:4b50516630db61ac1b5d2ecc4e13eef532746ed2f01409a5c7313ff8e03e9f0d", size = 34905207, upload-time = "2026-09-18T07:15:20.392Z" },
-    { url = "https://files.pythonhosted.org/packages/62/c3/7ffd206b5b1b7779b260f989edc630372e5d6dec62754daf2119003f8579/eval_hub_server-1.0.2-py3-none-macosx_11_0_arm64.whl", hash = "sha256:c3d56b5734b08113b69e62ff5942826a15261a63249fc1dd33652e63a508e11a", size = 31896800, upload-time = "2026-09-18T07:15:23.915Z" },
-    { url = "https://files.pythonhosted.org/packages/e5/64/707137632082713017f31c03f8e75864d425cca376db210faf99a6e3c30b/eval_hub_server-1.0.2-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:40ddff0b5a69b36923707d3d644b1685bdd535db125de363cd9cab956bd876e8", size = 30472555, upload-time = "2026-09-18T07:15:27.443Z" },
-    { url = "https://files.pythonhosted.org/packages/83/a8/b5e28ec129213ee7f1c55380d4210932970ff7217b0b3ce5bae6bac08c9a/eval_hub_server-1.0.2-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:d8777a52cf863b9043ebc0916298e9cc3a16d6af720d0e2dd146da3365585355", size = 34324742, upload-time = "2026-09-18T07:15:33.076Z" },
-    { url = "https://files.pythonhosted.org/packages/35/2b/4e59eb645b719523af123f5832595f326bb1c8e1a1a94bd24e507798bb3a/eval_hub_server-1.0.2-py3-none-win_amd64.whl", hash = "sha256:8bfe2049cfb0ccceeffb36b8060650efe63aea305852e316a689d67b527a0974", size = 34980325, upload-time = "2026-09-18T07:15:36.956Z" },
+    { url = "https://files.pythonhosted.org/packages/6a/a9/311622a58bd78008162a13bc20080a4d5d105cad16d75034b2f5a040be94/eval_hub_server-1.0.3-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:e64f6a97cb41dcae74c6daaac4f920d43ceb83ffeb9507e675f44f13e013198a", size = 35784281, upload-time = "2026-11-18T08:41:44.737Z" },
+    { url = "https://files.pythonhosted.org/packages/ec/bc/842b112fedb8673e12c59a10c50e31b1cdf7a266be8a17f0170ff67115c7/eval_hub_server-1.0.3-py3-none-macosx_11_0_arm64.whl", hash = "sha256:ff92d072b39f3db3b1835e40d03d7b4d50524e8846ea329880cb54910e3ab8d7", size = 32750802, upload-time = "2026-11-18T08:41:47.712Z" },
+    { url = "https://files.pythonhosted.org/packages/06/61/bdcae000cf2580382f5b4b5b9fddb5c68602c7113b375aebdbc4541fb265/eval_hub_server-1.0.3-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:60467daf003ca5a97ff3c9ab34ae8145281d567b58f132b8d85e6c7d2608d469", size = 31274163, upload-time = "2026-11-18T08:41:50.688Z" },
+    { url = "https://files.pythonhosted.org/packages/9c/64/21441e69b5ad11123db9d4e16d464b1efbb1b7d93f54d20848378d6928cc/eval_hub_server-1.0.3-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:52ed33b4b9359c2094c6d983b20725e1619156e269897b56e04994d27af4e060", size = 35182530, upload-time = "2026-11-18T08:41:54.682Z" },
+    { url = "https://files.pythonhosted.org/packages/ec/68/7788563c9d15398ed22d120fde5e7fb271a2812e63457a63cd38ef7e16a2/eval_hub_server-1.0.3-py3-none-win_amd64.whl", hash = "sha256:77e48a07028b9182c65f629c7f0bd1ef19667f3922dd5213c7831cea5a9b1809", size = 35861957, upload-time = "2026-11-18T08:41:57.674Z" },
 ]
 
 [[package]]

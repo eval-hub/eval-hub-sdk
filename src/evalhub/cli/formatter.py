@@ -20,15 +20,19 @@ from rich.table import Table
 FORMATS = ("table", "json", "yaml", "csv")
 
 
-def format_option(default: str = "table") -> Callable:
+def format_option(
+    default: str | None = "table", formats: Sequence[str] = FORMATS
+) -> Callable:
     """Reusable --format Click option."""
     return click.option(
         "--format",
         "output_format",
-        type=click.Choice(FORMATS, case_sensitive=False),
+        type=click.Choice(formats, case_sensitive=False),
         default=default,
         show_default=True,
-        help="Output format.",
+        help="Output format."
+        if default is not None
+        else "Output format. Omit for human-readable output.",
     )
 
 

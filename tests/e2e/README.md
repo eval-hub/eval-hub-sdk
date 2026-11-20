@@ -39,3 +39,8 @@ Other tests require the `eval-hub-server` binary and a local OCI registry at
 `localhost:5001`; start the registry with `make start-oci-registry`.
 The EvalHub fixture uses configuration from `tests/e2e/config/` and starts the
 server at `localhost:8080`.
+
+The synchronous and asynchronous post-processing smoke tests require
+`eval-hub-server>=1.0.3` and verify submission acceptance, not execution or results.
+The EvalHub fixture sets `EVALHUB_POST_PROCESSING_LOCAL_COMMAND="sleep 1; true"`
+only for its server subprocess, so these tests need no post-processing adapter.
