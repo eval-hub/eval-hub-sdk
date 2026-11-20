@@ -73,6 +73,7 @@ The SDK is organized into distinct, focused packages:
 
 - HTTP client for submitting evaluations to EvalHub
 - Job lifecycle: submit, status, cancel, wait, and **log fetch/watch**
+- Standalone post-processing: submit, inspect, and delete post-processing jobs
 - Resource navigation (providers, benchmarks, collections)
 - See [Getting Started with the CLI](https://eval-hub.github.io/getting-started/cli/)
 

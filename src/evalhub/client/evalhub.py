@@ -10,10 +10,12 @@ from .resources import (
     AsyncBenchmarksResource,
     AsyncCollectionsResource,
     AsyncJobsResource,
+    AsyncPostProcessingResource,
     AsyncProvidersResource,
     SyncBenchmarksResource,
     SyncCollectionsResource,
     SyncJobsResource,
+    SyncPostProcessingResource,
     SyncProvidersResource,
 )
 
@@ -104,6 +106,11 @@ class AsyncEvalHubClient(BaseAsyncClient):
         """Access evaluation job operations."""
         return AsyncJobsResource(self)
 
+    @cached_property
+    def post_processing(self) -> AsyncPostProcessingResource:
+        """Access standalone post-processing operations."""
+        return AsyncPostProcessingResource(self)
+
 
 class SyncEvalHubClient(BaseSyncClient):
     """Complete synchronous EvalHub client with all capabilities.
@@ -190,6 +197,11 @@ class SyncEvalHubClient(BaseSyncClient):
     def jobs(self) -> SyncJobsResource:
         """Access evaluation job operations."""
         return SyncJobsResource(self)
+
+    @cached_property
+    def post_processing(self) -> SyncPostProcessingResource:
+        """Access standalone post-processing operations."""
+        return SyncPostProcessingResource(self)
 
 
 # Aliases for backward compatibility and convenience
