@@ -52,9 +52,25 @@ _MLFLOW_PUBLIC_ERROR_CODES = frozenset(
 )
 
 
+# Exact SDK-authored messages only: never allow arbitrary configuration/backend text.
+_MLFLOW_PUBLIC_CONFIG_MESSAGES = frozenset(
+    {
+        "MLflow tracking URI is required (pass tracking_uri or set MLFLOW_TRACKING_URI)",
+        "EVALHUB_MLFLOW_BACKEND=upstream requires the 'mlflow' package. "
+        "Install it with: pip install mlflow-skinny",
+    }
+)
+
+
 def _mlflow_failure_message(error: Exception) -> str:
     """Expose bounded diagnostic categories, never backend text, URLs or response bodies."""
     details = []
+    if len(error.args) == 1 and isinstance(error.args[0], str):
+        # Full equality prevents credential-bearing suffixes from entering public metadata.
+        for message in _MLFLOW_PUBLIC_CONFIG_MESSAGES:
+            if error.args[0] == message:
+                details.append(message)
+                break
     if isinstance(error, httpx.HTTPStatusError):
         details.append(f"HTTP {error.response.status_code}")
     elif (

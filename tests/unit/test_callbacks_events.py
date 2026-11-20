@@ -696,6 +696,7 @@ def test_mlflow_failure_diagnostics_are_safe_and_bounded(
         f"https://user:{secret}@private-host/run?token={secret} Authorization: Bearer {secret} "
         + "<html>" * 10000
     )
+    error: Exception
     if kind == "http":
         response = httpx.Response(
             503,
@@ -743,3 +744,41 @@ def test_mlflow_failure_diagnostics_are_safe_and_bounded(
     assert body["error_message"]["message_code"] == "mlflow_save_failed"
     assert body["error_message"]["message_origin"] == "sdk"
     assert mock_http.post.call_count == 1
+
+
+@pytest.mark.parametrize("backend", ["odh", "upstream"])
+def test_sdk_configuration_failures_remain_actionable(
+    backend: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exercise the actual SDK configuration checks rather than mocked backend errors."""
+    from evalhub.adapter.config import MlflowBackend
+
+    callbacks, mock_http = _make_callbacks()
+    callbacks.mlflow._backend = MlflowBackend(backend)
+    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
+    with patch.dict("sys.modules", {"mlflow": None}):
+        with pytest.raises(RuntimeError) as raised:
+            callbacks.mlflow.save(_results(), _job_spec())
+    message = mock_http.post.call_args.kwargs["json"]["benchmark_status_event"][
+        "error_message"
+    ]["message"]
+    assert str(raised.value) == message
+    assert len(message) <= 256
+    if backend == "odh":
+        assert "pass tracking_uri or set MLFLOW_TRACKING_URI" in message
+    else:
+        assert "pip install mlflow-skinny" in message
+    assert raised.value.__cause__ is not None
+
+
+def test_configuration_lookalike_with_secret_is_not_public() -> None:
+    from evalhub.adapter.callbacks import _mlflow_failure_message
+
+    secret = "credential-bearing-suffix"
+    error = ValueError(
+        "MLflow tracking URI is required (pass tracking_uri or set MLFLOW_TRACKING_URI) "
+        + secret
+    )
+    message = _mlflow_failure_message(error)
+    assert "backend error" in message
+    assert secret not in message
